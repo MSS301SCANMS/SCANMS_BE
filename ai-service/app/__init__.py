@@ -1,0 +1,1 @@
+"""SCANMS AI service package."""

@@ -8,6 +8,7 @@ public enum ErrorCode {
     FORBIDDEN(403, HttpStatus.FORBIDDEN, "Access is denied"),
     RESOURCE_NOT_FOUND(404, HttpStatus.NOT_FOUND, "Resource not found"),
     CONFLICT(409, HttpStatus.CONFLICT, "Resource conflict"),
+    AI_SERVICE_UNAVAILABLE(503, HttpStatus.SERVICE_UNAVAILABLE, "AI service is not available"),
     INTERNAL_SERVER_ERROR(500, HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
 
     private final int code;
@@ -32,4 +33,3 @@ public enum ErrorCode {
         return message;
     }
 }
-
