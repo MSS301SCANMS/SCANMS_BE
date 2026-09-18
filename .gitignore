@@ -1,0 +1,10 @@
+**/target/
+.m2/
+.idea/
+.vscode/
+*.iml
+*.log
+.env
+
+# Local aggregate infrastructure; service-level Compose files stay tracked.
+/docker-compose.yml

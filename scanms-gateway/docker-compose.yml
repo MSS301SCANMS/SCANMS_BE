@@ -1,0 +1,2 @@
+# Gateway không cần hạ tầng Docker cục bộ; chạy ứng dụng trực tiếp bằng IntelliJ.
+services: {}
