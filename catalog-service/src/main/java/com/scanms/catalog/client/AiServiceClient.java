@@ -1,0 +1,15 @@
+package com.scanms.catalog.client;
+
+import com.scanms.catalog.dto.ai.AiDetectionResponse;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
+
+@FeignClient(name = "ai-service", url = "${clients.ai.url:http://localhost:8000}")
+public interface AiServiceClient {
+
+    @PostMapping(value = "/api/v1/ai/detect", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    AiDetectionResponse detect(@RequestPart("image") MultipartFile image);
+}
