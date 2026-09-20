@@ -1,8 +1,8 @@
-package com.scanms.livestream.mapper;
+package com.scanms.catalog.mapper;
 
-import com.scanms.livestream.dto.request.CreateLivestreamRequest;
-import com.scanms.livestream.dto.response.LivestreamResponse;
-import com.scanms.livestream.entity.Livestream;
+import com.scanms.catalog.dto.request.CreateLivestreamRequest;
+import com.scanms.catalog.dto.response.LivestreamResponse;
+import com.scanms.catalog.entity.Livestream;
 import org.springframework.stereotype.Component;
 
 @Component

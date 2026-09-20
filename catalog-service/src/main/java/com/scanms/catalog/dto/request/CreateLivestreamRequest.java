@@ -1,10 +1,11 @@
-package com.scanms.livestream.dto.request;
+package com.scanms.catalog.dto.request;
 
-import com.scanms.livestream.constant.*;
-import jakarta.validation.constraints.*;
-import java.math.BigDecimal;
+import com.scanms.catalog.constant.LivestreamStatus;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Map;
+import java.util.UUID;
 
 public record CreateLivestreamRequest(
         @NotNull UUID storeId,
