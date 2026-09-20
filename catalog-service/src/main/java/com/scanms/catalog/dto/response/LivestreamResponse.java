@@ -1,9 +1,9 @@
-package com.scanms.livestream.dto.response;
+package com.scanms.catalog.dto.response;
 
-import com.scanms.livestream.constant.*;
-import java.math.BigDecimal;
+import com.scanms.catalog.constant.LivestreamStatus;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Map;
+import java.util.UUID;
 
 public record LivestreamResponse(
         UUID livestreamId,
