@@ -13,7 +13,7 @@ public class OpenApiConfig {
     @Bean
     OpenAPI serviceOpenApi() {
         return new OpenAPI()
-                .info(new Info().title("SCANMS Catalog Service API").version("v1"))
+                .info(new Info().title("SCANMS Catalog and Livestream Service API").version("v1"))
                 .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
                 .components(new Components().addSecuritySchemes("bearerAuth", new SecurityScheme()
                         .type(SecurityScheme.Type.HTTP)

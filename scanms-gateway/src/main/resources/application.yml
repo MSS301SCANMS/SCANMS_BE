@@ -43,12 +43,6 @@ spring:
                 - "Path=/openapi/promotion"
               filters:
                 - "SetPath=/v3/api-docs"
-            - id: livestream-service-openapi
-              uri: ${LIVESTREAM_SERVICE_URL:http://localhost:8086}
-              predicates:
-                - "Path=/openapi/livestream"
-              filters:
-                - "SetPath=/v3/api-docs"
             - id: user-service
               uri: ${USER_SERVICE_URL:http://localhost:8081}
               predicates:
@@ -56,7 +50,7 @@ spring:
             - id: catalog-service
               uri: ${CATALOG_SERVICE_URL:http://localhost:8082}
               predicates:
-                - "Path=/api/v1/stores/**,/api/v1/products/**"
+                - "Path=/api/v1/stores/**,/api/v1/products/**,/api/v1/livestreams/**"
             - id: order-service
               uri: ${ORDER_SERVICE_URL:http://localhost:8083}
               predicates:
@@ -69,11 +63,6 @@ spring:
               uri: ${PROMOTION_SERVICE_URL:http://localhost:8085}
               predicates:
                 - "Path=/api/v1/vouchers/**,/api/v1/collaborators/**,/api/v1/referrals/**,/api/v1/commissions/**"
-            - id: livestream-service
-              uri: ${LIVESTREAM_SERVICE_URL:http://localhost:8086}
-              predicates:
-                - "Path=/api/v1/livestreams/**"
-
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
@@ -90,5 +79,3 @@ springdoc:
         url: /openapi/payment
       - name: Promotion Affiliate Service
         url: /openapi/promotion
-      - name: Livestream Service
-        url: /openapi/livestream

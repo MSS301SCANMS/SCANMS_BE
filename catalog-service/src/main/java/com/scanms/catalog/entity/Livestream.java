@@ -1,18 +1,23 @@
-package com.scanms.livestream.entity;
+package com.scanms.catalog.entity;
 
-import com.scanms.livestream.constant.LivestreamStatus;
+import com.scanms.catalog.constant.LivestreamStatus;
 import jakarta.persistence.*;
-
-import lombok.*;
-import org.hibernate.annotations.*;
-import org.hibernate.type.SqlTypes;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Map;
+import java.util.UUID;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "livestreams")
-@Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Livestream {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
