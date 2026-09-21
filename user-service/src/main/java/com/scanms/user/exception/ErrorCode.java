@@ -8,7 +8,13 @@ public enum ErrorCode {
     FORBIDDEN(403, HttpStatus.FORBIDDEN, "Access is denied"),
     RESOURCE_NOT_FOUND(404, HttpStatus.NOT_FOUND, "Resource not found"),
     CONFLICT(409, HttpStatus.CONFLICT, "Resource conflict"),
-    INTERNAL_SERVER_ERROR(500, HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+    INTERNAL_SERVER_ERROR(500, HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred"),
+    USER_ALREADY_EXISTS(1000, HttpStatus.BAD_REQUEST, "Tên đăng nhập hoặc email đã tồn tại"),
+    INVALID_CREDENTIALS(1001, HttpStatus.UNAUTHORIZED, "Sai tên đăng nhập hoặc mật khẩu"),
+    KEYCLOAK_COMMUNICATION_ERROR(1002, HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi kết nối tới hệ thống xác thực"),
+    UNCATEGORIZED_EXCEPTION(500, HttpStatus.INTERNAL_SERVER_ERROR, "Uncategorized error"),
+    UNAUTHENTICATED(1401, HttpStatus.UNAUTHORIZED, "Chưa xác thực hoặc token không hợp lệ"),
+    ;
 
     private final int code;
     private final HttpStatus httpStatus;
