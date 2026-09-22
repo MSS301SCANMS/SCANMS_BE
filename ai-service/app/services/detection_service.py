@@ -77,7 +77,15 @@ def detect_clothing(image: Image.Image) -> DetectionResponse:
         raise InferenceError("The image could not be analyzed.") from exception
 
     inference_time_ms = round((perf_counter() - started_at) * 1000, 3)
-    best = max(detections, key=lambda item: item.confidence, default=None)
+    detections.sort(
+        key=lambda item: (
+            item.confidence,
+            (item.bounding_box.x2 - item.bounding_box.x1)
+            * (item.bounding_box.y2 - item.bounding_box.y1),
+        ),
+        reverse=True,
+    )
+    best = detections[0] if detections else None
     top_prediction = (
         TopPrediction(class_name=best.class_name, confidence=best.confidence)
         if best is not None
@@ -88,3 +96,18 @@ def detect_clothing(image: Image.Image) -> DetectionResponse:
         top_prediction=top_prediction,
         inference_time_ms=inference_time_ms,
     )
+
+
+def crop_top_detection(image: Image.Image, detection: DetectionItem | None) -> Image.Image:
+    """Crop the best detected garment, or return a copy of the full image."""
+    if detection is None:
+        return image.copy()
+
+    box = detection.bounding_box
+    left = max(0, min(image.width, int(box.x1)))
+    top = max(0, min(image.height, int(box.y1)))
+    right = max(0, min(image.width, int(round(box.x2))))
+    bottom = max(0, min(image.height, int(round(box.y2))))
+    if right <= left or bottom <= top:
+        return image.copy()
+    return image.crop((left, top, right, bottom))

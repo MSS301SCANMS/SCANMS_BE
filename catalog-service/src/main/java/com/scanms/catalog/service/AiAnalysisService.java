@@ -20,10 +20,11 @@ public class AiAnalysisService {
         }
 
         try {
-            return aiServiceClient.detect(image);
-        } catch (FeignException.BadRequest exception) {
-            throw new AppException(ErrorCode.INVALID_REQUEST, "AI service rejected the image");
+            return aiServiceClient.analyze(image);
         } catch (FeignException exception) {
+            if (exception.status() == 400 || exception.status() == 413 || exception.status() == 422) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "AI service rejected the image");
+            }
             throw new AppException(ErrorCode.AI_SERVICE_UNAVAILABLE);
         }
     }

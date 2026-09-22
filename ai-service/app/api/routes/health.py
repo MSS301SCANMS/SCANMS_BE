@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.core.config import get_settings
 from app.models.model_loader import is_model_ready
+from app.models.fashion_clip_loader import is_fashion_clip_ready
 from app.models.schemas import HealthResponse
 
 router = APIRouter(prefix="/api/v1/ai", tags=["AI Health"])
@@ -19,8 +20,10 @@ def _public_model_path() -> str:
 @router.get("/health", response_model=HealthResponse, response_model_exclude_none=True)
 def health() -> HealthResponse:
     ready = is_model_ready()
+    fashion_ready = is_fashion_clip_ready()
     return HealthResponse(
-        status="UP" if ready else "DEGRADED",
+        status="UP" if ready and fashion_ready else "DEGRADED",
         model_loaded=ready,
         model_path=_public_model_path() if ready else None,
+        fashion_clip_loaded=fashion_ready,
     )
