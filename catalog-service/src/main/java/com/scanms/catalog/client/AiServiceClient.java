@@ -10,6 +10,6 @@ import org.springframework.web.multipart.MultipartFile;
 @FeignClient(name = "ai-service", url = "${clients.ai.url:http://localhost:8000}")
 public interface AiServiceClient {
 
-    @PostMapping(value = "/api/v1/ai/detect", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    AiDetectionResponse detect(@RequestPart("image") MultipartFile image);
+    @PostMapping(value = "/api/v1/ai/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    AiDetectionResponse analyze(@RequestPart("image") MultipartFile image);
 }
