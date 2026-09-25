@@ -6,6 +6,6 @@ import java.util.*;
 
 public interface PaymentService {
     PaymentResponse create(CreatePaymentRequest request);
-    PaymentResponse getById(UUID id);
+    PaymentResponse getById(String id);
     List<PaymentResponse> findAll();
 }

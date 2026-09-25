@@ -19,10 +19,10 @@ spring:
                 - "Path=/openapi/user"
               filters:
                 - "SetPath=/v3/api-docs"
-            - id: catalog-service-openapi
-              uri: ${CATALOG_SERVICE_URL:http://localhost:8082}
+            - id: product-service-openapi
+              uri: ${PRODUCT_SERVICE_URL:http://localhost:8082}
               predicates:
-                - "Path=/openapi/catalog"
+                - "Path=/openapi/product"
               filters:
                 - "SetPath=/v3/api-docs"
             - id: order-service-openapi
@@ -47,22 +47,22 @@ spring:
               uri: ${USER_SERVICE_URL:http://localhost:8081}
               predicates:
                 - "Path=/api/v1/users/**"
-            - id: catalog-service
-              uri: ${CATALOG_SERVICE_URL:http://localhost:8082}
+            - id: product-service
+              uri: ${PRODUCT_SERVICE_URL:http://localhost:8082}
               predicates:
-                - "Path=/api/v1/stores/**,/api/v1/products/**,/api/v1/livestreams/**"
+                - "Path=/api/v1/stores/**,/api/v1/store-applications/**,/api/v1/products/**,/api/v1/product-categories/**,/api/v1/product-images/**,/api/v1/product-variants/**,/api/v1/feedbacks/**,/api/v1/livestreams/**"
             - id: order-service
               uri: ${ORDER_SERVICE_URL:http://localhost:8083}
               predicates:
-                - "Path=/api/v1/orders/**,/api/v1/seller-orders/**,/api/v1/returns/**"
+                - "Path=/api/v1/orders/**,/api/v1/order-items/**,/api/v1/seller-orders/**,/api/v1/returns/**,/api/v1/shipments/**,/api/v1/discount-allocations/**"
             - id: payment-service
               uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
               predicates:
-                - "Path=/api/v1/payments/**,/api/v1/bank-accounts/**,/api/v1/settlements/**"
+                - "Path=/api/v1/payments/**,/api/v1/wallets/**,/api/v1/wallet-transactions/**,/api/v1/bank-accounts/**,/api/v1/withdrawals/**,/api/v1/settlements/**,/api/v1/fee-configs/**"
             - id: promotion-service
               uri: ${PROMOTION_SERVICE_URL:http://localhost:8085}
               predicates:
-                - "Path=/api/v1/vouchers/**,/api/v1/collaborators/**,/api/v1/referrals/**,/api/v1/commissions/**"
+                - "Path=/api/v1/vouchers/**,/api/v1/voucher-redemptions/**,/api/v1/collaborators/**,/api/v1/referrals/**,/api/v1/commission-policies/**,/api/v1/commissions/**"
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
@@ -71,8 +71,8 @@ springdoc:
     urls:
       - name: User Service
         url: /openapi/user
-      - name: Catalog Service
-        url: /openapi/catalog
+      - name: Product Service
+        url: /openapi/product
       - name: Order Service
         url: /openapi/order
       - name: Payment Service

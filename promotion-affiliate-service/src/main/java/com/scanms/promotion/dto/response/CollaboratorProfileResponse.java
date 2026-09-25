@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CollaboratorProfileResponse(
-        UUID collaboratorId,
-        UUID userId,
+        String collaboratorId,
+        String userId,
         CollaboratorStatus approvalStatus,
         LocalDateTime joinedAt,
         String policyVersion,

@@ -9,7 +9,10 @@ import java.util.*;
 public record CreateVoucherRequest(
         @NotBlank String code,
         VoucherIssuerType issuerType,
-        UUID storeId,
+        String storeId,
+        String productId,
+        String livestreamId,
+        VoucherScopeType scopeType,
         VoucherDiscountType discountType,
         BigDecimal value,
         Long cap,

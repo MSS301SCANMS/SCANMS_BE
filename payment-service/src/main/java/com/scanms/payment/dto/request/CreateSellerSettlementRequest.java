@@ -7,8 +7,10 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CreateSellerSettlementRequest(
-        @NotNull UUID storeId,
-        @NotNull UUID bankAccountId,
+        @NotNull String storeId,
+        @NotNull String bankAccountId,
+        String walletId,
+        String walletTransactionId,
         Map<String, Object> destinationSnapshot,
         Map<String, Object> orderRefs,
         Map<String, Object> breakdown,

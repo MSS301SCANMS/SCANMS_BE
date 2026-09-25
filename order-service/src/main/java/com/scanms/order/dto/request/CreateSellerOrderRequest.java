@@ -7,8 +7,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CreateSellerOrderRequest(
-        @NotNull UUID orderId,
-        @NotNull UUID storeId,
+        @NotNull String orderId,
+        @NotNull String storeId,
         Map<String, Object> totalsSnapshot,
         SellerOrderStatus status,
         LocalDateTime deliveredAt,

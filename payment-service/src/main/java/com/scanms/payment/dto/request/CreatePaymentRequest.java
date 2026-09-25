@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CreatePaymentRequest(
-        @NotNull UUID orderId,
+        @NotNull String orderId,
         @NotBlank String providerCode,
         String transactionId,
         @PositiveOrZero Long amountVnd,

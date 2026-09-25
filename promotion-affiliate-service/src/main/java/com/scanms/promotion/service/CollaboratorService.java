@@ -6,6 +6,6 @@ import java.util.*;
 
 public interface CollaboratorService {
     CollaboratorProfileResponse create(ApplyCollaboratorRequest request);
-    CollaboratorProfileResponse getById(UUID id);
+    CollaboratorProfileResponse getById(String id);
     List<CollaboratorProfileResponse> findAll();
 }

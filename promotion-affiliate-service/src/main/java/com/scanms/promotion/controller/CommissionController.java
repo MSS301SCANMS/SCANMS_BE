@@ -22,7 +22,7 @@ public class CommissionController {
     }
 
     @GetMapping("/{id}")
-    ApiResponse<CommissionResponse> getById(@PathVariable UUID id) {
+    ApiResponse<CommissionResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 

@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CreateReturnRequest(
-        @NotNull UUID orderItemId,
+        @NotNull String orderItemId,
         @Positive Integer quantity,
         @NotBlank String reason,
         Map<String, Object> evidenceRefs,
