@@ -24,7 +24,7 @@ public class ReferralLinkServiceImpl implements ReferralLinkService {
     }
 
     @Transactional(readOnly = true)
-    public ReferralLinkResponse getById(UUID id) {
+    public ReferralLinkResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "ReferralLink not found: " + id));
     }

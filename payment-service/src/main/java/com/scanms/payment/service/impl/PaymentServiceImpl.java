@@ -24,7 +24,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Transactional(readOnly = true)
-    public PaymentResponse getById(UUID id) {
+    public PaymentResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Payment not found: " + id));
     }

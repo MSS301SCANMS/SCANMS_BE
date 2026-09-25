@@ -6,9 +6,10 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record ReferralLinkResponse(
-        UUID referralLinkId,
-        UUID collaboratorId,
-        UUID productId,
+        String referralLinkId,
+        String collaboratorId,
+        String productId,
+        String livestreamId,
         String token,
         ReferralLinkStatus status,
         LocalDateTime expiresAt,

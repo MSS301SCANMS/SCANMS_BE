@@ -16,11 +16,15 @@ import java.util.*;
 public class OrderItem {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID orderItemId;
+    private String orderItemId;
 
-    private UUID sellerOrderId;
+    private String sellerOrderId;
 
-    private UUID productId;
+    private String productId;
+
+    private String variantId;
+
+    private String sourceLivestreamId;
 
     private Integer quantity;
 
@@ -32,11 +36,18 @@ public class OrderItem {
 
     private Long unitPrice;
 
+    private Long grossAmountVnd;
+
+    private Long discountAmountVnd;
+
+    private Long netPaidAmountVnd;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
+    @Deprecated(forRemoval = false)
     private Map<String, Object> discountAllocations;
 
-    private UUID referralLinkId;
+    private String referralLinkId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")

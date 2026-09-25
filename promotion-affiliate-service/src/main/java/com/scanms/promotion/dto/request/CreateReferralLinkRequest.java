@@ -7,8 +7,9 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CreateReferralLinkRequest(
-        @NotNull UUID collaboratorId,
-        @NotNull UUID productId,
+        @NotNull String collaboratorId,
+        @NotNull String productId,
+        String livestreamId,
         @NotBlank String token,
         ReferralLinkStatus status,
         LocalDateTime expiresAt

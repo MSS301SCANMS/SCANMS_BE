@@ -7,8 +7,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record RegisterBankAccountRequest(
-        UUID storeId,
-        UUID collaboratorId,
+        String storeId,
+        String collaboratorId,
         @NotBlank String bankCode,
         @NotBlank String holderName,
         @NotBlank String accountCiphertext,

@@ -15,7 +15,7 @@ public class ReturnRequestMapper {
                 .evidenceRefs(request.evidenceRefs())
                 .status(request.status())
                 .decisionReason(request.decisionReason())
-                .refundAmount(request.refundAmount())
+                .refundAmountVnd(request.refundAmount())
                 .refundReference(request.refundReference())
                 .requestedAt(request.requestedAt())
                 .resolvedAt(request.resolvedAt())
@@ -31,7 +31,7 @@ public class ReturnRequestMapper {
                 entity.getEvidenceRefs(),
                 entity.getStatus(),
                 entity.getDecisionReason(),
-                entity.getRefundAmount(),
+                entity.getRefundAmountVnd(),
                 entity.getRefundReference(),
                 entity.getRequestedAt(),
                 entity.getResolvedAt());

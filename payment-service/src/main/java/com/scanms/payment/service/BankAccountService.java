@@ -6,6 +6,6 @@ import java.util.*;
 
 public interface BankAccountService {
     BankAccountResponse create(RegisterBankAccountRequest request);
-    BankAccountResponse getById(UUID id);
+    BankAccountResponse getById(String id);
     List<BankAccountResponse> findAll();
 }

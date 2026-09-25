@@ -7,9 +7,10 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CreateCommissionRequest(
-        @NotNull UUID orderItemId,
-        @NotNull UUID collaboratorId,
-        UUID referralLinkId,
+        @NotNull String orderItemId,
+        @NotNull String collaboratorId,
+        String referralLinkId,
+        String commissionPolicyId,
         @PositiveOrZero Long basisVnd,
         BigDecimal rate,
         @PositiveOrZero Long amountVnd,

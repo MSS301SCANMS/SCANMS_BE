@@ -12,6 +12,9 @@ public class VoucherMapper {
                 .code(request.code())
                 .issuerType(request.issuerType())
                 .storeId(request.storeId())
+                .productId(request.productId())
+                .livestreamId(request.livestreamId())
+                .scopeType(request.scopeType())
                 .discountType(request.discountType())
                 .value(request.value())
                 .cap(request.cap())
@@ -30,6 +33,9 @@ public class VoucherMapper {
                 entity.getCode(),
                 entity.getIssuerType(),
                 entity.getStoreId(),
+                entity.getProductId(),
+                entity.getLivestreamId(),
+                entity.getScopeType(),
                 entity.getDiscountType(),
                 entity.getValue(),
                 entity.getCap(),

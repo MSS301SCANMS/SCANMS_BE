@@ -6,10 +6,13 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record VoucherResponse(
-        UUID voucherId,
+        String voucherId,
         String code,
         VoucherIssuerType issuerType,
-        UUID storeId,
+        String storeId,
+        String productId,
+        String livestreamId,
+        VoucherScopeType scopeType,
         VoucherDiscountType discountType,
         BigDecimal value,
         Long cap,

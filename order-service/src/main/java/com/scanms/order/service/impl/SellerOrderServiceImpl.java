@@ -24,7 +24,7 @@ public class SellerOrderServiceImpl implements SellerOrderService {
     }
 
     @Transactional(readOnly = true)
-    public SellerOrderResponse getById(UUID id) {
+    public SellerOrderResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "SellerOrder not found: " + id));
     }

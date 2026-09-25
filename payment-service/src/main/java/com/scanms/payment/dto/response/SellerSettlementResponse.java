@@ -6,9 +6,11 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record SellerSettlementResponse(
-        UUID settlementId,
-        UUID storeId,
-        UUID bankAccountId,
+        String settlementId,
+        String storeId,
+        String bankAccountId,
+        String walletId,
+        String walletTransactionId,
         Map<String, Object> destinationSnapshot,
         Map<String, Object> orderRefs,
         Map<String, Object> breakdown,

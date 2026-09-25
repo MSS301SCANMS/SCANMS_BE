@@ -22,7 +22,7 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}")
-    ApiResponse<BankAccountResponse> getById(@PathVariable UUID id) {
+    ApiResponse<BankAccountResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
