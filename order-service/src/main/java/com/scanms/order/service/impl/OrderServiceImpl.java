@@ -24,7 +24,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Transactional(readOnly = true)
-    public OrderResponse getById(UUID id) {
+    public OrderResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Order not found: " + id));
     }

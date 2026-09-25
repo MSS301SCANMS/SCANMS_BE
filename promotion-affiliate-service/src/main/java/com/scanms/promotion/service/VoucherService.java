@@ -6,6 +6,6 @@ import java.util.*;
 
 public interface VoucherService {
     VoucherResponse create(CreateVoucherRequest request);
-    VoucherResponse getById(UUID id);
+    VoucherResponse getById(String id);
     List<VoucherResponse> findAll();
 }

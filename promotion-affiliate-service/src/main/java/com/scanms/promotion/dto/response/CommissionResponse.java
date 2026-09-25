@@ -6,10 +6,11 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CommissionResponse(
-        UUID commissionId,
-        UUID orderItemId,
-        UUID collaboratorId,
-        UUID referralLinkId,
+        String commissionId,
+        String orderItemId,
+        String collaboratorId,
+        String referralLinkId,
+        String commissionPolicyId,
         Long basisVnd,
         BigDecimal rate,
         Long amountVnd,

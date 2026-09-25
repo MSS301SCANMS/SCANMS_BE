@@ -24,7 +24,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
     }
 
     @Transactional(readOnly = true)
-    public ReturnRequestResponse getById(UUID id) {
+    public ReturnRequestResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "ReturnRequest not found: " + id));
     }

@@ -24,7 +24,7 @@ public class VoucherServiceImpl implements VoucherService {
     }
 
     @Transactional(readOnly = true)
-    public VoucherResponse getById(UUID id) {
+    public VoucherResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Voucher not found: " + id));
     }

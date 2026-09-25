@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CreateOrderRequest(
-        @NotNull UUID customerId,
+        @NotNull String customerId,
         @NotBlank String idempotencyKey,
         @PositiveOrZero Long payableVnd,
         @NotBlank String currency,

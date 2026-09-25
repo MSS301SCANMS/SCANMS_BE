@@ -22,7 +22,7 @@ public class ReturnRequestController {
     }
 
     @GetMapping("/{id}")
-    ApiResponse<ReturnRequestResponse> getById(@PathVariable UUID id) {
+    ApiResponse<ReturnRequestResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 

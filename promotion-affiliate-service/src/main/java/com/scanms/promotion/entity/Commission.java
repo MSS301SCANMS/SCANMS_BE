@@ -16,19 +16,24 @@ import java.util.*;
 public class Commission {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID commissionId;
+    private String commissionId;
 
-    private UUID orderItemId;
+    private String orderItemId;
 
-    private UUID collaboratorId;
+    private String collaboratorId;
 
-    private UUID referralLinkId;
+    private String referralLinkId;
 
-    private Long basisVnd;
+    private String commissionPolicyId;
 
-    private BigDecimal rate;
+    @Column(name = "basis_amount_vnd")
+    private Long basisAmountVnd;
 
-    private Long amountVnd;
+    @Column(name = "rate_snapshot", precision = 10, scale = 6)
+    private BigDecimal rateSnapshot;
+
+    @Column(name = "commission_amount_vnd")
+    private Long commissionAmountVnd;
 
     @Enumerated(EnumType.STRING)
     private CommissionStatus status;

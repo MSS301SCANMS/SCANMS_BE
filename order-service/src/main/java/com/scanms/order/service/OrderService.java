@@ -6,6 +6,6 @@ import java.util.*;
 
 public interface OrderService {
     OrderResponse create(CreateOrderRequest request);
-    OrderResponse getById(UUID id);
+    OrderResponse getById(String id);
     List<OrderResponse> findAll();
 }

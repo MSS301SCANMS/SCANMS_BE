@@ -16,11 +16,15 @@ import java.util.*;
 public class SellerSettlement {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID settlementId;
+    private String settlementId;
 
-    private UUID storeId;
+    private String storeId;
 
-    private UUID bankAccountId;
+    private String bankAccountId;
+
+    private String walletId;
+
+    private String walletTransactionId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")

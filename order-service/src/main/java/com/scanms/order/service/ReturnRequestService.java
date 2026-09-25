@@ -6,6 +6,6 @@ import java.util.*;
 
 public interface ReturnRequestService {
     ReturnRequestResponse create(CreateReturnRequest request);
-    ReturnRequestResponse getById(UUID id);
+    ReturnRequestResponse getById(String id);
     List<ReturnRequestResponse> findAll();
 }

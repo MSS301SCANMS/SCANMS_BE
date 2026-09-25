@@ -16,9 +16,9 @@ import java.util.*;
 public class CollaboratorProfile {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID collaboratorId;
+    private String collaboratorId;
 
-    private UUID userId;
+    private String userId;
 
     @Enumerated(EnumType.STRING)
     private CollaboratorStatus approvalStatus;

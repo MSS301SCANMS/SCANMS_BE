@@ -16,11 +16,13 @@ import java.util.*;
 public class ReferralLink {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID referralLinkId;
+    private String referralLinkId;
 
-    private UUID collaboratorId;
+    private String collaboratorId;
 
-    private UUID productId;
+    private String productId;
+
+    private String livestreamId;
 
     private String token;
 

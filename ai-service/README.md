@@ -1,11 +1,11 @@
 # SCANMS AI Service
 
-Stateless FastAPI service that combines the existing Ultralytics YOLO clothing model, CIELAB/K-means dominant-color extraction, FashionCLIP embeddings, and zero-shot style classification. Predictions are advisory only; Catalog Service remains responsible for seller confirmation and product persistence.
+Stateless FastAPI service that combines the existing Ultralytics YOLO clothing model, CIELAB/K-means dominant-color extraction, FashionCLIP embeddings, and zero-shot style classification. Predictions are advisory only; Product Service remains responsible for seller confirmation and product persistence.
 
 ## Architecture
 
 ```text
-Frontend -> SCANMS Gateway -> Catalog Service -> AI Service
+Frontend -> SCANMS Gateway -> Product Service -> AI Service
                                                     |-> YOLO
                                                     |-> Lab + K-means
                                                     `-> FashionCLIP
@@ -77,6 +77,14 @@ Working directory: <repository>/ai-service
 Python interpreter: <repository>/ai-service/.venv/Scripts/python.exe
 ```
 
+Alternatively, create a regular **Python** run configuration using the included entrypoint:
+
+```text
+Script path: <repository>/ai-service/main.py
+Working directory: <repository>/ai-service
+Python interpreter: <repository>/ai-service/.venv/Scripts/python.exe
+```
+
 If the Python menus are absent, install/enable JetBrains' Python plugin and restart the IDE.
 
 ## Endpoints
@@ -137,10 +145,10 @@ docker run --rm -p 8000:8000 \
   scanms-ai-service
 ```
 
-## Catalog Service integration
+## Product Service integration
 
-Catalog Service exposes `POST /api/v1/products/ai-analyze`. It forwards the multipart image to `/api/v1/ai/analyze` through OpenFeign and wraps the suggestion in the standard SCANMS `ApiResponse`. Catalog Service does not persist the suggestion automatically. The legacy `/detect` endpoint remains available for backward compatibility.
+Product Service exposes `POST /api/v1/products/ai-analyze`. It forwards the multipart image to `/api/v1/ai/analyze` through OpenFeign and wraps the suggestion in the standard SCANMS `ApiResponse`. Product Service does not persist the suggestion automatically. The legacy `/detect` endpoint remains available for backward compatibility.
 
-PGVector retrieval is not enabled in the current Catalog Service, so no database or fake similar-product endpoint is created here. `recommendation_service.py` contains the configurable weighted-score calculation ready for the Catalog-owned vector retrieval phase.
+PGVector retrieval is not enabled in the current Product Service, so no database or fake similar-product endpoint is created here. `recommendation_service.py` contains the configurable weighted-score calculation ready for the Product-owned vector retrieval phase.
 
 Future service-to-service authentication can use `X-Internal-Api-Key` or JWT. No authentication secret is stored by this baseline implementation.

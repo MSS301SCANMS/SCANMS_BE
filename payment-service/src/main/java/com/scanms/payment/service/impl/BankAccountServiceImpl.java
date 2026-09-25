@@ -24,7 +24,7 @@ public class BankAccountServiceImpl implements BankAccountService {
     }
 
     @Transactional(readOnly = true)
-    public BankAccountResponse getById(UUID id) {
+    public BankAccountResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "BankAccount not found: " + id));
     }
