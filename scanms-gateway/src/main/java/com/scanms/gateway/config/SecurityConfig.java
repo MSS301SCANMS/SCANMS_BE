@@ -15,7 +15,10 @@ public class SecurityConfig {
                                 "/", "/swagger-ui/**", "/swagger-ui.html",
                                 "/v3/api-docs/**", "/v3/api-docs.yaml",
                                 "/openapi/**", "/webjars/**",
-                                "/actuator/health", "/error")
+                                "/actuator/health", "/error",
+                                "/api/v1/orders/**", "/api/v1/seller-orders/**",
+                                "/api/v1/shipments/**", "/api/v1/returns/**",
+                                "/api/v1/products/**", "/api/v1/stores/**")
                         .permitAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
