@@ -46,6 +46,7 @@ public class SecurityConfig {
                                 "/actuator/health", "/error",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
+                                "/api/v1/payments/webhooks/payos",
                                 "/api/v1/orders/**", "/api/v1/seller-orders/**",
                                 "/api/v1/shipments/**", "/api/v1/returns/**",
                                 "/api/v1/products/**", "/api/v1/stores/**"
@@ -59,8 +60,6 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth -> oauth
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(grantedAuthoritiesExtractor()))
                 )
-                               
-  
                 .build();
     }
 

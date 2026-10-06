@@ -27,7 +27,7 @@ public class BankAccountMapper {
                 entity.getCollaboratorId(),
                 entity.getBankCode(),
                 entity.getHolderName(),
-                entity.getAccountCiphertext(),
+                null,
                 entity.getMaskedNumber(),
                 entity.getVerificationStatus(),
                 entity.getActive(),

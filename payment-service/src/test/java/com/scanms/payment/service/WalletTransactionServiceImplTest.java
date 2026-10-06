@@ -24,12 +24,12 @@ class WalletTransactionServiceImplTest {
                 .heldBalanceVnd(0L)
                 .status(WalletStatus.ACTIVE)
                 .build();
-        when(walletRepository.findByIdForUpdate(walletId)).thenReturn(Optional.of(wallet));
-        when(transactionRepository.save(any(WalletTransaction.class)))
+        when(walletRepository.findById(walletId)).thenReturn(Optional.of(wallet));
+        when(transactionRepository.saveAndFlush(any(WalletTransaction.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         var service = new WalletTransactionServiceImpl(
-                transactionRepository, walletRepository, new WalletTransactionMapper());
+                transactionRepository, walletRepository, new WalletTransactionMapper(), mock(jakarta.persistence.EntityManager.class));
         var request = new CreateWalletTransactionRequest(
                 walletId, WalletTransactionType.ORDER_PAYMENT, WalletTransactionDirection.DEBIT,
                 30_000L, WalletTransactionStatus.SUCCESS, "ORDER", java.util.UUID.randomUUID().toString(),
@@ -41,6 +41,6 @@ class WalletTransactionServiceImplTest {
         assertEquals(100_000L, response.balanceBeforeVnd());
         assertEquals(70_000L, response.balanceAfterVnd());
         verify(walletRepository).save(wallet);
-        verify(transactionRepository).save(any(WalletTransaction.class));
+        verify(transactionRepository).saveAndFlush(any(WalletTransaction.class));
     }
 }

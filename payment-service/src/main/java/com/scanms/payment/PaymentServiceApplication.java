@@ -8,6 +8,7 @@ import com.scanms.payment.config.PaymentProviderConfig;
 
 @SpringBootApplication
 @EnableFeignClients
+@org.springframework.scheduling.annotation.EnableScheduling
 @EnableConfigurationProperties(PaymentProviderConfig.class)
 public class PaymentServiceApplication {
     public static void main(String[] args) {

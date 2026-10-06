@@ -25,6 +25,8 @@ public class WalletTransaction {
     private Long balanceBeforeVnd;
     @Column(nullable = false)
     private Long balanceAfterVnd;
+    private Long heldBeforeVnd;
+    private Long heldAfterVnd;
     @Enumerated(EnumType.STRING) @Column(nullable = false)
     private WalletTransactionStatus status;
     private String referenceType;

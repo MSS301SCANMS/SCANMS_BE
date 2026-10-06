@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 @Entity
-@Table(name = "orders")
+@Table(name = "orders",uniqueConstraints=@UniqueConstraint(name="uk_order_customer_key",columnNames={"customerId","idempotencyKey"}))
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class Order {
     @Id
@@ -21,6 +21,7 @@ public class Order {
     private String customerId;
 
     private String idempotencyKey;
+    @Column(columnDefinition="text") private String checkoutRequest;
 
     private Long payableVnd;
 

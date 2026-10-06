@@ -24,3 +24,32 @@ spring:
 springdoc:
   swagger-ui:
     enabled: ${SWAGGER_ENABLED:true}
+
+scanms:
+  payment:
+    frontend-url: ${FRONTEND_URL:http://localhost:5173}
+    bank-encryption-key: ${BANK_ENCRYPTION_KEY:}
+    bank-closed-dates: ${BANK_CLOSED_DATES:}
+    minimum-withdrawal-vnd: ${MINIMUM_WITHDRAWAL_VND:200000}
+    automatic-payouts: ${AUTOMATIC_PAYOUTS:true}
+    payout-delay-ms: ${PAYOUT_DELAY_MS:60000}
+    service-token-url: ${PAYMENT_SERVICE_TOKEN_URL:}
+    service-client-id: ${PAYMENT_SERVICE_CLIENT_ID:payment-service}
+    service-client-secret: ${PAYMENT_SERVICE_CLIENT_SECRET:}
+    payos:
+      base-url: ${PAYOS_BASE_URL:https://api-merchant.payos.vn}
+      client-id: ${PAYOS_CLIENT_ID:}
+      api-key: ${PAYOS_API_KEY:}
+      checksum-key: ${PAYOS_CHECKSUM_KEY:}
+      payout-client-id: ${PAYOS_PAYOUT_CLIENT_ID:}
+      payout-api-key: ${PAYOS_PAYOUT_API_KEY:}
+      payout-checksum-key: ${PAYOS_PAYOUT_CHECKSUM_KEY:}
+clients:
+  user:
+    url: ${USER_SERVICE_URL:http://localhost:8081}
+  product:
+    url: ${PRODUCT_SERVICE_URL:http://localhost:8082}
+  order:
+    url: ${ORDER_SERVICE_URL:http://localhost:8083}
+  promotion:
+    url: ${PROMOTION_SERVICE_URL:http://localhost:8085}

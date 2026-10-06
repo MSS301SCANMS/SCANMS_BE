@@ -15,6 +15,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class DiscountAllocationController {
     private final DiscountAllocationService service;
+    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
     ResponseEntity<ApiResponse<DiscountAllocationResponse>> create(@Valid @RequestBody CreateDiscountAllocationRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));

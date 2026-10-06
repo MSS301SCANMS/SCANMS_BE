@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 @Entity
-@Table(name = "seller_settlements")
+@Table(name = "seller_settlements", uniqueConstraints = @UniqueConstraint(name = "uk_settlement_seller_order", columnNames = "sellerOrderId"))
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class SellerSettlement {
     @Id
@@ -19,6 +19,8 @@ public class SellerSettlement {
     private String settlementId;
 
     private String storeId;
+    private String sellerOrderId;
+    @Version private Long version;
 
     private String bankAccountId;
 
@@ -37,6 +39,8 @@ public class SellerSettlement {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> breakdown;
+    @JdbcTypeCode(SqlTypes.JSON) @Column(columnDefinition="jsonb")
+    private Map<String,Object> reconciliationHistory;
 
     private Long netAmountVnd;
 

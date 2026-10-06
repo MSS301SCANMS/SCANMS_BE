@@ -24,3 +24,15 @@ spring:
 springdoc:
   swagger-ui:
     enabled: ${SWAGGER_ENABLED:true}
+
+clients:
+  order:
+    url: ${ORDER_SERVICE_URL:http://localhost:8083}
+  payment:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+scanms:
+  finance:
+    token-url: ${FINANCE_TOKEN_URL:}
+    client-id: ${AFFILIATE_SERVICE_CLIENT_ID:promotion-affiliate-service}
+    client-secret: ${AFFILIATE_SERVICE_CLIENT_SECRET:}
+    dispatch-delay-ms: ${FINANCE_DISPATCH_DELAY_MS:60000}

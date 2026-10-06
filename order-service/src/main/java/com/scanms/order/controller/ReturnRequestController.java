@@ -17,6 +17,7 @@ import java.util.*;
 public class ReturnRequestController {
     private final ReturnRequestService service;
 
+    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
     public ResponseEntity<ApiResponse<ReturnRequestResponse>> create(@Valid @RequestBody CreateReturnRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
