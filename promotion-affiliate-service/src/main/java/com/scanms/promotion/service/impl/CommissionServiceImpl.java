@@ -18,8 +18,13 @@ import java.util.*;
 public class CommissionServiceImpl implements CommissionService {
     private final CommissionRepository repository;
     private final CommissionMapper mapper;
+    private final com.scanms.promotion.repository.CommissionFinalizationRepository finalizations;
+    private final jakarta.persistence.EntityManager em;
 
     public CommissionResponse create(CreateCommissionRequest request) {
+        var anchor=em.find(com.scanms.promotion.entity.CommissionFinalization.class,request.orderItemId(),jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        if(anchor==null) { anchor=new com.scanms.promotion.entity.CommissionFinalization(); anchor.setOrderItemId(request.orderItemId()); em.persist(anchor); em.flush(); }
+        if(anchor.getFinalizedAt()!=null) throw new AppException(ErrorCode.CONFLICT,"Commission has been finalized; use a referenced adjustment instead");
         return mapper.toResponse(repository.save(mapper.toEntity(request)));
     }
 

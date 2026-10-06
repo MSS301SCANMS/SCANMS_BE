@@ -9,13 +9,13 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 public class SecurityConfig {
     @Bean
     SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
-        return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
+        return http.csrf(ServerHttpSecurity.CsrfSpec::disable).cors(Customizer.withDefaults())
                 .authorizeExchange(auth -> auth
                         .pathMatchers(
                                 "/", "/swagger-ui/**", "/swagger-ui.html",
                                 "/v3/api-docs/**", "/v3/api-docs.yaml",
                                 "/openapi/**", "/webjars/**",
-                                "/actuator/health", "/error")
+                                "/actuator/health", "/error", "/api/v1/payments/webhooks/payos")
                         .permitAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))

@@ -16,6 +16,7 @@ import java.util.*;
 public class CommissionController {
     private final CommissionService service;
 
+    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
     ResponseEntity<ApiResponse<CommissionResponse>> create(@Valid @RequestBody CreateCommissionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
