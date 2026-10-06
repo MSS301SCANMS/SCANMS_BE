@@ -8,12 +8,14 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/user_db}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:update}
     open-in-view: false
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   security:
     oauth2:
@@ -24,3 +26,8 @@ spring:
 springdoc:
   swagger-ui:
     enabled: ${SWAGGER_ENABLED:true}
+keycloak:
+  auth-server-url: http://localhost:8180
+  realm: scanms
+  client-id: scanms-client
+  client-secret: ${CLIENT_SECRET}
