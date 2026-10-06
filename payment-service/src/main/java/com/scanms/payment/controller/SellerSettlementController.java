@@ -22,7 +22,7 @@ public class SellerSettlementController {
     }
 
     @GetMapping("/{id}")
-    ApiResponse<SellerSettlementResponse> getById(@PathVariable UUID id) {
+    ApiResponse<SellerSettlementResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 

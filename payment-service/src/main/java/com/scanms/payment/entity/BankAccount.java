@@ -16,11 +16,11 @@ import java.util.*;
 public class BankAccount {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID bankAccountId;
+    private String bankAccountId;
 
-    private UUID storeId;
+    private String storeId;
 
-    private UUID collaboratorId;
+    private String collaboratorId;
 
     private String bankCode;
 

@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record ReturnRequestResponse(
-        UUID returnRequestId,
-        UUID orderItemId,
+        String returnRequestId,
+        String orderItemId,
         Integer quantity,
         String reason,
         Map<String, Object> evidenceRefs,

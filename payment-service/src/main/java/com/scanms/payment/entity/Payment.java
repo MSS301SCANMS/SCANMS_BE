@@ -16,9 +16,9 @@ import java.util.*;
 public class Payment {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID paymentId;
+    private String paymentId;
 
-    private UUID orderId;
+    private String orderId;
 
     private String providerCode;
 

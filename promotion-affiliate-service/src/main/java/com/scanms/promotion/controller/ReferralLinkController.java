@@ -22,7 +22,7 @@ public class ReferralLinkController {
     }
 
     @GetMapping("/{id}")
-    ApiResponse<ReferralLinkResponse> getById(@PathVariable UUID id) {
+    ApiResponse<ReferralLinkResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 

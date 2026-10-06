@@ -24,7 +24,7 @@ public class SellerSettlementServiceImpl implements SellerSettlementService {
     }
 
     @Transactional(readOnly = true)
-    public SellerSettlementResponse getById(UUID id) {
+    public SellerSettlementResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "SellerSettlement not found: " + id));
     }

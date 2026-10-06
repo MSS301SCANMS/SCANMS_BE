@@ -6,6 +6,6 @@ import java.util.*;
 
 public interface SellerSettlementService {
     SellerSettlementResponse create(CreateSellerSettlementRequest request);
-    SellerSettlementResponse getById(UUID id);
+    SellerSettlementResponse getById(String id);
     List<SellerSettlementResponse> findAll();
 }

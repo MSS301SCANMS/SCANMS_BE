@@ -12,9 +12,10 @@ public class CommissionMapper {
                 .orderItemId(request.orderItemId())
                 .collaboratorId(request.collaboratorId())
                 .referralLinkId(request.referralLinkId())
-                .basisVnd(request.basisVnd())
-                .rate(request.rate())
-                .amountVnd(request.amountVnd())
+                .commissionPolicyId(request.commissionPolicyId())
+                .basisAmountVnd(request.basisVnd())
+                .rateSnapshot(request.rate())
+                .commissionAmountVnd(request.amountVnd())
                 .status(request.status())
                 .adjustmentHistory(request.adjustmentHistory())
                 .transferReference(request.transferReference())
@@ -28,9 +29,10 @@ public class CommissionMapper {
                 entity.getOrderItemId(),
                 entity.getCollaboratorId(),
                 entity.getReferralLinkId(),
-                entity.getBasisVnd(),
-                entity.getRate(),
-                entity.getAmountVnd(),
+                entity.getCommissionPolicyId(),
+                entity.getBasisAmountVnd(),
+                entity.getRateSnapshot(),
+                entity.getCommissionAmountVnd(),
                 entity.getStatus(),
                 entity.getAdjustmentHistory(),
                 entity.getTransferReference(),

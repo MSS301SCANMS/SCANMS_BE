@@ -6,6 +6,6 @@ import java.util.*;
 
 public interface ReferralLinkService {
     ReferralLinkResponse create(CreateReferralLinkRequest request);
-    ReferralLinkResponse getById(UUID id);
+    ReferralLinkResponse getById(String id);
     List<ReferralLinkResponse> findAll();
 }

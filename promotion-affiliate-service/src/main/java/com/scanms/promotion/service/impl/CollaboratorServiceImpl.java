@@ -24,7 +24,7 @@ public class CollaboratorServiceImpl implements CollaboratorService {
     }
 
     @Transactional(readOnly = true)
-    public CollaboratorProfileResponse getById(UUID id) {
+    public CollaboratorProfileResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "CollaboratorProfile not found: " + id));
     }

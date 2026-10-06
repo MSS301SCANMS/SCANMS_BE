@@ -24,3 +24,11 @@ spring:
 springdoc:
   swagger-ui:
     enabled: ${SWAGGER_ENABLED:true}
+
+clients:
+  product:
+    url: ${PRODUCT_SERVICE_URL:http://localhost:8082}
+  promotion:
+    url: ${PROMOTION_SERVICE_URL:http://localhost:8085}
+  payment:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8084}

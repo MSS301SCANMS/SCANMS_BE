@@ -2,6 +2,7 @@ package com.scanms.promotion.entity;
 
 import com.scanms.promotion.constant.VoucherIssuerType;
 import com.scanms.promotion.constant.VoucherDiscountType;
+import com.scanms.promotion.constant.VoucherScopeType;
 import jakarta.persistence.*;
 
 import lombok.*;
@@ -17,14 +18,21 @@ import java.util.*;
 public class Voucher {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID voucherId;
+    private String voucherId;
 
     private String code;
 
     @Enumerated(EnumType.STRING)
     private VoucherIssuerType issuerType;
 
-    private UUID storeId;
+    private String storeId;
+
+    private String productId;
+
+    private String livestreamId;
+
+    @Enumerated(EnumType.STRING)
+    private VoucherScopeType scopeType;
 
     @Enumerated(EnumType.STRING)
     private VoucherDiscountType discountType;
@@ -45,6 +53,7 @@ public class Voucher {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
+    @Deprecated(forRemoval = false)
     private Map<String, Object> scope;
 
     @JdbcTypeCode(SqlTypes.JSON)

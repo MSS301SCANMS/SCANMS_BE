@@ -16,9 +16,9 @@ import java.util.*;
 public class Order {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID orderId;
+    private String orderId;
 
-    private UUID customerId;
+    private String customerId;
 
     private String idempotencyKey;
 

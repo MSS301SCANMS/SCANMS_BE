@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record ApplyCollaboratorRequest(
-        @NotNull UUID userId,
+        @NotNull String userId,
         CollaboratorStatus approvalStatus,
         LocalDateTime joinedAt,
         String policyVersion

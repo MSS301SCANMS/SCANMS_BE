@@ -29,9 +29,29 @@ class TopPrediction(ApiModel):
     confidence: float
 
 
+class DominantColor(ApiModel):
+    name: str
+    ratio: float = Field(ge=0.0, le=1.0)
+
+
+class StylePrediction(ApiModel):
+    style: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
 class DetectionResponse(ApiModel):
     detections: list[DetectionItem]
     top_prediction: TopPrediction | None
+    inference_time_ms: float
+
+
+class AnalysisResponse(ApiModel):
+    detections: list[DetectionItem]
+    top_prediction: TopPrediction | None
+    dominant_colors: list[DominantColor]
+    style_prediction: StylePrediction | None
+    detection_fallback: bool
+    embedding_generated: bool
     inference_time_ms: float
 
 
@@ -40,6 +60,7 @@ class HealthResponse(ApiModel):
     status: str
     model_loaded: bool
     model_path: str | None = None
+    fashion_clip_loaded: bool = False
 
 
 class ErrorResponse(BaseModel):

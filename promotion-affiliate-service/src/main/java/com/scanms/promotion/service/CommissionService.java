@@ -6,6 +6,6 @@ import java.util.*;
 
 public interface CommissionService {
     CommissionResponse create(CreateCommissionRequest request);
-    CommissionResponse getById(UUID id);
+    CommissionResponse getById(String id);
     List<CommissionResponse> findAll();
 }

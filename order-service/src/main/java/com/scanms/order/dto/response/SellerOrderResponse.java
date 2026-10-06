@@ -6,9 +6,9 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record SellerOrderResponse(
-        UUID sellerOrderId,
-        UUID orderId,
-        UUID storeId,
+        String sellerOrderId,
+        String orderId,
+        String storeId,
         Map<String, Object> totalsSnapshot,
         SellerOrderStatus status,
         LocalDateTime deliveredAt,

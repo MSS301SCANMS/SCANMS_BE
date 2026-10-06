@@ -7,9 +7,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import detection, health
+from app.api.routes import analyze, detection, health
 from app.core.config import get_settings
 from app.models.model_loader import load_model
+from app.models.fashion_clip_loader import load_fashion_clip
 from app.models.schemas import ErrorResponse
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     load_model()
+    load_fashion_clip()
     yield
 
 
@@ -72,3 +74,4 @@ async def unexpected_exception_handler(_: Request, exception: Exception) -> JSON
 
 app.include_router(health.router)
 app.include_router(detection.router)
+app.include_router(analyze.router)

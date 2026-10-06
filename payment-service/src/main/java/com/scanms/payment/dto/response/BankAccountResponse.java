@@ -6,9 +6,9 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record BankAccountResponse(
-        UUID bankAccountId,
-        UUID storeId,
-        UUID collaboratorId,
+        String bankAccountId,
+        String storeId,
+        String collaboratorId,
         String bankCode,
         String holderName,
         String accountCiphertext,

@@ -11,6 +11,7 @@ public class ReferralLinkMapper {
         return ReferralLink.builder()
                 .collaboratorId(request.collaboratorId())
                 .productId(request.productId())
+                .livestreamId(request.livestreamId())
                 .token(request.token())
                 .status(request.status())
                 .expiresAt(request.expiresAt())
@@ -22,6 +23,7 @@ public class ReferralLinkMapper {
                 entity.getReferralLinkId(),
                 entity.getCollaboratorId(),
                 entity.getProductId(),
+                entity.getLivestreamId(),
                 entity.getToken(),
                 entity.getStatus(),
                 entity.getExpiresAt(),

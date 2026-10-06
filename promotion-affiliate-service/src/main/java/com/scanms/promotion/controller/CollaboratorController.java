@@ -22,7 +22,7 @@ public class CollaboratorController {
     }
 
     @GetMapping("/{id}")
-    ApiResponse<CollaboratorProfileResponse> getById(@PathVariable UUID id) {
+    ApiResponse<CollaboratorProfileResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 

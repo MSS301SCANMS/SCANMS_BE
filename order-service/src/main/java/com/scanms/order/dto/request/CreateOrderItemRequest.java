@@ -7,13 +7,18 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CreateOrderItemRequest(
-        @NotNull UUID sellerOrderId,
-        @NotNull UUID productId,
+        @NotNull String sellerOrderId,
+        @NotNull String productId,
+        String variantId,
+        String sourceLivestreamId,
         @Positive Integer quantity,
         Map<String, Object> productSnapshot,
         String selectedSize,
         @PositiveOrZero Long unitPrice,
+        @PositiveOrZero Long grossAmountVnd,
+        @PositiveOrZero Long discountAmountVnd,
+        @PositiveOrZero Long netPaidAmountVnd,
         Map<String, Object> discountAllocations,
-        UUID referralLinkId,
+        String referralLinkId,
         Map<String, Object> ruleSnapshot
 ) {}

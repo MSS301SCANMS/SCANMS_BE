@@ -24,7 +24,7 @@ public class OrderItemServiceImpl implements OrderItemService {
     }
 
     @Transactional(readOnly = true)
-    public OrderItemResponse getById(UUID id) {
+    public OrderItemResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "OrderItem not found: " + id));
     }

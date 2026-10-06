@@ -24,7 +24,7 @@ public class CommissionServiceImpl implements CommissionService {
     }
 
     @Transactional(readOnly = true)
-    public CommissionResponse getById(UUID id) {
+    public CommissionResponse getById(String id) {
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Commission not found: " + id));
     }

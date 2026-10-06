@@ -16,9 +16,9 @@ import java.util.*;
 public class ReturnRequest {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID returnRequestId;
+    private String returnRequestId;
 
-    private UUID orderItemId;
+    private String orderItemId;
 
     private Integer quantity;
 
@@ -33,7 +33,8 @@ public class ReturnRequest {
 
     private String decisionReason;
 
-    private Long refundAmount;
+    @Column(name = "refund_amount_vnd")
+    private Long refundAmountVnd;
 
     private String refundReference;
 

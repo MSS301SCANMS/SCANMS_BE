@@ -22,7 +22,7 @@ public class VoucherController {
     }
 
     @GetMapping("/{id}")
-    ApiResponse<VoucherResponse> getById(@PathVariable UUID id) {
+    ApiResponse<VoucherResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 

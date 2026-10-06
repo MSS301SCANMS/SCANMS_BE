@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record OrderResponse(
-        UUID orderId,
-        UUID customerId,
+        String orderId,
+        String customerId,
         String idempotencyKey,
         Long payableVnd,
         String currency,

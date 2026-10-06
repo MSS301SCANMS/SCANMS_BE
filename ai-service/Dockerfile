@@ -1,7 +1,8 @@
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/app/.cache/huggingface
 
 WORKDIR /app
 
@@ -10,7 +11,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
-RUN mkdir -p /app/weights \
+RUN mkdir -p /app/weights /app/.cache/huggingface \
     && addgroup --system app \
     && adduser --system --ingroup app app \
     && chown -R app:app /app

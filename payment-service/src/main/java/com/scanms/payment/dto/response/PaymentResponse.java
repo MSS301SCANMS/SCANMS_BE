@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record PaymentResponse(
-        UUID paymentId,
-        UUID orderId,
+        String paymentId,
+        String orderId,
         String providerCode,
         String transactionId,
         Long amountVnd,

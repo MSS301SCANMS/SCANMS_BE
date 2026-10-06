@@ -11,6 +11,8 @@ public class SellerSettlementMapper {
         return SellerSettlement.builder()
                 .storeId(request.storeId())
                 .bankAccountId(request.bankAccountId())
+                .walletId(request.walletId())
+                .walletTransactionId(request.walletTransactionId())
                 .destinationSnapshot(request.destinationSnapshot())
                 .orderRefs(request.orderRefs())
                 .breakdown(request.breakdown())
@@ -26,6 +28,8 @@ public class SellerSettlementMapper {
                 entity.getSettlementId(),
                 entity.getStoreId(),
                 entity.getBankAccountId(),
+                entity.getWalletId(),
+                entity.getWalletTransactionId(),
                 entity.getDestinationSnapshot(),
                 entity.getOrderRefs(),
                 entity.getBreakdown(),

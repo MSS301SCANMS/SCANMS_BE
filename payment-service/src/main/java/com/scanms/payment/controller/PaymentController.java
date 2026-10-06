@@ -22,7 +22,7 @@ public class PaymentController {
     }
 
     @GetMapping("/{id}")
-    ApiResponse<PaymentResponse> getById(@PathVariable UUID id) {
+    ApiResponse<PaymentResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 

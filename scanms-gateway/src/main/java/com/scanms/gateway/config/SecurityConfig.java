@@ -45,7 +45,10 @@ public class SecurityConfig {
                                 "/openapi/**", "/webjars/**",
                                 "/actuator/health", "/error",
                                 "/api/v1/auth/register",
-                                "/api/v1/auth/login"
+                                "/api/v1/auth/login",
+                                "/api/v1/orders/**", "/api/v1/seller-orders/**",
+                                "/api/v1/shipments/**", "/api/v1/returns/**",
+                                "/api/v1/products/**", "/api/v1/stores/**")
                         ).permitAll()
 
                         // Các request còn lại bắt buộc phải có JWT hợp lệ
@@ -56,6 +59,8 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth -> oauth
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(grantedAuthoritiesExtractor()))
                 )
+                               
+  
                 .build();
     }
 
