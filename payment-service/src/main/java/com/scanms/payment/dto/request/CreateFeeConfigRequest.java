@@ -8,7 +8,7 @@ import java.time.Instant;
 public record CreateFeeConfigRequest(
         @NotNull FeeType feeType,
         @NotNull FeeCalculationType calculationType,
-        @PositiveOrZero BigDecimal ratePercent,
+        @PositiveOrZero @Digits(integer=3,fraction=6) BigDecimal ratePercent,
         @PositiveOrZero Long fixedAmountVnd,
         @PositiveOrZero Long minFeeVnd,
         @PositiveOrZero Long maxFeeVnd,

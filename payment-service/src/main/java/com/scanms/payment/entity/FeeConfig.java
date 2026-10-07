@@ -17,7 +17,7 @@ public class FeeConfig {
     private FeeType feeType;
     @Enumerated(EnumType.STRING) @Column(nullable = false)
     private FeeCalculationType calculationType;
-    private BigDecimal ratePercent;
+    @Column(precision=10,scale=6) private BigDecimal ratePercent;
     private Long fixedAmountVnd;
     private Long minFeeVnd;
     private Long maxFeeVnd;
@@ -25,6 +25,7 @@ public class FeeConfig {
     private Instant validTo;
     @Enumerated(EnumType.STRING) @Column(nullable = false)
     private FeeConfigStatus status;
+    private Instant activatedAt;
     @Version
     private Long version;
     @CreationTimestamp @Column(updatable = false)

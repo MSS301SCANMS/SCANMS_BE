@@ -34,6 +34,10 @@ public class BankAccount {
     private BankAccountVerificationStatus verificationStatus;
 
     private Boolean active;
+    @Column(unique=true) private String sourceKycReference;
+    @Column(unique=true) private String replacesBankId;
+    private String verifiedBy;
+    private java.time.Instant verifiedAt;
 
     @CreationTimestamp
     @Column(updatable = false)

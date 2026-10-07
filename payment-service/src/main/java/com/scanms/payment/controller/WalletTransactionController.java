@@ -17,17 +17,20 @@ public class WalletTransactionController {
     private final WalletTransactionService service;
 
     @PostMapping
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'PAYMENT_INTERNAL')")
     ResponseEntity<ApiResponse<WalletTransactionResponse>> create(
             @Valid @RequestBody CreateWalletTransactionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'PAYMENT_INTERNAL')")
     ApiResponse<WalletTransactionResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'PAYMENT_INTERNAL')")
     ApiResponse<List<WalletTransactionResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }

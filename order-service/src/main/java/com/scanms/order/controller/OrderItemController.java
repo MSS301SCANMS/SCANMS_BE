@@ -16,6 +16,7 @@ import java.util.*;
 public class OrderItemController {
     private final OrderItemService service;
 
+    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
     ResponseEntity<ApiResponse<OrderItemResponse>> create(@Valid @RequestBody CreateOrderItemRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));

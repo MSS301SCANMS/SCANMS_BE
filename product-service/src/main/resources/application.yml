@@ -26,5 +26,7 @@ springdoc:
     enabled: ${SWAGGER_ENABLED:true}
 
 clients:
+  user:
+    url: ${USER_SERVICE_URL:http://localhost:8081}
   ai:
     url: ${AI_SERVICE_URL:http://localhost:8000}

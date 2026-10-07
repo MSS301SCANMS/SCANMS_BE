@@ -16,6 +16,7 @@ import java.util.*;
 public class CollaboratorController {
     private final CollaboratorService service;
 
+    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
     ResponseEntity<ApiResponse<CollaboratorProfileResponse>> create(@Valid @RequestBody ApplyCollaboratorRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));

@@ -26,9 +26,19 @@ springdoc:
     enabled: ${SWAGGER_ENABLED:true}
 
 clients:
+  user:
+    url: ${USER_SERVICE_URL:http://localhost:8081}
+  payment:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8084}
   product:
     url: ${PRODUCT_SERVICE_URL:http://localhost:8082}
   promotion:
     url: ${PROMOTION_SERVICE_URL:http://localhost:8085}
-  payment:
-    url: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+scanms:
+  finance:
+    token-url: ${FINANCE_TOKEN_URL:}
+    client-id: ${ORDER_SERVICE_CLIENT_ID:order-service}
+    client-secret: ${ORDER_SERVICE_CLIENT_SECRET:}
+    dispatch-delay-ms: ${FINANCE_DISPATCH_DELAY_MS:60000}
+  checkout:
+    shipping-fee-per-store-vnd: ${CHECKOUT_SHIPPING_FEE_PER_STORE_VND:0}
