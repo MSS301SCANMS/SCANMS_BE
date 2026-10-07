@@ -4,9 +4,11 @@ import com.scanms.promotion.constant.*;
 import com.scanms.promotion.dto.ApiResponse;
 import com.scanms.promotion.entity.*;
 import com.scanms.promotion.repository.*;
+import com.scanms.promotion.service.CommissionPolicyService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -15,15 +17,19 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.*;
 import java.util.*;
 
+@Slf4j
 @RestController @RequestMapping("/api/v1/finance") @RequiredArgsConstructor @Transactional
 public class FinanceContractController {
     private final EntityManager em;
     private final CommissionRepository commissions;
     private final CollaboratorProfileRepository collaborators;
     private final CommissionFinalizationRepository finalizations;
+    private final ReferralLinkRepository referralLinks;
+    private final CommissionPolicyService policyService;
     @Value("${clients.order.url:http://localhost:8083}") private String orderUrl;
     private final RestClient http=http();
     private static RestClient http() {
@@ -85,6 +91,103 @@ public class FinanceContractController {
         if(total!=finalizedTotal) throw new ResponseStatusException(HttpStatus.CONFLICT,"Finalized commission snapshot changed");
         return ApiResponse.success(Map.of("amountVnd",total,"finalized",true));
     }
+    // ─── Commission Initialization ────────────────────────────────────────────────
+
+    public record InitInput(String reason) {}
+
+    /**
+     * Endpoint khởi tạo Commission cho một OrderItem.
+     * Gọi bởi order-service sau payment SUCCESS (hoặc admin thủ công).
+     * Idempotent: gọi nhiều lần với cùng itemId đều trả kết quả nhất quán.
+     */
+    @PostMapping("/commission-initializations/{itemId}")
+    ApiResponse<Map<String,Object>> initializeCommission(
+            @PathVariable String itemId,
+            @RequestBody(required = false) InitInput input,
+            @AuthenticationPrincipal Jwt jwt) {
+        trusted(jwt, true);
+        return ApiResponse.success(doInitialize(itemId, jwt));
+    }
+
+    /**
+     * Tạo Commission row với rateSnapshot tại thời điểm gọi.
+     * Flow: OrderItem.referralLinkId → ReferralLink → CollaboratorProfile (APPROVED?) → CommissionPolicy resolver → Commission(PENDING)
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String,Object> doInitialize(String itemId, Jwt jwt) {
+        // Lock để tránh race condition
+        CommissionFinalization anchor = em.find(CommissionFinalization.class, itemId, LockModeType.PESSIMISTIC_WRITE);
+        if (anchor != null && anchor.getFinalizedAt() != null) {
+            return Map.of("orderItemId", itemId, "initialized", false, "reason", "Item already finalized");
+        }
+        // Idempotent: Commission đã có thì trả về luôn
+        List<Commission> existing = commissions.findByOrderItemId(itemId);
+        if (!existing.isEmpty()) {
+            Commission c = existing.get(0);
+            return Map.of("orderItemId", itemId, "initialized", true,
+                    "commissionId", c.getCommissionId(), "status", c.getStatus().name());
+        }
+        // Lấy OrderItem từ order-service
+        Map<String,Object> itemDetails;
+        try { itemDetails = order("/api/v1/order-items/" + itemId, jwt); }
+        catch(Exception ex) { throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot fetch order item: " + ex.getMessage()); }
+
+        String referralLinkId = Objects.toString(itemDetails.get("referralLinkId"), null);
+        if (referralLinkId == null) {
+            return Map.of("orderItemId", itemId, "initialized", false, "reason", "No referral attribution");
+        }
+        // Tìm ReferralLink
+        ReferralLink referralLink = referralLinks.findById(referralLinkId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "ReferralLink not found: " + referralLinkId));
+        String collaboratorId = referralLink.getCollaboratorId();
+        // Validate collaborator APPROVED
+        CollaboratorProfile profile = collaborators.findById(collaboratorId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Collaborator profile not found: " + collaboratorId));
+        if (!Set.of("ACTIVE", "APPROVED").contains(profile.getApprovalStatus().name())) {
+            log.warn("Commission init skipped: collaborator {} status={}", collaboratorId, profile.getApprovalStatus());
+            return Map.of("orderItemId", itemId, "initialized", false, "reason", "Collaborator not approved: " + profile.getApprovalStatus());
+        }
+        // Lấy storeId (best-effort, dùng cho STORE-level policy resolution)
+        String storeId = null;
+        String sellerOrderId = Objects.toString(itemDetails.get("sellerOrderId"), null);
+        if (sellerOrderId != null) {
+            try {
+                Map<?,?> resp = http.get().uri(orderUrl + "/api/v1/seller-orders/" + sellerOrderId)
+                        .headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
+                if (resp != null && resp.get("result") instanceof Map<?,?> r) storeId = Objects.toString(r.get("storeId"), null);
+            } catch(Exception ex) { log.debug("Could not fetch storeId for seller order {}: {}", sellerOrderId, ex.getMessage()); }
+        }
+        // Resolve CommissionPolicy: COLLABORATOR → LIVESTREAM → PRODUCT → STORE → PLATFORM
+        CommissionPolicy policy = policyService.resolvePolicy(
+                collaboratorId, referralLink.getLivestreamId(), referralLink.getProductId(), storeId);
+        if (policy == null) {
+            log.warn("No active policy for collaborator={} product={} store={}", collaboratorId, referralLink.getProductId(), storeId);
+            return Map.of("orderItemId", itemId, "initialized", false, "reason", "No applicable active commission policy");
+        }
+        // Tạo CommissionFinalization anchor nếu chưa có
+        if (anchor == null) { anchor = new CommissionFinalization(); anchor.setOrderItemId(itemId); em.persist(anchor); em.flush(); }
+        // Tạo Commission với rate snapshot tại thời điểm này (không thay đổi dù policy sau đổi)
+        Commission commission = new Commission();
+        commission.setOrderItemId(itemId);
+        commission.setCollaboratorId(collaboratorId);
+        commission.setReferralLinkId(referralLinkId);
+        commission.setCommissionPolicyId(policy.getPolicyId());
+        commission.setRateSnapshot(policy.getCommissionRate());
+        commission.setBasisAmountVnd(0L);
+        commission.setCommissionAmountVnd(0L);
+        commission.setStatus(CommissionStatus.PENDING);
+        commission.setAdjustmentHistory(Map.of("initializedAt", Instant.now().toString(),
+                "policyId", policy.getPolicyId(), "scope", policy.getScopeType().name(),
+                "rateSnapshot", policy.getCommissionRate().toPlainString()));
+        Commission saved = commissions.save(commission);
+        log.info("Commission {} created: item={} collaborator={} policy={} rate={}",
+                saved.getCommissionId(), itemId, collaboratorId, policy.getPolicyId(), policy.getCommissionRate());
+        return Map.of("orderItemId", itemId, "initialized", true,
+                "commissionId", saved.getCommissionId(), "rateSnapshot", policy.getCommissionRate().toPlainString());
+    }
+
+    // ─── Commission Finalization (14-day rule) ────────────────────────────────────
+
     public record FinalizeInput(String reason) {}
     @PostMapping("/commission-finalizations/{itemId}") ApiResponse<Map<String,Object>> finalizeItem(@PathVariable String itemId,@RequestBody FinalizeInput input,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true);
@@ -94,8 +197,15 @@ public class FinanceContractController {
         Map<String,Object> basis=order("/api/v1/finance/commission-order-item/"+itemId,jwt);
         if(anchor.getFinalizedAt()!=null) return ApiResponse.success(Map.of("orderItemId",itemId,"finalized",true));
         long retained=new java.math.BigDecimal(basis.get("basisAmountVnd").toString()).longValueExact(), total=0;
-        List<Commission> rows=commissions.findAll().stream().filter(c -> itemId.equals(c.getOrderItemId())).sorted(Comparator.comparing(Commission::getCommissionId)).toList();
-        if(rows.isEmpty() && Boolean.TRUE.equals(basis.get("commissionApplicable"))) throw new ResponseStatusException(HttpStatus.CONFLICT,"Attributed item requires a commission calculation");
+        // Dùng findByOrderItemId thay vì findAll().filter() để hiệu quả hơn
+        List<Commission> rows=commissions.findByOrderItemId(itemId).stream().sorted(Comparator.comparing(Commission::getCommissionId)).toList();
+        // Auto-init nếu thiếu Commission row — trường hợp commission-initializations chưa được gọi trước đó
+        if(rows.isEmpty() && Boolean.TRUE.equals(basis.get("commissionApplicable"))) {
+            log.info("Auto-initializing commission for orderItem={} during finalization", itemId);
+            try { doInitialize(itemId, jwt); }
+            catch(Exception ex) { throw new ResponseStatusException(HttpStatus.CONFLICT, "Commission auto-init failed: " + ex.getMessage()); }
+            rows=commissions.findByOrderItemId(itemId).stream().sorted(Comparator.comparing(Commission::getCommissionId)).toList();
+        }
         for(Commission candidate:rows) {
             Commission c=find(candidate.getCommissionId());
             if(c.getRateSnapshot()==null || c.getRateSnapshot().signum()<0 || c.getRateSnapshot().compareTo(java.math.BigDecimal.valueOf(100))>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission policy snapshot is missing or invalid");

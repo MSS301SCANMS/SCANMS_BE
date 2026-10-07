@@ -1,0 +1,150 @@
+{
+  "realm": "scanms",
+  "enabled": true,
+  "displayName": "SCANMS Ecosystem",
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "roles": {
+    "realm": [
+      { 
+        "name": "USER", 
+        "description": "Default customer and standard user role" 
+      },
+      { 
+        "name": "MANAGER", 
+        "description": "Manager role for store approval, moderation, and dispute handling" 
+      },
+      { 
+        "name": "SHOP_OWNER", 
+        "description": "Store owner role for managing store products, livestreams, and orders" 
+      },
+      { 
+        "name": "KOL_CTV", 
+        "description": "Collaborator and KOL role for referral links and commissions" 
+      },
+      { 
+        "name": "ADMINISTRATOR", 
+        "description": "Platform administrator role with full system control" 
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "scanms-web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "rootUrl": "http://localhost:5173",
+      "baseUrl": "/",
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173"]
+    },
+    {
+      "clientId": "scanms-client",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${CLIENT_SECRET}",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:8080/*"],
+      "serviceAccountRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "query-clients",
+          "view-clients",
+          "realm-admin",
+          "query-realms",
+          "view-realm"
+        ]
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "System",
+      "lastName": "Administrator",
+      "email": "admin@scanms.com",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "USER",
+        "ADMINISTRATOR"
+      ]
+    },
+    {
+      "username": "manager01",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "System",
+      "lastName": "Manager",
+      "email": "manager01@scanms.com",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "USER",
+        "MANAGER"
+      ]
+    },
+    {
+      "username": "shopowner01",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Nguyen Van",
+      "lastName": "ShopOwner",
+      "email": "shopowner01@scanms.com",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "USER",
+        "SHOP_OWNER"
+      ]
+    },
+    {
+      "username": "kolctv01",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Le Van",
+      "lastName": "KOLCTV",
+      "email": "kolctv01@scanms.com",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "123456",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "USER",
+        "KOL_CTV"
+      ]
+    }
+  ]
+}
