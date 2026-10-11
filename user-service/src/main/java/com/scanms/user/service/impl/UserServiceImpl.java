@@ -26,8 +26,13 @@ public class UserServiceImpl implements UserService {
 
     public UserResponse updateCurrentUser(String identitySubject, UpdateUserProfileRequest request) {
         User user = find(identitySubject);
-        if (request.email() != null) user.setEmail(request.email());
         if (request.fullName() != null) user.setFullName(request.fullName());
+        if (request.phoneNumber() != null) user.setPhoneNumber(request.phoneNumber());
+        if (request.dateOfBirth() != null) user.setDateOfBirth(request.dateOfBirth());
+        if (request.gender() != null) user.setGender(request.gender());
+        if (request.address() != null) user.setAddress(request.address());
+        if (request.avatarUrl() != null) user.setAvatarUrl(request.avatarUrl());
+        if (request.bio() != null) user.setBio(request.bio());
         return mapper.toResponse(repository.save(user));
     }
 

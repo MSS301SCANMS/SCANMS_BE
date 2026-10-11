@@ -17,7 +17,8 @@ public class SecurityConfig {
                                 "/v3/api-docs/**", "/v3/api-docs.yaml",
                                 "/webjars/**", "/actuator/health", "/error",
                                 "/api/v1/auth/register",
-                                "/api/v1/auth/login")
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/google")
                         .permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())

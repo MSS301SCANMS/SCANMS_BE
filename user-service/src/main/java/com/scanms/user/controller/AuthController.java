@@ -4,6 +4,7 @@ import com.scanms.user.dto.ApiResponse;
 import com.scanms.user.dto.request.LoginRequest;
 import com.scanms.user.dto.request.RefreshTokenRequest;
 import com.scanms.user.dto.request.RegisterRequest;
+import com.scanms.user.dto.request.GoogleLoginRequest;
 import com.scanms.user.dto.response.AuthResponse;
 import com.scanms.user.service.AuthService;
 import com.scanms.user.service.UserService;
@@ -27,6 +28,12 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse authResponse = service.login(request);
+        return ApiResponse.success(authResponse);
+    }
+
+    @PostMapping("/google")
+    public ApiResponse<AuthResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+        AuthResponse authResponse = service.googleLogin(request);
         return ApiResponse.success(authResponse);
     }
 

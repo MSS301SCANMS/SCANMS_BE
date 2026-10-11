@@ -6,4 +6,5 @@ import java.util.*;
 
 public interface UserRepository extends JpaRepository<User, String> {
     Optional<User> findByIdentitySubject(String identitySubject);
+    Optional<User> findByEmail(String email);
 }
