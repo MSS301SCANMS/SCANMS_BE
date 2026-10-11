@@ -30,5 +30,15 @@ public class ProductVariantController {
     ApiResponse<List<ProductVariantResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
+
+    @PatchMapping("/{id}")
+    ApiResponse<ProductVariantResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateProductVariantRequest request) {
+        return ApiResponse.success(service.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    ApiResponse<ProductVariantResponse> deactivate(@PathVariable String id) {
+        return ApiResponse.success(service.deactivate(id));
+    }
 }
 

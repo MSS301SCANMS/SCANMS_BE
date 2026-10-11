@@ -33,7 +33,9 @@ public class CheckoutService {
     @Value("${scanms.finance.client-secret:}") private String secret;
     @Value("${scanms.checkout.shipping-fee-per-store-vnd:0}") private long shippingFee;
     private final RestClient http=FinanceDispatch.client();
-    public record Line(@NotBlank String productId,String variantId,@Min(1) @Max(1000) int quantity) {}
+    public record Line(@NotBlank String productId,String variantId,@Min(1) @Max(1000) int quantity,String sourceLivestreamId) {
+        public Line(String productId,String variantId,int quantity) { this(productId,variantId,quantity,null); }
+    }
     public record Input(@NotBlank @Size(max=128) String idempotencyKey,@NotBlank @Size(max=100) String customerName,
         @NotBlank @Size(max=30) String customerPhone,@NotBlank @Size(max=500) String shippingAddress,
         @NotBlank String paymentMethod,@AssertTrue boolean policyAccepted,@Size(max=100) String couponCode,
@@ -78,7 +80,7 @@ public class CheckoutService {
                 List<Map<String,Object>> ds=discounts.stream().filter(d -> Objects.equals(d.get("variantId"),line.get("variantId"))).toList();
                 for(var d:ds) discount=Math.addExact(discount,number(d,"allocatedAmountVnd"));
                 if(discount<0 || discount>gross) throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid allocated discount");
-                OrderItem item=items.saveAndFlush(OrderItem.builder().sellerOrderId(seller.getSellerOrderId()).productId(line.get("productId").toString()).variantId(line.get("variantId").toString()).quantity(((Number)line.get("quantity")).intValue()).unitPrice(number(line,"unitPriceVnd")).grossAmountVnd(gross).discountAmountVnd(discount).netPaidAmountVnd(gross-discount).productSnapshot(line).selectedSize(Objects.toString(line.get("size"),null)).build());
+                OrderItem item=items.saveAndFlush(OrderItem.builder().sellerOrderId(seller.getSellerOrderId()).productId(line.get("productId").toString()).variantId(line.get("variantId").toString()).sourceLivestreamId(Objects.toString(line.get("sourceLivestreamId"),null)).quantity(((Number)line.get("quantity")).intValue()).unitPrice(number(line,"unitPriceVnd")).grossAmountVnd(gross).discountAmountVnd(discount).netPaidAmountVnd(gross-discount).productSnapshot(line).selectedSize(Objects.toString(line.get("size"),null)).build());
                 for(var d:ds) if(number(d,"allocatedAmountVnd")>0) allocations.save(DiscountAllocation.builder().orderItemId(item.getOrderItemId()).voucherId(d.get("voucherId").toString()).sourceType(DiscountSourceType.VOUCHER).fundedBy(DiscountFundingType.valueOf(d.get("fundedBy").toString())).allocatedAmountVnd(number(d,"allocatedAmountVnd")).ruleSnapshotJson(tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(d)).build());
                 total=Math.addExact(total,gross-discount);
                 Map<String,Object> totals=new LinkedHashMap<>(seller.getTotalsSnapshot()); totals.put("storeName",line.get("storeName")); totals.put("netPaidVnd",Math.addExact(((Number)totals.getOrDefault("netPaidVnd",0L)).longValue(),gross-discount)); seller.setTotalsSnapshot(totals);

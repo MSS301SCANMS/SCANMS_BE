@@ -8,5 +8,7 @@ public interface ProductImageService {
     ProductImageResponse create(CreateProductImageRequest request);
     ProductImageResponse getById(String id);
     List<ProductImageResponse> findAll();
+    ProductImageResponse update(String id, com.scanms.product.dto.request.UpdateProductImageRequest request);
+    void delete(String id);
 }
 

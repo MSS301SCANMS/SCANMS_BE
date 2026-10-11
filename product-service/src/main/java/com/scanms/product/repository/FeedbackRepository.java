@@ -5,6 +5,6 @@ import com.scanms.product.constant.FeedbackStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface FeedbackRepository extends JpaRepository<Feedback, String> {
-    boolean existsByOrderItemIdAndCustomerIdAndStatus(
-            String orderItemId, String customerId, FeedbackStatus status);
+    boolean existsByOrderItemIdAndCustomerId(String orderItemId, String customerId);
+    java.util.List<Feedback> findByProductIdInAndStatus(java.util.Collection<String> productIds, FeedbackStatus status);
 }

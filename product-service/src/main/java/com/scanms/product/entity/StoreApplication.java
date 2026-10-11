@@ -23,6 +23,8 @@ public class StoreApplication {
     private String reviewNote;
     private Instant submittedAt;
     private Instant reviewedAt;
+    @Version
+    private Long version;
     @CreationTimestamp @Column(updatable = false)
     private Instant createdAt;
     @UpdateTimestamp

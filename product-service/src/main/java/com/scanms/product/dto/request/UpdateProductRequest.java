@@ -6,4 +6,5 @@ import java.util.Map;
 
 public record UpdateProductRequest(String name, String description, String category, String material,
         Map<String, Object> sizesStock, Map<String, Object> sizeGuide, Map<String, Object> imageRefs,
-        @PositiveOrZero Long priceVnd, ProductStatus status) {}
+        @PositiveOrZero Long priceVnd, ProductStatus status, String categoryId,
+        Map<String, Object> attributes) {}

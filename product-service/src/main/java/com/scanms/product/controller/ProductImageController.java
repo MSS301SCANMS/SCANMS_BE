@@ -30,5 +30,16 @@ public class ProductImageController {
     ApiResponse<List<ProductImageResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
+
+    @PatchMapping("/{id}")
+    ApiResponse<ProductImageResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateProductImageRequest request) {
+        return ApiResponse.success(service.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    ResponseEntity<Void> delete(@PathVariable String id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }
 

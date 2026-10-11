@@ -6,6 +6,8 @@ import com.scanms.product.exception.*;
 import com.scanms.product.mapper.ProductImageMapper;
 import com.scanms.product.repository.ProductImageRepository;
 import com.scanms.product.service.ProductImageService;
+import com.scanms.product.service.ProductAccess;
+import com.scanms.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,9 +19,18 @@ import java.util.*;
 public class ProductImageServiceImpl implements ProductImageService {
     private final ProductImageRepository repository;
     private final ProductImageMapper mapper;
+    private final ProductRepository products;
+    private final ProductAccess access;
 
     public ProductImageResponse create(CreateProductImageRequest request) {
-        return mapper.toResponse(repository.save(mapper.toEntity(request)));
+        var product = products.findLockedByProductId(request.productId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found"));
+        access.requireApprovedStore(product.getStoreId());
+        var existing = repository.findByProductId(request.productId());
+        if (request.primaryImage()) existing.forEach(image -> image.setPrimaryImage(false));
+        var image = mapper.toEntity(request);
+        if (existing.isEmpty()) image.setPrimaryImage(true);
+        return mapper.toResponse(repository.save(image));
     }
 
     @Transactional(readOnly = true)
@@ -31,6 +42,35 @@ public class ProductImageServiceImpl implements ProductImageService {
     @Transactional(readOnly = true)
     public List<ProductImageResponse> findAll() {
         return repository.findAll().stream().map(mapper::toResponse).toList();
+    }
+
+    public ProductImageResponse update(String id, com.scanms.product.dto.request.UpdateProductImageRequest request) {
+        var image = repository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product image not found"));
+        var product = products.findLockedByProductId(image.getProductId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found"));
+        access.requireApprovedStore(product.getStoreId());
+        if (request.objectKey() != null) image.setObjectKey(request.objectKey());
+        if (request.imageUrl() != null) image.setImageUrl(request.imageUrl());
+        if (request.sortOrder() != null) image.setSortOrder(request.sortOrder());
+        if (request.altText() != null) image.setAltText(request.altText());
+        if (Boolean.TRUE.equals(request.primaryImage())) {
+            repository.findByProductId(image.getProductId()).forEach(other -> other.setPrimaryImage(other.getImageId().equals(id)));
+        }
+        return mapper.toResponse(repository.save(image));
+    }
+
+    public void delete(String id) {
+        var image = repository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product image not found"));
+        var product = products.findLockedByProductId(image.getProductId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found"));
+        access.requireApprovedStore(product.getStoreId());
+        repository.delete(image);
+        if (image.isPrimaryImage()) repository.findByProductId(image.getProductId()).stream()
+                .filter(other -> !other.getImageId().equals(id))
+                .min(java.util.Comparator.comparing(other -> other.getSortOrder() == null ? Integer.MAX_VALUE : other.getSortOrder()))
+                .ifPresent(next -> next.setPrimaryImage(true));
     }
 }
 

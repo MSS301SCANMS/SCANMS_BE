@@ -8,5 +8,6 @@ public interface StoreApplicationService {
     StoreApplicationResponse create(CreateStoreApplicationRequest request);
     StoreApplicationResponse getById(String id);
     List<StoreApplicationResponse> findAll();
+    StoreApplicationResponse review(String id, boolean approve, String note);
 }
 

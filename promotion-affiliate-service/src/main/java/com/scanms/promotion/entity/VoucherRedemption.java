@@ -7,7 +7,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.Instant;
 
 @Entity
-@Table(name = "voucher_redemptions")
+@Table(name = "voucher_redemptions", uniqueConstraints = @UniqueConstraint(name = "uk_voucher_redemption_order", columnNames = "orderId"))
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class VoucherRedemption {
     @Id @GeneratedValue(strategy = GenerationType.UUID)
@@ -23,6 +23,7 @@ public class VoucherRedemption {
     @Enumerated(EnumType.STRING) @Column(nullable = false)
     private VoucherRedemptionStatus status;
     @CreationTimestamp @Column(updatable = false)
+    private Instant reservedAt;
     private Instant redeemedAt;
     private Instant cancelledAt;
 }

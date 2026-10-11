@@ -8,6 +8,7 @@ public interface AuthService {
     void register(RegisterRequest request);
     AuthResponse login(LoginRequest request);
     void removeRoleFromUser(String userId, String roleName);
+    void grantShopOwnerRole(String userId);
     void createNewRole(String roleName);
     void changePassword(String oldPassword, String newPassword);
     void logout(String refreshToken);

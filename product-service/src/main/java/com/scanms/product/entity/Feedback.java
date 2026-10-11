@@ -9,7 +9,7 @@ import java.time.Instant;
 import java.util.*;
 
 @Entity
-@Table(name = "feedbacks")
+@Table(name = "feedbacks", uniqueConstraints = @UniqueConstraint(name = "uk_feedback_order_item_customer", columnNames = {"orderItemId", "customerId"}))
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class Feedback {
     @Id @GeneratedValue(strategy = GenerationType.UUID)

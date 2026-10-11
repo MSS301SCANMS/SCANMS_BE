@@ -32,6 +32,7 @@ public class ShipmentController {
         return ApiResponse.success(service.getBySellerOrderId(sellerOrderId));
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PatchMapping("/{id}/status")
     public ApiResponse<ShipmentResponse> updateStatus(
             @PathVariable String id,

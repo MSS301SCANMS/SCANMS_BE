@@ -30,5 +30,26 @@ public class FeedbackController {
     ApiResponse<List<FeedbackResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
+
+    @PatchMapping("/{id}")
+    ApiResponse<FeedbackResponse> updateOwn(@PathVariable String id,
+            @Valid @RequestBody com.scanms.product.dto.request.UpdateFeedbackRequest request) {
+        return ApiResponse.success(service.updateOwn(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    ApiResponse<FeedbackResponse> removeOwn(@PathVariable String id) {
+        return ApiResponse.success(service.removeOwn(id));
+    }
+
+    @PostMapping("/{id}/hide")
+    ApiResponse<FeedbackResponse> hide(@PathVariable String id) {
+        return ApiResponse.success(service.moderate(id, com.scanms.product.constant.FeedbackStatus.HIDDEN));
+    }
+
+    @PostMapping("/{id}/remove")
+    ApiResponse<FeedbackResponse> remove(@PathVariable String id) {
+        return ApiResponse.success(service.moderate(id, com.scanms.product.constant.FeedbackStatus.REMOVED));
+    }
 }
 

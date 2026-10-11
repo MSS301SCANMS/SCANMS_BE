@@ -39,6 +39,12 @@ public class AuthController {
         service.removeRoleFromUser(userId, roleName);
         return ApiResponse.success("Đã thu hồi role của user!");
     }
+    @PostMapping("/{userId}/roles/shop-owner")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ApiResponse<String> grantShopOwnerRole(@PathVariable String userId) {
+        service.grantShopOwnerRole(userId);
+        return ApiResponse.success("SHOP_OWNER role granted");
+    }
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<String> createRole(@RequestParam @NotBlank String roleName) {

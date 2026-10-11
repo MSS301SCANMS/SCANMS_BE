@@ -29,14 +29,14 @@
         "description": "Collaborator and KOL role for referral links and commissions" 
       },
       { 
-        "name": "ADMINISTRATOR", 
+        "name": "ADMIN",
         "description": "Platform administrator role with full system control" 
       }
     ]
   },
   "clients": [
     {
-      "clientId": "scanms-web",
+      "clientId": "scanms-frontend",
       "enabled": true,
       "publicClient": true,
       "standardFlowEnabled": true,
@@ -86,7 +86,7 @@
       ],
       "realmRoles": [
         "USER",
-        "ADMINISTRATOR"
+        "ADMIN"
       ]
     },
     {

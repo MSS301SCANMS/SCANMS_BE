@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 @Entity
-@Table(name = "stores")
+@Table(name = "stores", uniqueConstraints = @UniqueConstraint(name = "uk_store_owner", columnNames = "ownerUserId"))
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class Store {
     @Id

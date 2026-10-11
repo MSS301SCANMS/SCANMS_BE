@@ -34,6 +34,26 @@ public class StoreController {
         return ApiResponse.success(service.getById(id));
     }
 
+    @GetMapping("/{id}/dashboard")
+    ApiResponse<com.scanms.product.dto.response.StoreDashboardResponse> dashboard(@PathVariable String id) {
+        return ApiResponse.success(service.dashboard(id));
+    }
+
+    @PostMapping("/{id}/suspend")
+    ApiResponse<StoreResponse> suspend(@PathVariable String id) {
+        return ApiResponse.success(service.setSuspended(id, true));
+    }
+
+    @PostMapping("/{id}/activate")
+    ApiResponse<StoreResponse> activate(@PathVariable String id) {
+        return ApiResponse.success(service.setSuspended(id, false));
+    }
+
+    @PatchMapping("/{id}")
+    ApiResponse<StoreResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateStoreRequest request) {
+        return ApiResponse.success(service.update(id, request));
+    }
+
     @GetMapping
     ApiResponse<List<StoreResponse>> findAll() {
         return ApiResponse.success(service.findAll());
