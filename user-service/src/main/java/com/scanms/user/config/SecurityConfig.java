@@ -18,7 +18,10 @@ public class SecurityConfig {
                                 "/webjars/**", "/actuator/health", "/error",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
-                                "/api/v1/auth/google")
+                                "/api/v1/auth/google",
+                                "/api/v1/auth/forgot-password/send-otp",
+                                "/api/v1/auth/forgot-password/verify-otp",
+                                "/api/v1/auth/forgot-password/reset")
                         .permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())

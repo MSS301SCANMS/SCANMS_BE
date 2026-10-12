@@ -5,6 +5,9 @@ import com.scanms.user.dto.request.LoginRequest;
 import com.scanms.user.dto.request.RefreshTokenRequest;
 import com.scanms.user.dto.request.RegisterRequest;
 import com.scanms.user.dto.request.GoogleLoginRequest;
+import com.scanms.user.dto.request.ForgotPasswordSendOtpRequest;
+import com.scanms.user.dto.request.ForgotPasswordVerifyOtpRequest;
+import com.scanms.user.dto.request.ForgotPasswordResetRequest;
 import com.scanms.user.dto.response.AuthResponse;
 import com.scanms.user.service.AuthService;
 import com.scanms.user.service.UserService;
@@ -69,6 +72,24 @@ public class AuthController {
     public ApiResponse<AuthResponse> refreshToken(@RequestBody RefreshTokenRequest request) {
         AuthResponse response = service.refreshToken(request.getRefreshToken());
         return ApiResponse.success(response);
+    }
+
+    @PostMapping("/forgot-password/send-otp")
+    public ApiResponse<String> sendForgotPasswordOtp(@Valid @RequestBody ForgotPasswordSendOtpRequest request) {
+        service.sendForgotPasswordOtp(request.email());
+        return ApiResponse.success("Đã gửi mã OTP tới email của bạn!");
+    }
+
+    @PostMapping("/forgot-password/verify-otp")
+    public ApiResponse<String> verifyForgotPasswordOtp(@Valid @RequestBody ForgotPasswordVerifyOtpRequest request) {
+        service.verifyForgotPasswordOtp(request.email(), request.otp());
+        return ApiResponse.success("Mã OTP hợp lệ!");
+    }
+
+    @PostMapping("/forgot-password/reset")
+    public ApiResponse<String> resetPasswordWithOtp(@Valid @RequestBody ForgotPasswordResetRequest request) {
+        service.resetPasswordWithOtp(request.email(), request.otp(), request.newPassword());
+        return ApiResponse.success("Đặt lại mật khẩu thành công!");
     }
 
 }

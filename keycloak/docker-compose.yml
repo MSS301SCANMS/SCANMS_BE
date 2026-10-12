@@ -96,6 +96,7 @@ services:
     command:
       - "start-dev"
       - "--import-realm"
+      - "--features=token-exchange,admin-fine-grained-authz"
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak_db

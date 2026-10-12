@@ -12,6 +12,8 @@ import com.scanms.user.exception.ErrorCode;
 import com.scanms.user.repository.RoleRepository;
 import com.scanms.user.repository.UserRepository;
 import com.scanms.user.service.AuthService;
+import com.scanms.user.service.MailService;
+import com.scanms.user.service.OtpService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -41,6 +43,8 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository repository;
     private final RestTemplate restTemplate = new RestTemplate();
     private final RoleRepository roleRepository;
+    private final OtpService otpService;
+    private final MailService mailService;
     @Value("${keycloak.auth-server-url}")
     private String serverUrl;
 
@@ -55,6 +59,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Value("${google.client-id}")
     private String googleClientId;
+
+    @Value("${app.auth.email-verification-enabled:false}")
+    private boolean emailVerificationEnabled;
 
     @Transactional
     @Override
@@ -73,10 +80,10 @@ public class AuthServiceImpl implements AuthService {
                 "username", request.username(),
                 "email", request.email(),
                 "enabled", true,
-                "emailVerified", true,
+                "emailVerified", !emailVerificationEnabled,
                 "firstName", request.firstName(),
                 "lastName",request.lastName(),
-                "requiredActions", List.of(),
+                "requiredActions", emailVerificationEnabled ? List.of("VERIFY_EMAIL") : List.of(),
                 "credentials", List.of(Map.of(
                         "type", "password",
                         "value", request.password(),
@@ -105,6 +112,10 @@ public class AuthServiceImpl implements AuthService {
                 if (userSearchResponse.getBody() != null && !userSearchResponse.getBody().isEmpty()) {
                     Map<String, Object> kcUser = userSearchResponse.getBody().get(0);
                     String identitySubject = (String) kcUser.get("id");
+
+                    if (emailVerificationEnabled) {
+                        sendVerifyEmail(identitySubject, adminToken);
+                    }
                                       // Lưu vào database của user-service
                     List<RoleName> rolesToQuery = (request.roleNames() != null && !request.roleNames().isEmpty())
                             ? request.roleNames()
@@ -304,6 +315,75 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không thể lấy token cho user: " + e.getMessage());
         }
         throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không thể lấy token cho user");
+    }
+
+    /**
+     * Yêu cầu Keycloak gửi mail xác minh email tới user vừa tạo.
+     * Chỉ được gọi khi app.auth.email-verification-enabled=true (đã cấu hình SMTP trong Keycloak).
+     */
+    private void sendVerifyEmail(String userId, String adminToken) {
+        try {
+            String sendVerifyEmailUrl = serverUrl + "/admin/realms/" + realm + "/users/" + userId + "/send-verify-email";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(adminToken);
+
+            HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
+            restTemplate.exchange(sendVerifyEmailUrl, HttpMethod.PUT, requestEntity, Void.class);
+        } catch (Exception e) {
+            // Không làm fail cả flow đăng ký nếu gửi mail lỗi (ví dụ SMTP chưa cấu hình) — chỉ log lại.
+            System.err.println("Không thể gửi mail xác minh cho user [" + userId + "]: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void sendForgotPasswordOtp(String email) {
+        User user = repository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Email chưa đăng ký tài khoản nào"));
+
+        String otp = otpService.generate(user.getEmail());
+        try {
+            mailService.sendOtpEmail(user.getEmail(), otp);
+        } catch (Exception e) {
+            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không thể gửi mã OTP: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void verifyForgotPasswordOtp(String email, String otp) {
+        if (!otpService.verify(email, otp)) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Mã OTP không đúng hoặc đã hết hạn");
+        }
+    }
+
+    @Override
+    public void resetPasswordWithOtp(String email, String otp, String newPassword) {
+        if (!otpService.consume(email, otp)) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Mã OTP không đúng hoặc đã hết hạn");
+        }
+
+        User user = repository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Email chưa đăng ký tài khoản nào"));
+
+        String adminToken = getAdminAccessToken();
+        String resetPasswordUrl = serverUrl + "/admin/realms/" + realm + "/users/" + user.getIdentitySubject() + "/reset-password";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(adminToken);
+
+        Map<String, Object> body = Map.of(
+                "type", "password",
+                "value", newPassword,
+                "temporary", false
+        );
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+        try {
+            restTemplate.exchange(resetPasswordUrl, HttpMethod.PUT, entity, Void.class);
+        } catch (Exception e) {
+            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đặt lại mật khẩu thất bại: " + e.getMessage());
+        }
     }
 
     private String getAdminAccessToken() {
