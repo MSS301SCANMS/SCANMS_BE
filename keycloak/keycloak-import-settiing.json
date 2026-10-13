@@ -64,7 +64,7 @@
       "emailVerified": true,
       "firstName": "System",
       "lastName": "Administrator",
-      "email": "admin@scanms.com",
+        "email": "admin@scanms.com",
       "credentials": [
         {
           "type": "password",
@@ -74,7 +74,7 @@
       ],
       "realmRoles": [
         "USER",
-        "ADMINISTRATOR"
+        "ADMIN"
       ]
     },
     {
