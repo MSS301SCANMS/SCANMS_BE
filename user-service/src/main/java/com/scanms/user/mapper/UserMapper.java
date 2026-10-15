@@ -11,8 +11,23 @@ import org.springframework.stereotype.Component;
 @Component
 public class UserMapper {
     public UserResponse toResponse(User user) {
-        return new UserResponse(user.getUserId(), user.getIdentitySubject(), user.getEmail(), user.getFullName(),
-                user.getStatus(), toRoleNames(user.getRoles()), user.getCreatedAt(), user.getUpdatedAt());
+        return new UserResponse(
+                user.getUserId(),
+                user.getIdentitySubject(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getPhoneNumber(),
+                user.getDateOfBirth(),
+                user.getGender(),
+                user.getAddress(),
+                user.getAvatarUrl(),
+                user.getBio(),
+                user.getStatus(),
+                toRoleNames(user.getRoles()),
+                user.getCreatedAt(),
+                user.getUpdatedAt()
+        );
     }
 
     private Set<RoleName> toRoleNames(Set<Role> roles) {

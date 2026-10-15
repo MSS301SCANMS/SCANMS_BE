@@ -12,25 +12,25 @@
   "waitIncrementSeconds": 60,
   "roles": {
     "realm": [
-      { 
-        "name": "USER", 
-        "description": "Default customer and standard user role" 
+      {
+        "name": "USER",
+        "description": "Default customer and standard user role"
       },
-      { 
-        "name": "MANAGER", 
-        "description": "Manager role for store approval, moderation, and dispute handling" 
+      {
+        "name": "MANAGER",
+        "description": "Manager role for store approval, moderation, and dispute handling"
       },
-      { 
-        "name": "SHOP_OWNER", 
-        "description": "Store owner role for managing store products, livestreams, and orders" 
+      {
+        "name": "SHOP_OWNER",
+        "description": "Store owner role for managing store products, livestreams, and orders"
       },
-      { 
-        "name": "KOL_CTV", 
-        "description": "Collaborator and KOL role for referral links and commissions" 
+      {
+        "name": "KOL_CTV",
+        "description": "Collaborator and KOL role for referral links and commissions"
       },
-      { 
-        "name": "ADMINISTRATOR", 
-        "description": "Platform administrator role with full system control" 
+      {
+        "name": "ADMINISTRATOR",
+        "description": "Platform administrator role with full system control"
       }
     ]
   },
@@ -54,19 +54,7 @@
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
-      "redirectUris": ["http://localhost:8080/*"],
-      "serviceAccountRoles": {
-        "realm-management": [
-          "manage-users",
-          "view-users",
-          "query-users",
-          "query-clients",
-          "view-clients",
-          "realm-admin",
-          "query-realms",
-          "view-realm"
-        ]
-      }
+      "redirectUris": ["http://localhost:8080/*"]
     }
   ],
   "users": [
@@ -76,7 +64,7 @@
       "emailVerified": true,
       "firstName": "System",
       "lastName": "Administrator",
-      "email": "admin@scanms.com",
+        "email": "admin@scanms.com",
       "credentials": [
         {
           "type": "password",
@@ -86,7 +74,7 @@
       ],
       "realmRoles": [
         "USER",
-        "ADMINISTRATOR"
+        "ADMIN"
       ]
     },
     {
