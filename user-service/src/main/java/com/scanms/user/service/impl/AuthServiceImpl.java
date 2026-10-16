@@ -198,12 +198,28 @@ public class AuthServiceImpl implements AuthService {
 
         GoogleIdToken.Payload payload = idToken.getPayload();
         String email = payload.getEmail();
-        String firstName = (String) payload.get("given_name");
-        String lastName = (String) payload.get("family_name");
+        String rawFirstName = (String) payload.get("given_name");
+        String rawLastName = (String) payload.get("family_name");
+        String rawFullName = (String) payload.get("name");
         String googleSub = payload.getSubject();
 
-        if (firstName == null) firstName = "";
-        if (lastName == null) lastName = "";
+        // Keycloak (User Profile) bat buoc firstName/lastName phai khop regex "ten nguoi"
+        // (khong duoc rong, khong duoc chua ky tu la) -> can lam sach va luon co gia tri fallback
+        // thay vi gui chuoi rong nhu truoc (gay loi "error-person-name-invalid-character").
+        String firstName = sanitizePersonName(rawFirstName);
+        String lastName = sanitizePersonName(rawLastName);
+
+        if (firstName == null && lastName == null) {
+            String[] nameParts = rawFullName != null ? rawFullName.trim().split("\\s+") : new String[0];
+            if (nameParts.length >= 2) {
+                lastName = sanitizePersonName(String.join(" ", java.util.Arrays.copyOf(nameParts, nameParts.length - 1)));
+                firstName = sanitizePersonName(nameParts[nameParts.length - 1]);
+            } else if (nameParts.length == 1) {
+                firstName = sanitizePersonName(nameParts[0]);
+            }
+        }
+        if (firstName == null) firstName = "User";
+        if (lastName == null) lastName = "Google";
 
         // 2. Kiểm tra user đã tồn tại trong DB chưa
         User existingUser = repository.findByEmail(email).orElse(null);
@@ -383,6 +399,18 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đặt lại mật khẩu thất bại: " + e.getMessage());
         }
+    }
+
+    /**
+     * Lam sach ten lay tu Google (given_name/family_name/name) de khop voi quy tac
+     * "ten nguoi" cua Keycloak User Profile: chi giu chu cai (ke ca co dau), khoang trang,
+     * dau gach ngang, nhay don va dau cham. Tra ve null neu sau khi lam sach khong con gi
+     * (de noi goi con fallback sang gia tri mac dinh).
+     */
+    private String sanitizePersonName(String raw) {
+        if (raw == null) return null;
+        String cleaned = raw.trim().replaceAll("[^\\p{L}\\p{M}\\s'\\-.]", "").trim();
+        return cleaned.isEmpty() ? null : cleaned;
     }
 
     private String getAdminAccessToken() {
