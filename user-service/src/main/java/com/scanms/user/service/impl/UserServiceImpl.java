@@ -13,10 +13,6 @@ import com.scanms.user.exception.ErrorCode;
 import com.scanms.user.mapper.UserMapper;
 import com.scanms.user.repository.RoleRepository;
 import com.scanms.user.repository.UserRepository;
-import com.scanms.user.repository.RoleRepository;
-import com.scanms.user.constant.RoleName;
-import com.scanms.user.constant.UserStatus;
-import com.scanms.user.entity.Role;
 import com.scanms.user.service.KeycloakAdminClient;
 import com.scanms.user.service.UserService;
 import jakarta.persistence.criteria.Join;
@@ -30,6 +26,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.util.StringUtils;
+
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.Map;
@@ -38,7 +36,7 @@ import java.util.stream.Collectors;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+
 
 @Slf4j
 @Service
@@ -49,7 +47,6 @@ public class UserServiceImpl implements UserService {
     private final RoleRepository roleRepository;
     private final KeycloakAdminClient keycloakAdminClient;
     private final UserMapper mapper;
-    private final RoleRepository roleRepository;
 
     // Jwt is verified by the resource server. Only signed realm roles can
     // provision privileges; no role or identity is accepted from a request body.
