@@ -6,6 +6,10 @@ spring:
     import: optional:file:.env[.properties],optional:file:user-service/.env[.properties]
   application:
     name: user-service
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 110MB
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:${USER_DB_PORT:5433}/${USER_DB_NAME:user_db}}
     username: ${DB_USERNAME:${POSTGRES_USER:postgres}}
@@ -24,6 +28,17 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/scanms}
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 springdoc:
   swagger-ui:
@@ -33,3 +48,16 @@ keycloak:
   realm: scanms
   client-id: scanms-client
   client-secret: ${CLIENT_SECRET}
+
+app:
+  auth:
+    # false (mac dinh) = che do test: user moi tao duoc set emailVerified=true ngay, khong gui mail.
+    # true = bat thuc su: user moi tao emailVerified=false + Keycloak tu gui mail xac minh (can da cau hinh SMTP trong Keycloak).
+    email-verification-enabled: ${EMAIL_VERIFICATION_ENABLED:true}
+google:
+  client-id: ${GOOGLE_CLIENT_ID}
+
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME}
+  api-key: ${CLOUDINARY_API_KEY}
+  api-secret: ${CLOUDINARY_API_SECRET}

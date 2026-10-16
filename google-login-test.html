@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Login - Get idToken</title>
+    <script src="https://accounts.google.com/gsi/client" async></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 700px; margin: 50px auto; padding: 20px; }
+        h1 { color: #333; }
+        textarea { width: 100%; height: 200px; margin-top: 10px; font-size: 12px; word-break: break-all; }
+        .copy-btn { margin-top: 10px; padding: 10px 20px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .copy-btn:hover { background: #357ae8; }
+        .info { color: #666; margin-top: 5px; font-size: 13px; }
+        #token-section { display: none; margin-top: 20px; }
+        .success { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Google Login - Get idToken for Swagger</h1>
+    <p>Click the button below to sign in with Google. The idToken will appear for you to copy into Swagger.</p>
+
+    <div id="g_id_onload"
+         data-client_id="281102364785-etm73id59t8qvrbgrd16gpqg12plr21b.apps.googleusercontent.com"
+         data-callback="handleCredentialResponse"
+         data-auto_prompt="false">
+    </div>
+    <div class="g_id_signin"
+         data-type="standard"
+         data-size="large"
+         data-theme="outline"
+         data-text="sign_in_with"
+         data-shape="rectangular"
+         data-logo_alignment="left">
+    </div>
+
+    <div id="token-section">
+        <p class="success">Login successful!</p>
+        <p><strong>Email:</strong> <span id="email"></span></p>
+        <p><strong>Name:</strong> <span id="name"></span></p>
+        <label><strong>idToken (copy this to Swagger):</strong></label>
+        <textarea id="idToken" readonly></textarea>
+        <button class="copy-btn" onclick="copyToken()">Copy idToken</button>
+        <p class="info" id="copy-status"></p>
+    </div>
+
+    <script>
+        function handleCredentialResponse(response) {
+            const idToken = response.credential;
+            document.getElementById('idToken').value = idToken;
+            document.getElementById('token-section').style.display = 'block';
+
+            // Decode JWT to show user info
+            const payload = JSON.parse(atob(idToken.split('.')[1]));
+            document.getElementById('email').textContent = payload.email;
+            document.getElementById('name').textContent = payload.name;
+        }
+
+        function copyToken() {
+            const textarea = document.getElementById('idToken');
+            textarea.select();
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                document.getElementById('copy-status').textContent = 'Copied! Now paste into Swagger body: {"idToken": "..."}';
+            });
+        }
+    </script>
+</body>
+</html>
