@@ -23,6 +23,7 @@ public class ReturnRequestController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canDecideReturn(authentication)")
     @PostMapping("/{id}/decision")
     public ApiResponse<ReturnRequestResponse> processDecision(
             @PathVariable String id,

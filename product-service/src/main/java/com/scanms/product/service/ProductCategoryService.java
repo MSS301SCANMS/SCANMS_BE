@@ -8,5 +8,7 @@ public interface ProductCategoryService {
     ProductCategoryResponse create(CreateProductCategoryRequest request);
     ProductCategoryResponse getById(String id);
     List<ProductCategoryResponse> findAll();
+    ProductCategoryResponse update(String id, com.scanms.product.dto.request.UpdateProductCategoryRequest request);
+    void delete(String id);
 }
 

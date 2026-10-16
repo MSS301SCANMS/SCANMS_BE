@@ -5,10 +5,10 @@ import jakarta.validation.constraints.*;
 import java.time.Instant;
 
 public record CreateStoreApplicationRequest(
-        @NotNull String applicantUserId,
+        String applicantUserId,
         @NotBlank String proposedStoreName,
         String description,
-        @NotNull StoreApplicationStatus status,
+        StoreApplicationStatus status,
         String reviewedByUserId,
         String reviewNote,
         Instant submittedAt,

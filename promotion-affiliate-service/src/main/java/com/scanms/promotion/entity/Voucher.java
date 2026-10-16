@@ -13,13 +13,14 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 @Entity
-@Table(name = "vouchers")
+@Table(name = "vouchers", uniqueConstraints = @UniqueConstraint(name = "uk_voucher_code", columnNames = "code"))
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class Voucher {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String voucherId;
 
+    @Column(nullable = false)
     private String code;
 
     @Enumerated(EnumType.STRING)

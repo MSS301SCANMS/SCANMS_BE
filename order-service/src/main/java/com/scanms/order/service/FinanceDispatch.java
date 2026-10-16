@@ -45,6 +45,12 @@ public class FinanceDispatch {
     private Map<?,?> post(String url,String token,Object body) {
         return http.post().uri(url).headers(h -> h.setBearerAuth(token)).body(body).retrieve().body(Map.class);
     }
+    private boolean usesVoucher(String checkoutRequest) {
+        var request=tools.jackson.databind.json.JsonMapper.builder().build().readTree(checkoutRequest);
+        var code=request.path("couponCode");
+        if(code.isMissingNode() || code.isNull()) code=request.path("voucherCode");
+        return code.isTextual() && !code.asText().isBlank();
+    }
     @Scheduled(fixedDelayString="${scanms.finance.dispatch-delay-ms:60000}")
     public void dispatch() {
         String token;
@@ -72,7 +78,8 @@ public class FinanceDispatch {
                 String action=Set.of(OrderStatus.CANCELLED,OrderStatus.EXPIRED).contains(order.getStatus())?"release":Set.of(OrderStatus.PAID,OrderStatus.PROCESSING,OrderStatus.COMPLETED).contains(order.getStatus())?"commit":null;
                 if(action==null) continue;
                 post(productUrl+"/api/v1/inventory/reservations/"+order.getOrderId()+"/"+action,token,Map.of());
-                post(promotionUrl+"/api/v1/checkout-vouchers/"+order.getOrderId()+"/"+action,token,Map.of());
+                if(usesVoucher(order.getCheckoutRequest()))
+                    post(promotionUrl+"/api/v1/checkout-vouchers/"+order.getOrderId()+"/"+action,token,Map.of());
                 new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(s -> {
                     var current=orders.lockById(order.getOrderId()).orElseThrow(); var saga=new LinkedHashMap<>(current.getSagaState()); saga.put("resourcesFinalized",true); saga.put("resourceOutcome",action); current.setSagaState(saga); orders.save(current);
                 });

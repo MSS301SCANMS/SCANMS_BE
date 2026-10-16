@@ -12,5 +12,4 @@
 legacy-commerce/
 **/legacy-commerce/
 
-# Local aggregate infrastructure; service-level Compose files stay tracked.
-/docker-compose.yml
+# Root Compose starts the shared local Keycloak infrastructure.

@@ -35,6 +35,16 @@ public class ProductController {
         return ApiResponse.success(service.findAll());
     }
 
+    @PatchMapping("/{id}")
+    ApiResponse<ProductResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateProductRequest request) {
+        return ApiResponse.success(service.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    ApiResponse<ProductResponse> deactivate(@PathVariable String id) {
+        return ApiResponse.success(service.deactivate(id));
+    }
+
     @PostMapping(value = "/ai-analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     ApiResponse<AiDetectionResponse> analyzeImage(@RequestPart("image") MultipartFile image) {
         return ApiResponse.success(aiAnalysisService.analyze(image));

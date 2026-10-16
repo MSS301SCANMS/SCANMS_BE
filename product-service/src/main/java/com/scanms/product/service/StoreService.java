@@ -8,4 +8,7 @@ public interface StoreService {
     StoreResponse create(CreateStoreRequest request);
     StoreResponse getById(String id);
     List<StoreResponse> findAll();
+    com.scanms.product.dto.response.StoreDashboardResponse dashboard(String storeId);
+    StoreResponse setSuspended(String storeId, boolean suspended);
+    StoreResponse update(String storeId, com.scanms.product.dto.request.UpdateStoreRequest request);
 }

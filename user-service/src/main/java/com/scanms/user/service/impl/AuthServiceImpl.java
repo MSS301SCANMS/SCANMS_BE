@@ -117,9 +117,8 @@ public class AuthServiceImpl implements AuthService {
                         sendVerifyEmail(identitySubject, adminToken);
                     }
                                       // Lưu vào database của user-service
-                    List<RoleName> rolesToQuery = (request.roleNames() != null && !request.roleNames().isEmpty())
-                            ? request.roleNames()
-                            : List.of(RoleName.USER);
+                    // Public registration must never grant business or administrator roles.
+                    List<RoleName> rolesToQuery = List.of(RoleName.USER);
                     for (RoleName roleNameEnum : rolesToQuery) {
                         assignDefaultRoleToUser(identitySubject, adminToken, roleNameEnum.toString());
                     }
@@ -437,6 +436,33 @@ public class AuthServiceImpl implements AuthService {
             }
         } catch (Exception e) {
             System.err.println("Không thể gán role [" + roleName + "] cho user trên Keycloak: " + e.getMessage());
+        }
+    }
+    @Override
+    @Transactional
+    public void grantShopOwnerRole(String userId) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "User not found"));
+        if (user.getStatus() != UserStatus.ACTIVE)
+            throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
+        Role role = roleRepository.findAllByNameIn(List.of(RoleName.SHOP_OWNER)).stream().findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CONFLICT, "SHOP_OWNER role is not initialized"));
+        try {
+            String adminToken = getAdminAccessToken();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(adminToken);
+            String base = serverUrl + "/admin/realms/" + realm;
+            Map<?, ?> keycloakRole = restTemplate.exchange(base + "/roles/SHOP_OWNER", HttpMethod.GET,
+                    new HttpEntity<>(headers), Map.class).getBody();
+            if (keycloakRole == null || keycloakRole.get("id") == null)
+                throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "SHOP_OWNER role is missing in Keycloak");
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            restTemplate.postForEntity(base + "/users/" + user.getIdentitySubject() + "/role-mappings/realm",
+                    new HttpEntity<>(List.of(keycloakRole), headers), Void.class);
+            user.getRoles().add(role);
+            repository.save(user);
+        } catch (org.springframework.web.client.RestClientException ex) {
+            throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "Cannot grant SHOP_OWNER role in Keycloak");
         }
     }
     @Override

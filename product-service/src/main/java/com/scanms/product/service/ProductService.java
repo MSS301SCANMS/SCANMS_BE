@@ -8,4 +8,6 @@ public interface ProductService {
     ProductResponse create(CreateProductRequest request);
     ProductResponse getById(String id);
     List<ProductResponse> findAll();
+    ProductResponse update(String id, com.scanms.product.dto.request.UpdateProductRequest request);
+    ProductResponse deactivate(String id);
 }

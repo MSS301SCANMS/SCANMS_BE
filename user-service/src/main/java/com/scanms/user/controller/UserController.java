@@ -23,7 +23,7 @@ public class UserController {
 
     @GetMapping("/me")
     ApiResponse<UserResponse> me(@AuthenticationPrincipal Jwt jwt) {
-        return ApiResponse.success(service.getCurrentUser(jwt.getSubject()));
+        return ApiResponse.success(service.synchronizeCurrentUser(jwt));
     }
 
     @PatchMapping("/me")

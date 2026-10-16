@@ -7,10 +7,10 @@ import java.util.*;
 public record CreateFeedbackRequest(
         @NotNull String productId,
         @NotNull String orderItemId,
-        @NotNull String customerId,
+        String customerId,
         @NotNull @Min(1) @Max(5) Integer rating,
         String comment,
         List<String> imageRefs,
-        @NotNull FeedbackStatus status
+        FeedbackStatus status
 ) {}
 

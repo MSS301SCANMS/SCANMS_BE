@@ -62,7 +62,7 @@ spring:
             - id: user-service
               uri: ${USER_SERVICE_URL:http://localhost:8081}
               predicates:
-                - "Path=/api/v1/users/**,/api/v1/auth/**,/api/v1/upload/**"
+                - "Path=/api/v1/users/**,/api/v1/auth/**"
             - id: product-service
               uri: ${PRODUCT_SERVICE_URL:http://localhost:8082}
               predicates:
@@ -70,11 +70,11 @@ spring:
             - id: order-service
               uri: ${ORDER_SERVICE_URL:http://localhost:8083}
               predicates:
-                - "Path=/api/v1/checkout,/api/v1/checkout/**,/api/v1/orders/**,/api/v1/order-items/**,/api/v1/seller-orders/**,/api/v1/returns/**,/api/v1/shipments/**,/api/v1/discount-allocations/**"
+                - "Path=/api/v1/checkout,/api/v1/checkout/**,/api/v1/orders/**,/api/v1/order-items/**,/api/v1/seller-orders/**,/api/v1/returns/**,/api/v1/shipments/**,/api/v1/discount-allocations/**,/api/v1/livestream-sales/**,/api/v1/store-sales/**"
             - id: payment-service
               uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
               predicates:
-                - "Path=/api/v1/finance/**,/api/v1/payments/**,/api/v1/wallets/**,/api/v1/wallet-transactions/**,/api/v1/bank-accounts/**,/api/v1/withdrawals/**,/api/v1/settlements/**,/api/v1/fee-configs/**"
+                - "Path=/api/v1/finance/**,/api/v1/payments/**,/api/v1/payouts/webhooks/payos,/api/v1/wallets/**,/api/v1/wallet-transactions/**,/api/v1/bank-accounts/**,/api/v1/withdrawals/**,/api/v1/settlements/**,/api/v1/fee-configs/**"
             - id: promotion-service
               uri: ${PROMOTION_SERVICE_URL:http://localhost:8085}
               predicates:

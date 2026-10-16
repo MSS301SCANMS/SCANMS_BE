@@ -18,7 +18,9 @@ import java.util.*;
 @RestController @RequestMapping("/api/v1/inventory/reservations") @RequiredArgsConstructor @Transactional
 public class InventoryCheckoutController {
     private final EntityManager em;
-    public record Line(@NotBlank String productId,String variantId,@Min(1) @Max(1000) int quantity) {}
+    public record Line(@NotBlank String productId,String variantId,@Min(1) @Max(1000) int quantity,String sourceLivestreamId) {
+        public Line(String productId,String variantId,int quantity) { this(productId,variantId,quantity,null); }
+    }
     public record Input(@NotEmpty @Size(max=100) List<@Valid Line> items) {}
     private void internal(Jwt jwt) {
         var roles=new HashSet<String>(); Object realm=jwt.getClaim("realm_access");
@@ -52,6 +54,12 @@ public class InventoryCheckoutController {
         for(Line line:requested) {
             Product p=products.get(line.productId()); Store store=em.find(Store.class,p.getStoreId());
             if(store==null || store.getApprovalStatus()!=StoreStatus.APPROVED) throw new ResponseStatusException(HttpStatus.CONFLICT,"Store is not approved");
+            if(line.sourceLivestreamId()!=null) {
+                Livestream livestream=em.find(Livestream.class,line.sourceLivestreamId());
+                if(livestream==null || livestream.getStatus()!=LivestreamStatus.LIVE || !p.getStoreId().equals(livestream.getStoreId())
+                        || livestream.getProductRefs()==null || !(livestream.getProductRefs().get("productIds") instanceof Collection<?> ids)
+                        || !ids.contains(p.getProductId())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Livestream attribution is invalid");
+            }
             ProductVariant variant;
             if(line.variantId()==null || line.variantId().isBlank()) {
                 List<ProductVariant> choices=em.createQuery("select v from ProductVariant v where v.productId=:p and v.status=:s",ProductVariant.class).setParameter("p",p.getProductId()).setParameter("s",ProductVariantStatus.ACTIVE).getResultList();
@@ -59,7 +67,7 @@ public class InventoryCheckoutController {
             } else variant=em.find(ProductVariant.class,line.variantId(),LockModeType.PESSIMISTIC_WRITE);
             if(variant==null || !p.getProductId().equals(variant.getProductId()) || variant.getStatus()!=ProductVariantStatus.ACTIVE || variant.getPriceVnd()==null || variant.getPriceVnd()<=0 || variant.getStockQuantity()==null || variant.getStockQuantity()<line.quantity()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Variant or stock is unavailable");
             if(!preview) variant.setStockQuantity(variant.getStockQuantity()-line.quantity());
-            Map<String,Object> snapshot=new LinkedHashMap<>(); snapshot.put("productId",p.getProductId()); snapshot.put("variantId",variant.getVariantId()); snapshot.put("quantity",line.quantity()); snapshot.put("unitPriceVnd",variant.getPriceVnd()); snapshot.put("grossAmountVnd",Math.multiplyExact(variant.getPriceVnd(),line.quantity())); snapshot.put("storeId",p.getStoreId()); snapshot.put("storeName",store.getName()); snapshot.put("name",p.getName()); snapshot.put("size",variant.getSize()); snapshot.put("color",variant.getColor()); lines.add(snapshot);
+            Map<String,Object> snapshot=new LinkedHashMap<>(); snapshot.put("productId",p.getProductId()); snapshot.put("variantId",variant.getVariantId()); snapshot.put("quantity",line.quantity()); snapshot.put("unitPriceVnd",variant.getPriceVnd()); snapshot.put("grossAmountVnd",Math.multiplyExact(variant.getPriceVnd(),line.quantity())); snapshot.put("storeId",p.getStoreId()); snapshot.put("storeName",store.getName()); snapshot.put("name",p.getName()); snapshot.put("size",variant.getSize()); snapshot.put("color",variant.getColor()); if(line.sourceLivestreamId()!=null) snapshot.put("sourceLivestreamId",line.sourceLivestreamId()); lines.add(snapshot);
         }
         if(!preview) { CheckoutReservation reservation=new CheckoutReservation(); reservation.setOrderId(orderId); reservation.setRequestHash(hash); reservation.setLines(lines); reservation.setStatus("RESERVED"); reservation.setCreatedAt(Instant.now()); em.persist(reservation); em.flush(); }
         return ApiResponse.success(Map.of("orderId",orderId,"lines",lines));

@@ -52,10 +52,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password/reset",
                                 "/api/v1/send-otp",
                                 "/api/v1/payments/webhooks/payos",
-                                "/api/v1/orders/**", "/api/v1/seller-orders/**",
-                                "/api/v1/shipments/**", "/api/v1/returns/**",
-                                "/api/v1/products/**", "/api/v1/stores/**"
+                                "/api/v1/payouts/webhooks/payos"
                         ).permitAll()
+                        .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/orders/track").permitAll()
 
                         // Các request còn lại bắt buộc phải có JWT hợp lệ
                         .anyExchange().authenticated()
@@ -73,7 +72,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
 
         // Mở rộng origin cho phép (tương tự như code mẫu chạy được của bạn)
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        configuration.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization", "ngrok-skip-browser-warning"));
@@ -117,7 +116,7 @@ public class SecurityConfig {
     @Bean
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration corsConfig = new CorsConfiguration();
-        corsConfig.setAllowedOriginPatterns(List.of("*"));
+        corsConfig.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
         corsConfig.setMaxAge(3600L);
         corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         corsConfig.setAllowedHeaders(List.of("*"));

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PatchMapping;
 
 @RestController
 @RequestMapping("/api/v1/livestreams")
@@ -35,5 +36,27 @@ public class LivestreamController {
     @GetMapping
     ApiResponse<List<LivestreamResponse>> findAll() {
         return ApiResponse.success(service.findAll());
+    }
+
+    @PatchMapping("/{id}")
+    ApiResponse<LivestreamResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateLivestreamRequest request) {
+        return ApiResponse.success(service.update(id, request));
+    }
+
+    @PostMapping("/{id}/start")
+    ApiResponse<LivestreamResponse> start(@PathVariable String id) {
+        return ApiResponse.success(service.transition(id, com.scanms.product.constant.LivestreamStatus.LIVE));
+    }
+
+    @PostMapping("/{id}/end")
+    ApiResponse<LivestreamResponse> end(@PathVariable String id) {
+        return ApiResponse.success(service.transition(id, com.scanms.product.constant.LivestreamStatus.ENDED));
+    }
+
+    record StatsRequest(long viewerCount, long uniqueViewerCount, long concurrentViewerCount) {}
+
+    @PatchMapping("/{id}/stats")
+    ApiResponse<LivestreamResponse> stats(@PathVariable String id, @RequestBody StatsRequest request) {
+        return ApiResponse.success(service.updateStats(id, request.viewerCount(), request.uniqueViewerCount(), request.concurrentViewerCount()));
     }
 }

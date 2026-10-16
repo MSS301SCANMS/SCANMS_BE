@@ -42,6 +42,7 @@ class CheckoutIntegrationTest {
     }
 
     @Autowired CheckoutService checkout;
+    @Autowired FinanceDispatch financeDispatch;
     @Autowired OrderRepository orders;
     @Autowired SellerOrderRepository sellers;
     @Autowired OrderItemRepository items;
@@ -80,5 +81,16 @@ class CheckoutIntegrationTest {
         failNext.set(true); assertThrows(RestClientResponseException.class,() -> checkout.checkout(input("retry",2),jwt));
         assertEquals(1,orders.count()); assertEquals(0,items.count()); String id=orders.findAll().getFirst().getOrderId();
         assertEquals(id,checkout.checkout(input("retry",2),jwt).get("orderId")); assertEquals(1,items.count()); assertEquals(1,orders.count());
+    }
+    @Test void paidOrderWithoutVoucherFinalizesInventoryWithoutVoucherReservation() {
+        var created=checkout.checkout(input("no-voucher",2),jwt);
+        String orderId=created.get("orderId").toString();
+        var order=orders.findById(orderId).orElseThrow();
+        order.setStatus(com.scanms.order.constant.OrderStatus.PAID);
+        orders.saveAndFlush(order);
+
+        financeDispatch.dispatch();
+
+        assertEquals(true,orders.findById(orderId).orElseThrow().getSagaState().get("resourcesFinalized"));
     }
 }

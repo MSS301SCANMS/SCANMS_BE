@@ -45,6 +45,7 @@ class CheckoutVoucherIntegrationTest {
 
     @Autowired CheckoutVoucherController checkout;
     @Autowired VoucherRepository vouchers;
+    @Autowired VoucherRedemptionRepository redemptions;
     @Autowired FinanceContractController finance;
     @Autowired CommissionRepository commissions;
     @Autowired CommissionFinalizationRepository finalizations;
@@ -58,13 +59,15 @@ class CheckoutVoucherIntegrationTest {
     static com.sun.net.httpserver.HttpServer source() {
         try {
             var s=com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1",0),0);
-            s.createContext("/api/v1/finance/commission-order-item/item",exchange -> { byte[] body=("{\"result\":{\"basisAmountVnd\":900,\"commissionApplicable\":"+attributed.get()+"}}").getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); }); s.start(); return s;
+            s.createContext("/api/v1/finance/commission-order-item/item",exchange -> { byte[] body=("{\"result\":{\"basisAmountVnd\":900,\"commissionApplicable\":"+attributed.get()+"}}").getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            s.createContext("/api/v1/orders/restorable/voucher-restoration-eligibility",exchange -> { byte[] body="{\"result\":{\"eligible\":true}}".getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            s.start(); return s;
         } catch(Exception ex) { throw new IllegalStateException(ex); }
     }
     @DynamicPropertySource static void sources(DynamicPropertyRegistry r) { r.add("clients.order.url",() -> "http://127.0.0.1:"+source.getAddress().getPort()); }
     @AfterAll static void close() { source.stop(0); }
     @BeforeEach void setup() {
-        new TransactionTemplate(transactions).executeWithoutResult(s -> em.createQuery("delete from CheckoutVoucher").executeUpdate()); vouchers.deleteAll(); commissions.deleteAll(); finalizations.deleteAll(); attributed.set(false);
+        new TransactionTemplate(transactions).executeWithoutResult(s -> em.createQuery("delete from CheckoutVoucher").executeUpdate()); redemptions.deleteAll(); vouchers.deleteAll(); commissions.deleteAll(); finalizations.deleteAll(); attributed.set(false);
         vouchers.saveAndFlush(Voucher.builder().code("SAVE").issuerType(VoucherIssuerType.PLATFORM).scopeType(VoucherScopeType.PLATFORM).discountType(VoucherDiscountType.FIXED).value(BigDecimal.valueOf(99)).validFrom(LocalDateTime.now(ZoneOffset.UTC).minusDays(1)).validUntil(LocalDateTime.now(ZoneOffset.UTC).plusDays(1)).limits(Map.of("perCustomerLimit",1)).build());
     }
     CheckoutVoucherController.Input input() {
@@ -78,10 +81,45 @@ class CheckoutVoucherIntegrationTest {
     }
     @Test void usageLimitAndRetryAreAtomicAndReleasedVoucherCanBeUsedAgain() {
         checkout.reserve("first",input(),jwt); checkout.reserve("first",input(),jwt);
+        assertEquals(VoucherRedemptionStatus.RESERVED, redemptions.findByOrderId("first").orElseThrow().getStatus());
+        assertNull(redemptions.findByOrderId("first").orElseThrow().getRedeemedAt());
         assertThrows(ResponseStatusException.class,() -> checkout.reserve("second",input(),jwt));
-        checkout.release("first",jwt); assertDoesNotThrow(() -> checkout.reserve("second",input(),jwt));
-        checkout.commit("second",jwt); checkout.release("second",jwt);
+        checkout.release("first",jwt); checkout.release("first",jwt);
+        assertEquals(VoucherRedemptionStatus.CANCELLED, redemptions.findByOrderId("first").orElseThrow().getStatus());
+        assertDoesNotThrow(() -> checkout.reserve("second",input(),jwt));
+        checkout.commit("second",jwt); checkout.commit("second",jwt);
+        assertEquals(409,assertThrows(ResponseStatusException.class,() -> checkout.release("second",jwt)).getStatusCode().value());
+        assertEquals(VoucherRedemptionStatus.USED, redemptions.findByOrderId("second").orElseThrow().getStatus());
+        assertNotNull(redemptions.findByOrderId("second").orElseThrow().getRedeemedAt());
         assertThrows(ResponseStatusException.class,() -> checkout.reserve("third",input(),jwt));
+    }
+    @Test void commitRequiresARealReservationAndRedemption() {
+        assertEquals(404,assertThrows(ResponseStatusException.class,() -> checkout.commit("missing",jwt)).getStatusCode().value());
+        checkout.reserve("orphan",input(),jwt);
+        redemptions.deleteById(redemptions.findByOrderId("orphan").orElseThrow().getRedemptionId());
+        assertEquals(409,assertThrows(ResponseStatusException.class,() -> checkout.commit("orphan",jwt)).getStatusCode().value());
+    }
+    @Test @SuppressWarnings("unchecked") void storeFundingMatchesOrderContractAndLivestreamNeedsAttribution() {
+        vouchers.saveAndFlush(Voucher.builder().code("STORE").issuerType(VoucherIssuerType.STORE).storeId("store")
+                .scopeType(VoucherScopeType.STORE).discountType(VoucherDiscountType.FIXED).value(BigDecimal.TEN)
+                .validFrom(LocalDateTime.now(ZoneOffset.UTC).minusDays(1)).validUntil(LocalDateTime.now(ZoneOffset.UTC).plusDays(1)).build());
+        var result=checkout.quote(new CheckoutVoucherController.Input("STORE","customer",input().lines()),jwt).result();
+        var allocations=(List<Map<String,Object>>)result.get("allocations");
+        assertEquals("STORE",allocations.getFirst().get("fundedBy"));
+        vouchers.saveAndFlush(Voucher.builder().code("LIVE").issuerType(VoucherIssuerType.STORE).storeId("store")
+                .livestreamId("live-1").scopeType(VoucherScopeType.LIVESTREAM).discountType(VoucherDiscountType.FIXED).value(BigDecimal.TEN)
+                .validFrom(LocalDateTime.now(ZoneOffset.UTC).minusDays(1)).validUntil(LocalDateTime.now(ZoneOffset.UTC).plusDays(1)).build());
+        assertThrows(ResponseStatusException.class,() -> checkout.quote(new CheckoutVoucherController.Input("LIVE","customer",input().lines()),jwt));
+        var attributed=List.<Map<String,Object>>of(Map.of("variantId","v1","storeId","store","productId","product","sourceLivestreamId","live-1","grossAmountVnd",100));
+        assertEquals(10L,checkout.quote(new CheckoutVoucherController.Input("LIVE","customer",attributed),jwt).result().get("discountAmountVnd"));
+    }
+    @Test void committedVoucherCanOnlyBeRestoredAfterOrderConfirmsPreDeliveryCancellation() {
+        checkout.reserve("restorable",input(),jwt);
+        checkout.commit("restorable",jwt);
+        checkout.restore("restorable",jwt);
+        assertEquals(VoucherRedemptionStatus.RESTORED,redemptions.findByOrderId("restorable").orElseThrow().getStatus());
+        assertDoesNotThrow(() -> checkout.restore("restorable",jwt));
+        assertDoesNotThrow(() -> checkout.reserve("next",input(),jwt));
     }
     @Test void missingCommissionIsUnknownUntilSourceExplicitlyFinalizesZero() {
         assertThrows(ResponseStatusException.class,() -> finance.total("item",jwt));

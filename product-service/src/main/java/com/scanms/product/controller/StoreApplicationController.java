@@ -16,6 +16,8 @@ import java.util.*;
 public class StoreApplicationController {
     private final StoreApplicationService service;
 
+    public record ReviewRequest(String note) {}
+
     @PostMapping
     ResponseEntity<ApiResponse<StoreApplicationResponse>> create(@Valid @RequestBody CreateStoreApplicationRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
@@ -29,6 +31,16 @@ public class StoreApplicationController {
     @GetMapping
     ApiResponse<List<StoreApplicationResponse>> findAll() {
         return ApiResponse.success(service.findAll());
+    }
+
+    @PostMapping("/{id}/approve")
+    ApiResponse<StoreApplicationResponse> approve(@PathVariable String id, @RequestBody(required = false) ReviewRequest request) {
+        return ApiResponse.success(service.review(id, true, request == null ? null : request.note()));
+    }
+
+    @PostMapping("/{id}/reject")
+    ApiResponse<StoreApplicationResponse> reject(@PathVariable String id, @RequestBody(required = false) ReviewRequest request) {
+        return ApiResponse.success(service.review(id, false, request == null ? null : request.note()));
     }
 }
 

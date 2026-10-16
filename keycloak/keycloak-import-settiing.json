@@ -28,15 +28,15 @@
         "name": "KOL_CTV",
         "description": "Collaborator and KOL role for referral links and commissions"
       },
-      {
-        "name": "ADMINISTRATOR",
-        "description": "Platform administrator role with full system control"
+      { 
+        "name": "ADMIN",
+        "description": "Platform administrator role with full system control" 
       }
     ]
   },
   "clients": [
     {
-      "clientId": "scanms-web",
+      "clientId": "scanms-frontend",
       "enabled": true,
       "publicClient": true,
       "standardFlowEnabled": true,

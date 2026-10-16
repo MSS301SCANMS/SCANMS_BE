@@ -19,8 +19,10 @@ import java.util.*;
 @RequiredArgsConstructor
 public class OrderController {
     private final OrderService service;
+    private final com.scanms.order.repository.SellerOrderRepository sellerOrders;
 
-    @PostMapping({"/checkout", "/guest-checkout"})
+    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @PostMapping("/checkout")
     public ResponseEntity<ApiResponse<CheckoutResponse>> checkout(
             @Valid @RequestBody CheckoutRequest request,
             @AuthenticationPrincipal Jwt jwt) {
@@ -54,13 +56,6 @@ public class OrderController {
         return ApiResponse.success(service.trackOrders(phone, orderSn));
     }
 
-    @PostMapping("/{id}/mark-paid")
-    public ApiResponse<OrderResponse> markPaid(
-            @PathVariable String id,
-            @RequestParam(required = false) String transactionReference) {
-        return ApiResponse.success(service.markPaid(id, transactionReference));
-    }
-
     @GetMapping("/my-orders")
     public ApiResponse<List<OrderResponse>> getMyOrders(
             @RequestParam(required = false) String customerId,
@@ -86,6 +81,17 @@ public class OrderController {
     @GetMapping("/{id}")
     public ApiResponse<OrderResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
+    }
+
+    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @GetMapping("/{id}/voucher-restoration-eligibility")
+    public ApiResponse<Map<String, Boolean>> voucherRestorationEligibility(@PathVariable String id) {
+        var order = service.getById(id);
+        boolean beforeDelivery = sellerOrders.findAll().stream()
+                .filter(seller -> id.equals(seller.getOrderId()))
+                .noneMatch(seller -> java.util.Set.of(com.scanms.order.constant.SellerOrderStatus.DELIVERED,
+                        com.scanms.order.constant.SellerOrderStatus.COMPLETED).contains(seller.getStatus()));
+        return ApiResponse.success(Map.of("eligible", order.status() == com.scanms.order.constant.OrderStatus.CANCELLED && beforeDelivery));
     }
 
     @GetMapping
