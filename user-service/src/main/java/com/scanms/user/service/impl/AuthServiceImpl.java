@@ -15,6 +15,7 @@ import com.scanms.user.service.AuthService;
 import com.scanms.user.service.MailService;
 import com.scanms.user.service.OtpService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
@@ -37,6 +38,7 @@ import com.google.api.client.json.gson.GsonFactory;
 import com.scanms.user.dto.request.GoogleLoginRequest;
 import java.util.Collections;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
@@ -226,36 +228,45 @@ public class AuthServiceImpl implements AuthService {
 
         if (existingUser != null) {
             // User đã tồn tại -> login qua Keycloak bằng impersonation
-            return getTokenForUser(existingUser.getIdentitySubject());
+            try {
+                return getTokenForUser(existingUser.getIdentitySubject());
+            } catch (Exception e) {
+                // identitySubject cu co the khong con ton tai tren Keycloak nua (vi du: moi truong dev
+                // reset/import lai Keycloak nhung van giu nguyen DB cua user-service) -> thay vi tra ve
+                // loi 500 chung chung, tu dong tao lai user do tren Keycloak va dong bo lai identitySubject
+                // o duoi, giu nguyen role hien co cua user trong DB local (khong ha ve USER).
+                log.warn("Khong the lay token cho user hien co (identitySubject co the da khong con ton tai " +
+                        "tren Keycloak), se tao lai tren Keycloak va dong bo identitySubject. email={}", email, e);
+            }
         }
 
-        // 3. User chưa tồn tại -> tạo trên Keycloak + lưu DB
-        String adminToken = getAdminAccessToken();
-        String tempPassword = java.util.UUID.randomUUID().toString();
-
-        String createUserUrl = serverUrl + "/admin/realms/" + realm + "/users";
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
-
-        Map<String, Object> userPayload = Map.of(
-                "username", email,
-                "email", email,
-                "enabled", true,
-                "emailVerified", true,
-                "firstName", firstName,
-                "lastName", lastName,
-                "requiredActions", List.of(),
-                "credentials", List.of(Map.of(
-                        "type", "password",
-                        "value", tempPassword,
-                        "temporary", false
-                ))
-        );
-
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(userPayload, headers);
-
+        // 3. Tao user tren Keycloak (ap dung cho ca user hoan toan moi, lan user bi "mo coi" o buoc tren)
         try {
+            String adminToken = getAdminAccessToken();
+            String tempPassword = java.util.UUID.randomUUID().toString();
+
+            String createUserUrl = serverUrl + "/admin/realms/" + realm + "/users";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(adminToken);
+
+            Map<String, Object> userPayload = Map.of(
+                    "username", email,
+                    "email", email,
+                    "enabled", true,
+                    "emailVerified", true,
+                    "firstName", firstName,
+                    "lastName", lastName,
+                    "requiredActions", List.of(),
+                    "credentials", List.of(Map.of(
+                            "type", "password",
+                            "value", tempPassword,
+                            "temporary", false
+                    ))
+            );
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(userPayload, headers);
+
             restTemplate.exchange(createUserUrl, HttpMethod.POST, entity, Void.class);
 
             // Lấy user ID từ Keycloak
@@ -270,21 +281,33 @@ public class AuthServiceImpl implements AuthService {
 
             String identitySubject = (String) userSearchResponse.getBody().get(0).get("id");
 
-            // Gán role USER mặc định
-            assignDefaultRoleToUser(identitySubject, adminToken, RoleName.USER.toString());
+            // Vai tro gan tren Keycloak: neu la user "mo coi" dang duoc tao lai thi giu nguyen cac role
+            // da co trong DB local (vi du ADMIN/MANAGER...), con user hoan toan moi thi mac dinh USER.
+            List<RoleName> rolesToAssign = (existingUser != null && existingUser.getRoles() != null && !existingUser.getRoles().isEmpty())
+                    ? existingUser.getRoles().stream().map(Role::getName).toList()
+                    : List.of(RoleName.USER);
+            for (RoleName roleNameEnum : rolesToAssign) {
+                assignDefaultRoleToUser(identitySubject, adminToken, roleNameEnum.toString());
+            }
 
-            Set<Role> roles = roleRepository.findAllByNameIn(List.of(RoleName.USER));
-            User newUser = User.builder()
-                    .identitySubject(identitySubject)
-                    .username(email.split("@")[0])
-                    .email(email)
-                    .fullName(lastName + " " + firstName)
-                    .status(UserStatus.ACTIVE)
-                    .roles(roles)
-                    .build();
-            repository.save(newUser);
+            if (existingUser != null) {
+                // Dong bo lai identitySubject moi cho ban ghi cu, khong tao trung ban ghi (email la unique)
+                existingUser.setIdentitySubject(identitySubject);
+                repository.save(existingUser);
+            } else {
+                Set<Role> roles = roleRepository.findAllByNameIn(rolesToAssign);
+                User newUser = User.builder()
+                        .identitySubject(identitySubject)
+                        .username(email.split("@")[0])
+                        .email(email)
+                        .fullName(lastName + " " + firstName)
+                        .status(UserStatus.ACTIVE)
+                        .roles(roles)
+                        .build();
+                repository.save(newUser);
+            }
 
-            // Lấy token cho user mới
+            // Lấy token cho user
             return getTokenForUser(identitySubject);
 
         } catch (AppException e) {
