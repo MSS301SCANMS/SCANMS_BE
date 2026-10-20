@@ -56,8 +56,15 @@ public class FinanceDispatch {
         String token;
         try { token=token(); } catch(Exception ex) { return; }
         if(token==null) return;
-        for(var r:batch(returns.findAll().stream().filter(r -> Set.of(ReturnRequestStatus.APPROVED,ReturnRequestStatus.RECEIVED,ReturnRequestStatus.REFUND_PENDING).contains(r.getStatus())).sorted(Comparator.comparing(com.scanms.order.entity.ReturnRequest::getReturnRequestId)).toList(),refundCursor))
-            try { post(paymentUrl+"/api/v1/finance/refunds/"+r.getReturnRequestId(),token,Map.of()); } catch(Exception ex) { /* Retry persisted source reference next cycle. */ }
+        for(var r:batch(returns.findAll().stream().filter(r -> Set.of(ReturnRequestStatus.APPROVED,ReturnRequestStatus.RECEIVED,ReturnRequestStatus.REFUND_PENDING,ReturnRequestStatus.REFUNDED).contains(r.getStatus())).sorted(Comparator.comparing(com.scanms.order.entity.ReturnRequest::getReturnRequestId)).toList(),refundCursor)) {
+            try {
+                if (r.getStatus() != ReturnRequestStatus.REFUNDED)
+                    post(paymentUrl+"/api/v1/finance/refunds/"+r.getReturnRequestId(),token,Map.of());
+                // Return/refund → ADJUSTED commission theo basis còn lại
+                if (r.getOrderItemId() != null)
+                    post(promotionUrl+"/api/v1/finance/commission-adjustments/"+r.getOrderItemId(),token,Map.of("reason","Return/refund adjustment for "+r.getReturnRequestId()));
+            } catch(Exception ex) { /* Retry persisted source reference next cycle. */ }
+        }
         refundCursor+=20;
         for(var seller:batch(sellers.findAll().stream().filter(s -> s.getStatus()==SellerOrderStatus.COMPLETED && s.getReturnDeadline()!=null && s.getReturnDeadline().isBefore(LocalDateTime.now(ZoneOffset.UTC))).sorted(Comparator.comparing(com.scanms.order.entity.SellerOrder::getSellerOrderId)).toList(),settlementCursor)) {
             try {

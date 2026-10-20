@@ -122,10 +122,10 @@ public class CommissionPolicyServiceImpl implements CommissionPolicyService {
         return platform.orElse(null);
     }
 
-    /** Policy hợp lệ khi: validFrom đã qua và validTo chưa đến (hoặc null = không hết hạn) */
+    /** Policy hợp lệ khi: validFrom đã tới và validTo chưa hết (null = không hết hạn) */
     private boolean isValid(CommissionPolicy policy, Instant now) {
         return policy.getValidFrom() != null
-                && policy.getValidFrom().isBefore(now)
+                && !policy.getValidFrom().isAfter(now)
                 && (policy.getValidTo() == null || policy.getValidTo().isAfter(now));
     }
 }

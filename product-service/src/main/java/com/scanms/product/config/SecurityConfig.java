@@ -15,8 +15,12 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/swagger-ui/**", "/swagger-ui.html",
                                 "/v3/api-docs/**", "/v3/api-docs.yaml",
-                                "/webjars/**", "/actuator/health", "/error")
+                                "/webjars/**", "/actuator/health", "/error",
+                                "/api/v1/public/**",
+                                "/api/v1/stores/marketplace",
+                                "/api/v1/stores/public/**")
                         .permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
                 .build();

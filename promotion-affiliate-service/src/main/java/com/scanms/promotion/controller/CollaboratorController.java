@@ -20,8 +20,8 @@ public class CollaboratorController {
 
     private final CollaboratorService service;
 
-    /** KOL tự nộp đơn đăng ký — cần AFFILIATE_INTERNAL hoặc ADMIN */
-    @PreAuthorize("@financeBoundary.canWrite(authentication)")
+    /** KOL tự nộp đơn đăng ký — user đã đăng nhập (PENDING chờ MANAGER/ADMIN duyệt) */
+    @PreAuthorize("@financeBoundary.canApply(authentication)")
     @PostMapping
     ResponseEntity<ApiResponse<CollaboratorProfileResponse>> create(
             @Valid @RequestBody ApplyCollaboratorRequest request) {

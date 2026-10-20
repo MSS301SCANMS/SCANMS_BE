@@ -7,7 +7,7 @@ spring:
   application:
     name: product-service
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:${CATALOG_DB_PORT:5432}/${CATALOG_DB_NAME:catalog_db}}
+    url: ${DB_URL:jdbc:postgresql://localhost:${PRODUCT_DB_PORT:5432}/${PRODUCT_DB_NAME:product_db}}
     username: ${DB_USERNAME:${POSTGRES_USER:postgres}}
     password: ${DB_PASSWORD:${POSTGRES_PASSWORD:postgres}}
   jpa:

@@ -14,6 +14,12 @@ public class FinanceBoundary {
         return hasAnyRole(authentication, Set.of("ADMIN", "SYSTEM_ADMIN", "AFFILIATE_INTERNAL"));
     }
 
+    /** User đã đăng nhập được nộp hồ sơ KOL (PENDING). */
+    public boolean canApply(Authentication authentication) {
+        return authentication != null && authentication.isAuthenticated()
+                && hasAnyRole(authentication, Set.of("USER", "CUSTOMER", "KOL_CTV", "ADMIN", "MANAGER", "SYSTEM_ADMIN", "SYSTEM_MANAGER", "AFFILIATE_INTERNAL"));
+    }
+
     /**
      * MANAGER / ADMIN / SYSTEM_MANAGER / SYSTEM_ADMIN — dùng cho approve/reject KOL,
      * duyệt store application và các quyết định nghiệp vụ cần cấp quản lý.

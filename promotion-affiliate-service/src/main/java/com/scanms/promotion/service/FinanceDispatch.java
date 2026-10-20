@@ -31,7 +31,7 @@ public class FinanceDispatch {
             Map<?,?> response=http.post().uri(tokenUrl).contentType(MediaType.APPLICATION_FORM_URLENCODED).body(form).retrieve().body(Map.class);
             if(response==null || !(response.get("access_token") instanceof String value)) return; token=value;
         } catch(Exception ex) { return; }
-        var eligible=commissions.findAll().stream().filter(c -> c.getStatus()==CommissionStatus.ELIGIBLE)
+        var eligible=commissions.findAll().stream().filter(c -> c.getStatus()==CommissionStatus.ELIGIBLE || c.getStatus()==CommissionStatus.ADJUSTED)
                 .sorted(Comparator.comparing(com.scanms.promotion.entity.Commission::getCommissionId)).toList();
         if(eligible.isEmpty()) return;
         int start=Math.floorMod(cursor,eligible.size()), count=Math.min(20,eligible.size());

@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import java.util.Map;
+import java.util.Objects;
 @RestController @RequiredArgsConstructor
 public class CollaboratorIdentityController {
     private final CollaboratorProfileRepository repository;
@@ -20,6 +21,9 @@ public class CollaboratorIdentityController {
     @GetMapping("/api/v1/collaborators/me") ApiResponse<CollaboratorProfileResponse> me(@AuthenticationPrincipal Jwt jwt) {
         Map<?,?> envelope=RestClient.create().get().uri(userUrl+"/api/v1/users/me").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
         if(envelope==null || !(envelope.get("result") instanceof Map<?,?> user)) throw new ResponseStatusException(HttpStatus.CONFLICT);
-        return ApiResponse.success(repository.findAll().stream().filter(p -> user.get("userId").equals(p.getUserId())).findFirst().map(mapper::toResponse).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"Collaborator profile not found")));
+        Object userId = user.get("userId");
+        return ApiResponse.success(repository.findByUserId(Objects.toString(userId, null))
+                .map(mapper::toResponse)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Collaborator profile not found")));
     }
 }

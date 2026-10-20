@@ -7,9 +7,12 @@ import com.scanms.order.repository.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +21,7 @@ import java.math.BigInteger;
 import java.util.*;
 
 /** Boundary owned by Order: Payment reads validated amounts, never client-supplied totals. */
+@Slf4j
 @RestController @RequestMapping("/api/v1/finance") @RequiredArgsConstructor @Transactional
 public class FinanceContractController {
     private final EntityManager em;
@@ -26,6 +30,11 @@ public class FinanceContractController {
     private final OrderItemRepository items;
     private final ReturnRequestRepository returns;
     private final DiscountAllocationRepository allocations;
+    @Value("${clients.promotion.url:http://localhost:8085}") private String promotionUrl;
+    private final RestClient http = RestClient.builder()
+            .requestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory(
+                    java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()))
+            .build();
     private void trusted(Jwt jwt,boolean operatorAllowed) {
         Set<String> roles=new HashSet<>();
         Object realm=jwt.getClaim("realm_access");
@@ -47,7 +56,24 @@ public class FinanceContractController {
         if(order.getStatus()==OrderStatus.CANCELLED || order.getStatus()==OrderStatus.EXPIRED) throw new ResponseStatusException(HttpStatus.CONFLICT,"Late payment requires reconciliation");
         saga.put("paymentId",input.paymentId()); saga.put("verifiedAt",input.verifiedAt()); order.setSagaState(saga);
         if(order.getStatus()==OrderStatus.PENDING || order.getStatus()==OrderStatus.AWAITING_PAYMENT) order.setStatus(OrderStatus.PAID);
-        orders.save(order); return ApiResponse.success(Map.of("orderId",id,"status",order.getStatus()));
+        orders.save(order);
+        // Payment SUCCESS → khởi tạo Commission PENDING cho mọi item có referral (idempotent phía promotion)
+        int initialized = 0;
+        for (SellerOrder seller : sellers.findByOrderId(id)) {
+            for (OrderItem item : items.findBySellerOrderId(seller.getSellerOrderId())) {
+                if (item.getReferralLinkId() == null || item.getReferralLinkId().isBlank()) continue;
+                try {
+                    http.post().uri(promotionUrl + "/api/v1/finance/commission-initializations/" + item.getOrderItemId())
+                            .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
+                            .body(Map.of("reason", "Payment verified; init pending commission"))
+                            .retrieve().toBodilessEntity();
+                    initialized++;
+                } catch (Exception ex) {
+                    log.warn("Commission init deferred for item {}: {}", item.getOrderItemId(), ex.getMessage());
+                }
+            }
+        }
+        return ApiResponse.success(Map.of("orderId", id, "status", order.getStatus(), "commissionsInitialized", initialized));
     }
     @GetMapping("/refund-basis/{id}") ApiResponse<Map<String,Object>> refundBasis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true); ReturnRequest request=find(ReturnRequest.class,id,false);
