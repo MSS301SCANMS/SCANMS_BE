@@ -107,6 +107,23 @@ public class LivestreamServiceImpl implements LivestreamService {
         return mapper.toResponse(repository.save(livestream));
     }
 
+    @Override
+    public LivestreamResponse respondInvite(String id, boolean accepted, org.springframework.security.oauth2.jwt.Jwt jwt) {
+        var livestream = repository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Livestream not found: " + id));
+        if (livestream.getStatus() == LivestreamStatus.ENDED || livestream.getStatus() == LivestreamStatus.CANCELLED)
+            throw new AppException(ErrorCode.CONFLICT, "Livestream is closed");
+        java.util.Map<String, Object> participants = new java.util.LinkedHashMap<>(
+                livestream.getParticipantRefs() == null ? java.util.Map.of() : livestream.getParticipantRefs());
+        participants.put("inviteStatus", accepted ? "ACCEPTED" : "REJECTED");
+        if (jwt != null) {
+            participants.put("respondedBySubject", jwt.getSubject());
+            participants.put("respondedAt", java.time.Instant.now().toString());
+        }
+        livestream.setParticipantRefs(participants);
+        return mapper.toResponse(repository.save(livestream));
+    }
+
     private com.scanms.product.entity.Livestream owned(String id) {
         var livestream = repository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Livestream not found: " + id));

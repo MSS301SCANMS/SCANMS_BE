@@ -52,7 +52,10 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password/reset",
                                 "/api/v1/send-otp",
                                 "/api/v1/payments/webhooks/payos",
-                                "/api/v1/payouts/webhooks/payos"
+                                "/api/v1/payouts/webhooks/payos",
+                                "/api/v1/public/**",
+                                "/api/v1/stores/marketplace",
+                                "/api/v1/stores/public/**"
                         ).permitAll()
                         .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/orders/track").permitAll()
 

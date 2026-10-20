@@ -25,7 +25,21 @@ public class CollaboratorServiceImpl implements CollaboratorService {
     private final CollaboratorProfileMapper mapper;
 
     public CollaboratorProfileResponse create(ApplyCollaboratorRequest request) {
-        return mapper.toResponse(repository.save(mapper.toEntity(request)));
+        // Idempotent: user đã có hồ sơ thì trả về (không tạo trùng)
+        var existing = repository.findByUserId(request.userId());
+        if (existing.isPresent()) {
+            return mapper.toResponse(existing.get());
+        }
+        CollaboratorProfile entity = mapper.toEntity(request);
+        // Luôn tạo PENDING — không cho client tự set APPROVED
+        entity.setApprovalStatus(CollaboratorStatus.PENDING);
+        if (entity.getJoinedAt() == null) {
+            entity.setJoinedAt(LocalDateTime.now());
+        }
+        if (entity.getPolicyVersion() == null || entity.getPolicyVersion().isBlank()) {
+            entity.setPolicyVersion("v1");
+        }
+        return mapper.toResponse(repository.save(entity));
     }
 
     @Transactional(readOnly = true)

@@ -47,7 +47,7 @@ keycloak:
   auth-server-url: http://localhost:8180
   realm: scanms
   client-id: scanms-client
-  client-secret: ${CLIENT_SECRET}
+  client-secret: ${CLIENT_SECRET:54wR8HtHb3tKEBAetWf418bzCqTQP1k1}
 
 app:
   auth:
@@ -55,7 +55,8 @@ app:
     # true = bat thuc su: user moi tao emailVerified=false + Keycloak tu gui mail xac minh (can da cau hinh SMTP trong Keycloak).
     email-verification-enabled: ${EMAIL_VERIFICATION_ENABLED:true}
 google:
-  client-id: ${GOOGLE_CLIENT_ID}
+  # Default khớp VITE_GOOGLE_CLIENT_ID trên FE; override bằng env GOOGLE_CLIENT_ID khi cần.
+  client-id: ${GOOGLE_CLIENT_ID:281102364785-etm73id59t8qvrbgrd16gpqg12plr21b.apps.googleusercontent.com}
 
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME}

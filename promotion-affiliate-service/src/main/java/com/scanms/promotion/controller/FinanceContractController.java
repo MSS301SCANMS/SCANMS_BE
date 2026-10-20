@@ -53,7 +53,7 @@ public class FinanceContractController {
     }
     @GetMapping("/commission-basis/{id}") ApiResponse<Map<String,Object>> basis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true); Commission c=find(id);
-        if(!Set.of(CommissionStatus.ELIGIBLE,CommissionStatus.CREDITED,CommissionStatus.PAID).contains(c.getStatus()) || c.getCommissionAmountVnd()==null || c.getCommissionAmountVnd()<=0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission is not eligible");
+        if(!Set.of(CommissionStatus.ELIGIBLE,CommissionStatus.ADJUSTED,CommissionStatus.CREDITED,CommissionStatus.PAID).contains(c.getStatus()) || c.getCommissionAmountVnd()==null || c.getCommissionAmountVnd()<=0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission is not eligible");
         CollaboratorProfile profile=collaborators.findById(c.getCollaboratorId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if(!Set.of("ACTIVE","APPROVED").contains(profile.getApprovalStatus().name())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Collaborator is inactive");
         Map<String,Object> item=order("/api/v1/order-items/"+c.getOrderItemId(),jwt);
@@ -68,7 +68,7 @@ public class FinanceContractController {
         trusted(jwt,false); Commission c=find(id);
         if(input.transactionId()==null || !Objects.equals(input.amountVnd(),c.getCommissionAmountVnd())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission credit mismatch");
         if(c.getTransferReference()!=null && !c.getTransferReference().equals(input.transactionId())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Another credit already exists");
-        if(!Set.of(CommissionStatus.ELIGIBLE,CommissionStatus.CREDITED,CommissionStatus.PAID).contains(c.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT);
+        if(!Set.of(CommissionStatus.ELIGIBLE,CommissionStatus.ADJUSTED,CommissionStatus.CREDITED,CommissionStatus.PAID).contains(c.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT);
         c.setTransferReference(input.transactionId()); c.setStatus(CommissionStatus.CREDITED); c.setPaidAt(LocalDateTime.now(ZoneOffset.UTC)); commissions.save(c);
         return ApiResponse.success(Map.of("commissionId",id,"status","CREDITED"));
     }
@@ -82,7 +82,7 @@ public class FinanceContractController {
             finalizedTotal=Math.addExact(finalizedTotal,f.getAmountVnd());
         }
         for(Commission c:commissions.findAll().stream().filter(c -> ids.contains(c.getOrderItemId())).toList()) {
-            if(!Set.of(CommissionStatus.CANCELLED,CommissionStatus.ELIGIBLE,CommissionStatus.CREDITED,CommissionStatus.PAID).contains(c.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Finalize commission adjustments first");
+            if(!Set.of(CommissionStatus.CANCELLED,CommissionStatus.ELIGIBLE,CommissionStatus.ADJUSTED,CommissionStatus.CREDITED,CommissionStatus.PAID).contains(c.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Finalize commission adjustments first");
             if(c.getStatus()!=CommissionStatus.CANCELLED) {
                 if(c.getCommissionAmountVnd()==null || c.getCommissionAmountVnd()<0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid finalized commission amount");
                 total=Math.addExact(total,c.getCommissionAmountVnd());
@@ -184,6 +184,62 @@ public class FinanceContractController {
                 saved.getCommissionId(), itemId, collaboratorId, policy.getPolicyId(), policy.getCommissionRate());
         return Map.of("orderItemId", itemId, "initialized", true,
                 "commissionId", saved.getCommissionId(), "rateSnapshot", policy.getCommissionRate().toPlainString());
+    }
+
+    // ─── Commission Adjustment (return / refund) ─────────────────────────────────
+
+    public record AdjustInput(String reason) {}
+
+    /**
+     * Recalculate commission amount after return/refund using current retained basis.
+     * PENDING rows stay PENDING (finalize sẽ tính lại). ELIGIBLE/CREDITED/PAID → ADJUSTED.
+     */
+    @PostMapping("/commission-adjustments/{itemId}")
+    ApiResponse<Map<String,Object>> adjustCommission(
+            @PathVariable String itemId,
+            @RequestBody(required = false) AdjustInput input,
+            @AuthenticationPrincipal Jwt jwt) {
+        trusted(jwt, true);
+        Map<String,Object> basis = order("/api/v1/finance/commission-order-item/" + itemId, jwt);
+        long retained = new java.math.BigDecimal(basis.get("basisAmountVnd").toString()).longValueExact();
+        String reason = input != null && input.reason() != null && !input.reason().isBlank()
+                ? input.reason() : "Return/refund adjustment";
+        int adjusted = 0;
+        for (Commission candidate : commissions.findByOrderItemId(itemId)) {
+            Commission c = find(candidate.getCommissionId());
+            if (c.getStatus() == CommissionStatus.PENDING || c.getStatus() == CommissionStatus.CANCELLED) continue;
+            if (c.getRateSnapshot() == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "Missing rate snapshot");
+            long amount = java.math.BigDecimal.valueOf(retained)
+                    .multiply(c.getRateSnapshot())
+                    .divide(java.math.BigDecimal.valueOf(100), 0, java.math.RoundingMode.HALF_UP)
+                    .longValueExact();
+            if (Objects.equals(c.getCommissionAmountVnd(), amount) && Objects.equals(c.getBasisAmountVnd(), retained))
+                continue;
+            Map<String,Object> history = new LinkedHashMap<>(c.getAdjustmentHistory() == null ? Map.of() : c.getAdjustmentHistory());
+            history.put("adjustedAt", Instant.now().toString());
+            history.put("reason", reason);
+            history.put("beforeAmountVnd", c.getCommissionAmountVnd() == null ? 0 : c.getCommissionAmountVnd());
+            history.put("afterAmountVnd", amount);
+            history.put("beforeBasisVnd", c.getBasisAmountVnd() == null ? 0 : c.getBasisAmountVnd());
+            history.put("afterBasisVnd", retained);
+            c.setAdjustmentHistory(history);
+            c.setBasisAmountVnd(retained);
+            c.setCommissionAmountVnd(amount);
+            c.setStatus(amount == 0 ? CommissionStatus.CANCELLED : CommissionStatus.ADJUSTED);
+            commissions.save(c);
+            adjusted++;
+        }
+        // Keep finalized snapshot consistent when already finalized
+        CommissionFinalization anchor = em.find(CommissionFinalization.class, itemId, LockModeType.PESSIMISTIC_WRITE);
+        if (anchor != null && anchor.getFinalizedAt() != null) {
+            long total = commissions.findByOrderItemId(itemId).stream()
+                    .filter(c -> c.getStatus() != CommissionStatus.CANCELLED && c.getCommissionAmountVnd() != null)
+                    .mapToLong(Commission::getCommissionAmountVnd).sum();
+            anchor.setAmountVnd(total);
+            anchor.setReason(reason);
+            finalizations.save(anchor);
+        }
+        return ApiResponse.success(Map.of("orderItemId", itemId, "adjusted", adjusted, "basisAmountVnd", retained));
     }
 
     // ─── Commission Finalization (14-day rule) ────────────────────────────────────

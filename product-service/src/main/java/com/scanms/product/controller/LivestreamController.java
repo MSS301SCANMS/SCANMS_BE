@@ -59,4 +59,16 @@ public class LivestreamController {
     ApiResponse<LivestreamResponse> stats(@PathVariable String id, @RequestBody StatsRequest request) {
         return ApiResponse.success(service.updateStats(id, request.viewerCount(), request.uniqueViewerCount(), request.concurrentViewerCount()));
     }
+
+    public record RespondRequest(boolean accepted) {}
+
+    /** KOL chấp nhận / từ chối lời mời live (lưu trong participantRefs.inviteStatus). */
+    @PatchMapping("/{id}/respond")
+    ApiResponse<LivestreamResponse> respond(
+            @PathVariable String id,
+            @RequestBody RespondRequest request,
+            org.springframework.security.core.annotation.AuthenticationPrincipal
+                    org.springframework.security.oauth2.jwt.Jwt jwt) {
+        return ApiResponse.success(service.respondInvite(id, request.accepted(), jwt));
+    }
 }
