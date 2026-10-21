@@ -12,6 +12,11 @@ import org.springframework.security.access.AccessDeniedException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    ResponseEntity<ApiResponse<Void>> handleMissingEndpoint(org.springframework.web.servlet.resource.NoResourceFoundException exception) {
+        return ResponseEntity.status(404).body(ApiResponse.error(404,"API chưa tồn tại trên dịch vụ đang chạy."));
+    }
+
     @ExceptionHandler(AppException.class)
     ResponseEntity<ApiResponse<Void>> handleAppException(AppException exception) {
         ErrorCode errorCode = exception.getErrorCode();

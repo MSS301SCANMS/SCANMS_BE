@@ -4,6 +4,13 @@ server:
 spring:
   application:
     name: order-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Timeout ngắn: Redis lỗi thì cache bị bỏ qua nhanh, request vẫn đọc DB.
+      timeout: ${REDIS_TIMEOUT:500ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5434/order_db}
     username: ${DB_USERNAME:postgres}

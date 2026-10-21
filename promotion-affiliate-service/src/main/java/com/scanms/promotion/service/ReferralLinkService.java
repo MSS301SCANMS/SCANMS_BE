@@ -8,4 +8,5 @@ public interface ReferralLinkService {
     ReferralLinkResponse create(CreateReferralLinkRequest request);
     ReferralLinkResponse getById(String id);
     List<ReferralLinkResponse> findAll();
+    List<Map<String, Object>> findStoreLinks(String storeId);
 }

@@ -31,6 +31,10 @@ public class FinanceBoundary {
 
     // ---------- helper ----------
 
+    public boolean canViewShopCollaborations(Authentication authentication) {
+        return hasAnyRole(authentication, Set.of("SHOP_OWNER", "SHOP_MANAGER"));
+    }
+
     private boolean hasAnyRole(Authentication authentication, Set<String> allowed) {
         if (!(authentication instanceof JwtAuthenticationToken auth)) return false;
         Set<String> roles = extractRoles(auth);

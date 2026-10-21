@@ -15,14 +15,12 @@ import java.util.*;
 public class PublicStoreController {
 
     private final StoreRepository stores;
+    private final com.scanms.product.service.PublicCatalogService catalog;
 
     @GetMapping("/marketplace")
     ApiResponse<List<Map<String, Object>>> marketplace() {
-        List<Map<String, Object>> items = stores.findAll().stream()
-                .filter(s -> s.getApprovalStatus() == StoreStatus.APPROVED)
-                .map(this::toPublic)
-                .toList();
-        return ApiResponse.success(items);
+        // Danh sách gian hàng đã duyệt lấy từ cache Redis (xoá khi Store thay đổi).
+        return ApiResponse.success(catalog.approvedStores());
     }
 
     @GetMapping("/public/id/{shopId}")

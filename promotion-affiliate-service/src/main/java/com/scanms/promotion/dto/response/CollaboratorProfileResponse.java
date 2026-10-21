@@ -12,5 +12,7 @@ public record CollaboratorProfileResponse(
         LocalDateTime joinedAt,
         String policyVersion,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Map<String, Object> applicationData,
+        String rejectionReason
 ) {}

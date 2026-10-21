@@ -45,6 +45,7 @@ public class StoreServiceImpl implements StoreService {
     }
 
     @Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(com.scanms.product.config.CacheNames.STORES_ALL)
     public List<StoreResponse> findAll() {
         return repository.findAll().stream().map(mapper::toResponse).toList();
     }

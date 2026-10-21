@@ -98,7 +98,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
     @Override
     @Transactional
     public ReturnRequestResponse processDecision(String returnRequestId, ReturnDecisionRequest decision) {
-        ReturnRequest rr = repository.findById(returnRequestId)
+        ReturnRequest rr = repository.lockById(returnRequestId)
                 .orElseThrow(() -> new AppException(ErrorCode.RETURN_REQUEST_NOT_FOUND, "ReturnRequest not found: " + returnRequestId));
 
         if (decision.status() == ReturnRequestStatus.APPROVED) {

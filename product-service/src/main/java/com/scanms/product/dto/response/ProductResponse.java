@@ -22,4 +22,4 @@ public record ProductResponse(
         Long version,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
-) {}
+) implements java.io.Serializable {}
