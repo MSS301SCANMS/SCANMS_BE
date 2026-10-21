@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import com.scanms.promotion.service.KolApplicationService;
 
 @Service
 @RequiredArgsConstructor
@@ -75,7 +76,7 @@ public class CollaboratorServiceImpl implements CollaboratorService {
                     "Cannot approve a collaborator with status: " + profile.getApprovalStatus());
         }
 
-        com.scanms.promotion.service.KolApplicationService.validate(profile.getApplicationData());
+        KolApplicationService.validate(profile.getApplicationData());
 
         profile.setApprovalStatus(CollaboratorStatus.APPROVED);
         profile.setJoinedAt(LocalDateTime.now());

@@ -22,6 +22,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import com.scanms.product.config.CacheNames;
+import com.scanms.product.dto.request.UpdateStoreRequest;
+import org.springframework.cache.annotation.Cacheable;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +48,7 @@ public class StoreServiceImpl implements StoreService {
     }
 
     @Transactional(readOnly = true)
-    @org.springframework.cache.annotation.Cacheable(com.scanms.product.config.CacheNames.STORES_ALL)
+    @Cacheable(CacheNames.STORES_ALL)
     public List<StoreResponse> findAll() {
         return repository.findAll().stream().map(mapper::toResponse).toList();
     }
@@ -83,7 +86,7 @@ public class StoreServiceImpl implements StoreService {
         return mapper.toResponse(repository.save(store));
     }
 
-    public StoreResponse update(String storeId, com.scanms.product.dto.request.UpdateStoreRequest request) {
+    public StoreResponse update(String storeId, UpdateStoreRequest request) {
         var store = access.requireApprovedStore(storeId);
         if (request.name() != null) store.setName(request.name());
         if (request.description() != null) store.setDescription(request.description());

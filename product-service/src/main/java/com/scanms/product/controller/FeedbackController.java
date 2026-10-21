@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import com.scanms.product.constant.FeedbackStatus;
+import com.scanms.product.dto.request.UpdateFeedbackRequest;
 
 @RestController
 @RequestMapping("/api/v1/feedbacks")
@@ -17,39 +19,39 @@ public class FeedbackController {
     private final FeedbackService service;
 
     @PostMapping
-    ResponseEntity<ApiResponse<FeedbackResponse>> create(@Valid @RequestBody CreateFeedbackRequest request) {
+    public ResponseEntity<ApiResponse<FeedbackResponse>> create(@Valid @RequestBody CreateFeedbackRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<FeedbackResponse> getById(@PathVariable String id) {
+    public ApiResponse<FeedbackResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<FeedbackResponse>> findAll() {
+    public ApiResponse<List<FeedbackResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 
     @PatchMapping("/{id}")
-    ApiResponse<FeedbackResponse> updateOwn(@PathVariable String id,
-            @Valid @RequestBody com.scanms.product.dto.request.UpdateFeedbackRequest request) {
+    public ApiResponse<FeedbackResponse> updateOwn(@PathVariable String id,
+            @Valid @RequestBody UpdateFeedbackRequest request) {
         return ApiResponse.success(service.updateOwn(id, request));
     }
 
     @DeleteMapping("/{id}")
-    ApiResponse<FeedbackResponse> removeOwn(@PathVariable String id) {
+    public ApiResponse<FeedbackResponse> removeOwn(@PathVariable String id) {
         return ApiResponse.success(service.removeOwn(id));
     }
 
     @PostMapping("/{id}/hide")
-    ApiResponse<FeedbackResponse> hide(@PathVariable String id) {
-        return ApiResponse.success(service.moderate(id, com.scanms.product.constant.FeedbackStatus.HIDDEN));
+    public ApiResponse<FeedbackResponse> hide(@PathVariable String id) {
+        return ApiResponse.success(service.moderate(id, FeedbackStatus.HIDDEN));
     }
 
     @PostMapping("/{id}/remove")
-    ApiResponse<FeedbackResponse> remove(@PathVariable String id) {
-        return ApiResponse.success(service.moderate(id, com.scanms.product.constant.FeedbackStatus.REMOVED));
+    public ApiResponse<FeedbackResponse> remove(@PathVariable String id) {
+        return ApiResponse.success(service.moderate(id, FeedbackStatus.REMOVED));
     }
 }
 

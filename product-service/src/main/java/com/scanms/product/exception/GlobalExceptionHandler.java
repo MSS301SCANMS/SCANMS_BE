@@ -8,12 +8,13 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
-    ResponseEntity<ApiResponse<Void>> handleMissingEndpoint(org.springframework.web.servlet.resource.NoResourceFoundException exception) {
+    @ExceptionHandler(NoResourceFoundException.class)
+    ResponseEntity<ApiResponse<Void>> handleMissingEndpoint(NoResourceFoundException exception) {
         return ResponseEntity.status(404).body(ApiResponse.error(404,"API chưa tồn tại trên dịch vụ đang chạy."));
     }
 

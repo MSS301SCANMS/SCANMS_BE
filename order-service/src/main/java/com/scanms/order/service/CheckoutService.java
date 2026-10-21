@@ -17,6 +17,7 @@ import jakarta.validation.constraints.*;
 import java.time.*;
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.function.Supplier;
 
 @Service @RequiredArgsConstructor
 public class CheckoutService {
@@ -40,7 +41,7 @@ public class CheckoutService {
         @NotBlank @Size(max=30) String customerPhone,@NotBlank @Size(max=500) String shippingAddress,
         @NotBlank String paymentMethod,@AssertTrue boolean policyAccepted,@Size(max=100) String couponCode,
         @Size(max=500) String orderNotes,@NotEmpty @Size(max=100) List<@Valid Line> items) {}
-    private <T> T tx(java.util.function.Supplier<T> action) { return new TransactionTemplate(transactions).execute(s -> action.get()); }
+    private <T> T tx(Supplier<T> action) { return new TransactionTemplate(transactions).execute(s -> action.get()); }
     @SuppressWarnings("unchecked") private Map<String,Object> result(Map<?,?> response) {
         if(response==null || !(response.get("result") instanceof Map<?,?> value)) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Checkout source contract unavailable");
         return (Map<String,Object>)value;

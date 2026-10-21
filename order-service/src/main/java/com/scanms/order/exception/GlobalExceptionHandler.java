@@ -9,11 +9,12 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     ResponseEntity<ApiResponse<Void>> handleInvalidParameter(Exception exception) {
         return ResponseEntity.badRequest().body(ApiResponse.error(400, "Tham số không hợp lệ. Vui lòng kiểm tra ngày và kỳ thống kê."));
     }

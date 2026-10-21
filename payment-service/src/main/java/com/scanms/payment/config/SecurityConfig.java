@@ -9,6 +9,8 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import java.util.*;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.core.GrantedAuthority;
 
 @Configuration
 @EnableMethodSecurity
@@ -22,7 +24,7 @@ public class SecurityConfig {
                                 "/v3/api-docs/**", "/v3/api-docs.yaml",
                                 "/webjars/**", "/actuator/health", "/error", "/api/v1/payments/webhooks/payos", "/api/v1/payouts/webhooks/payos")
                         .permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.POST,
+                        .requestMatchers(HttpMethod.POST,
                                 "/api/v1/payments", "/api/v1/bank-accounts", "/api/v1/withdrawals", "/api/v1/settlements", "/api/v1/fee-configs").denyAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter())))
@@ -39,7 +41,7 @@ public class SecurityConfig {
             if (resources instanceof Map<?,?> map) map.values().forEach(v -> {
                 if (v instanceof Map<?,?> entry && entry.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString()));
             });
-            return roles.stream().map(r -> (org.springframework.security.core.GrantedAuthority)new SimpleGrantedAuthority("ROLE_" + r)).toList();
+            return roles.stream().map(r -> (GrantedAuthority)new SimpleGrantedAuthority("ROLE_" + r)).toList();
         });
         return converter;
     }

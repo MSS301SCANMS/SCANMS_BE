@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import com.scanms.product.dto.request.UpdateProductImageRequest;
 
 @RestController
 @RequestMapping("/api/v1/product-images")
@@ -17,27 +18,27 @@ public class ProductImageController {
     private final ProductImageService service;
 
     @PostMapping
-    ResponseEntity<ApiResponse<ProductImageResponse>> create(@Valid @RequestBody CreateProductImageRequest request) {
+    public ResponseEntity<ApiResponse<ProductImageResponse>> create(@Valid @RequestBody CreateProductImageRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<ProductImageResponse> getById(@PathVariable String id) {
+    public ApiResponse<ProductImageResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<ProductImageResponse>> findAll() {
+    public ApiResponse<List<ProductImageResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 
     @PatchMapping("/{id}")
-    ApiResponse<ProductImageResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateProductImageRequest request) {
+    public ApiResponse<ProductImageResponse> update(@PathVariable String id, @Valid @RequestBody UpdateProductImageRequest request) {
         return ApiResponse.success(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    ResponseEntity<Void> delete(@PathVariable String id) {
+    public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }

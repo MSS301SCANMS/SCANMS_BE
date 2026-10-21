@@ -22,6 +22,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import com.scanms.product.dto.request.UpdateFeedbackRequest;
+import com.scanms.product.entity.Feedback;
+import com.scanms.product.entity.Product;
 
 @Service
 @RequiredArgsConstructor
@@ -45,9 +48,9 @@ public class FeedbackServiceImpl implements FeedbackService {
         var order = orderResult("/api/v1/orders/" + sellerOrder.get("orderId"));
         if (!product.getStoreId().equals(sellerOrder.get("storeId"))
                 || !customerId.equals(order.get("customerId"))
-                || !java.util.Set.of("PAID", "PROCESSING", "COMPLETED")
+                || !Set.of("PAID", "PROCESSING", "COMPLETED")
                         .contains(Objects.toString(order.get("status"), ""))
-                || !java.util.Set.of("DELIVERED", "COMPLETED")
+                || !Set.of("DELIVERED", "COMPLETED")
                         .contains(Objects.toString(sellerOrder.get("status"), "")))
             throw new AppException(ErrorCode.FORBIDDEN, "Only the buyer of a delivered item may review it");
         if (repository.existsByOrderItemIdAndCustomerId(request.orderItemId(), customerId)) {
@@ -84,7 +87,7 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .map(mapper::toResponse).toList();
     }
 
-    public FeedbackResponse updateOwn(String id, com.scanms.product.dto.request.UpdateFeedbackRequest request) {
+    public FeedbackResponse updateOwn(String id, UpdateFeedbackRequest request) {
         var feedback = ownedActive(id);
         if (request.rating() != null) feedback.setRating(request.rating());
         if (request.comment() != null) feedback.setComment(request.comment());
@@ -102,7 +105,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         return mapper.toResponse(feedback);
     }
 
-    private com.scanms.product.entity.Feedback ownedActive(String id) {
+    private Feedback ownedActive(String id) {
         var feedback = repository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Feedback not found"));
         if (!feedback.getCustomerId().equals(access.userId()))
@@ -112,7 +115,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         return feedback;
     }
 
-    private String storeId(com.scanms.product.entity.Feedback feedback) {
+    private String storeId(Feedback feedback) {
         return products.findById(feedback.getProductId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found"))
                 .getStoreId();
@@ -134,12 +137,12 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     private void refreshStoreRating(String storeId) {
         var store = stores.findById(storeId).orElseThrow();
-        var ids = products.findByStoreId(storeId).stream().map(com.scanms.product.entity.Product::getProductId).toList();
-        var active = ids.isEmpty() ? java.util.List.<com.scanms.product.entity.Feedback>of()
+        var ids = products.findByStoreId(storeId).stream().map(Product::getProductId).toList();
+        var active = ids.isEmpty() ? List.<Feedback>of()
                 : repository.findByProductIdInAndStatus(ids, FeedbackStatus.ACTIVE);
         store.setRatingCount((long) active.size());
         store.setRatingAverage(active.isEmpty() ? BigDecimal.ZERO :
-                BigDecimal.valueOf(active.stream().mapToLong(com.scanms.product.entity.Feedback::getRating).sum())
+                BigDecimal.valueOf(active.stream().mapToLong(Feedback::getRating).sum())
                         .divide(BigDecimal.valueOf(active.size()), 2, RoundingMode.HALF_UP));
     }
 

@@ -37,6 +37,12 @@ import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.scanms.user.dto.request.GoogleLoginRequest;
 import java.util.Collections;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.Arrays;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -108,7 +114,7 @@ public class AuthServiceImpl implements AuthService {
                         getUserIdUrl,
                         HttpMethod.GET,
                         new HttpEntity<>(headers),
-                        new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {}
+                        new ParameterizedTypeReference<List<Map<String, Object>>>() {}
                 );
 
                 if (userSearchResponse.getBody() != null && !userSearchResponse.getBody().isEmpty()) {
@@ -168,7 +174,7 @@ public class AuthServiceImpl implements AuthService {
                         (String) tokenData.get("token_type")
                 );
             }
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
+        } catch (HttpClientErrorException e) {
             String detail = e.getResponseBodyAsString();
             log.warn("Identity provider rejected login, status={}", e.getStatusCode().value());
             if (detail.contains("Account is not fully set up")) {
@@ -176,15 +182,15 @@ public class AuthServiceImpl implements AuthService {
                         "Tài khoản chưa hoàn tất thiết lập trên Keycloak (cần đổi mật khẩu / xác minh email). Liên hệ admin.");
             }
             if (detail.contains("invalid_client") || detail.contains("unauthorized_client") || e.getStatusCode().value() == 401) {
-                throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                         "Dịch vụ đăng nhập chưa sẵn sàng do cấu hình xác thực. Vui lòng liên hệ quản trị viên.");
             }
             if (detail.contains("invalid_grant")) {
                 throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai tên đăng nhập hoặc mật khẩu!");
             }
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ đăng nhập chưa sẵn sàng. Vui lòng thử lại.");
-        } catch (org.springframework.web.client.RestClientException e) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ đăng nhập chưa sẵn sàng. Vui lòng thử lại.");
+        } catch (RestClientException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
         }
         throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đăng nhập thất bại");
     }
@@ -228,7 +234,7 @@ public class AuthServiceImpl implements AuthService {
         if (firstName == null && lastName == null) {
             String[] nameParts = rawFullName != null ? rawFullName.trim().split("\\s+") : new String[0];
             if (nameParts.length >= 2) {
-                lastName = sanitizePersonName(String.join(" ", java.util.Arrays.copyOf(nameParts, nameParts.length - 1)));
+                lastName = sanitizePersonName(String.join(" ", Arrays.copyOf(nameParts, nameParts.length - 1)));
                 firstName = sanitizePersonName(nameParts[nameParts.length - 1]);
             } else if (nameParts.length == 1) {
                 firstName = sanitizePersonName(nameParts[0]);
@@ -257,7 +263,7 @@ public class AuthServiceImpl implements AuthService {
         // 3. Tao user tren Keycloak (ap dung cho ca user hoan toan moi, lan user bi "mo coi" o buoc tren)
         try {
             String adminToken = getAdminAccessToken();
-            String tempPassword = java.util.UUID.randomUUID().toString();
+            String tempPassword = UUID.randomUUID().toString();
 
             String createUserUrl = serverUrl + "/admin/realms/" + realm + "/users";
             HttpHeaders headers = new HttpHeaders();
@@ -287,7 +293,7 @@ public class AuthServiceImpl implements AuthService {
             String getUserIdUrl = serverUrl + "/admin/realms/" + realm + "/users?email=" + email;
             ResponseEntity<List<Map<String, Object>>> userSearchResponse = restTemplate.exchange(
                     getUserIdUrl, HttpMethod.GET, new HttpEntity<>(headers),
-                    new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {});
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {});
 
             if (userSearchResponse.getBody() == null || userSearchResponse.getBody().isEmpty()) {
                 throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không tìm thấy user vừa tạo trên Keycloak");
@@ -526,7 +532,7 @@ public class AuthServiceImpl implements AuthService {
                     new HttpEntity<>(List.of(keycloakRole), headers), Void.class);
             user.getRoles().add(role);
             repository.save(user);
-        } catch (org.springframework.web.client.RestClientException ex) {
+        } catch (RestClientException ex) {
             throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "Cannot grant SHOP_OWNER role in Keycloak");
         }
     }
@@ -554,7 +560,7 @@ public class AuthServiceImpl implements AuthService {
                     new HttpEntity<>(List.of(keycloakRole), headers), Void.class);
             user.getRoles().add(role);
             repository.save(user);
-        } catch (org.springframework.web.client.RestClientException ex) {
+        } catch (RestClientException ex) {
             throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "Cannot grant KOL_CTV role in Keycloak");
         }
     }
@@ -693,14 +699,14 @@ public class AuthServiceImpl implements AuthService {
                         .build();
             }
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không thể làm mới token");
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
+        } catch (HttpClientErrorException e) {
             // Only invalid_grant is a rejected session. A bad client configuration
             // or provider outage must not erase the user's local session.
             if (e.getResponseBodyAsString().contains("\"invalid_grant\""))
                 throw new AppException(ErrorCode.UNAUTHENTICATED, "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa thể gia hạn đăng nhập. Vui lòng thử lại.");
-        } catch (org.springframework.web.client.RestClientException e) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa thể gia hạn đăng nhập. Vui lòng thử lại.");
+        } catch (RestClientException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
         }
     }
 }

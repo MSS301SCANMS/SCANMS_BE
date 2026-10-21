@@ -12,6 +12,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
@@ -20,7 +23,7 @@ public class WalletTransactionServiceImpl implements WalletTransactionService {
     private final WalletTransactionRepository repository;
     private final WalletRepository walletRepository;
     private final WalletTransactionMapper mapper;
-    private final jakarta.persistence.EntityManager entityManager;
+    private final EntityManager entityManager;
 
     public WalletTransactionResponse create(CreateWalletTransactionRequest request) {
         if (request.amountVnd() == null || request.amountVnd() <= 0 || request.idempotencyKey() == null
@@ -29,7 +32,7 @@ public class WalletTransactionServiceImpl implements WalletTransactionService {
         Wallet wallet = walletRepository.findById(request.walletId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Wallet not found: " + request.walletId()));
         // Refresh while acquiring the lock: callers may already have loaded an older wallet version.
-        entityManager.refresh(wallet, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        entityManager.refresh(wallet, LockModeType.PESSIMISTIC_WRITE);
         var previous = repository.findByIdempotencyKey(request.idempotencyKey());
         if (previous.isPresent()) {
             WalletTransaction old = previous.get();
@@ -79,7 +82,7 @@ public class WalletTransactionServiceImpl implements WalletTransactionService {
         transaction.setBalanceBeforeVnd(before);
         transaction.setBalanceAfterVnd(after);
         transaction.setHeldBeforeVnd(heldBefore); transaction.setHeldAfterVnd(heldAfter);
-        transaction.setCompletedAt(java.time.Instant.now());
+        transaction.setCompletedAt(Instant.now());
         return mapper.toResponse(repository.saveAndFlush(transaction));
     }
 

@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import com.scanms.product.dto.request.UpdateProductCategoryRequest;
 
 @RestController
 @RequestMapping("/api/v1/product-categories")
@@ -17,27 +18,27 @@ public class ProductCategoryController {
     private final ProductCategoryService service;
 
     @PostMapping
-    ResponseEntity<ApiResponse<ProductCategoryResponse>> create(@Valid @RequestBody CreateProductCategoryRequest request) {
+    public ResponseEntity<ApiResponse<ProductCategoryResponse>> create(@Valid @RequestBody CreateProductCategoryRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<ProductCategoryResponse> getById(@PathVariable String id) {
+    public ApiResponse<ProductCategoryResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<ProductCategoryResponse>> findAll() {
+    public ApiResponse<List<ProductCategoryResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 
     @PatchMapping("/{id}")
-    ApiResponse<ProductCategoryResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateProductCategoryRequest request) {
+    public ApiResponse<ProductCategoryResponse> update(@PathVariable String id, @Valid @RequestBody UpdateProductCategoryRequest request) {
         return ApiResponse.success(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    ResponseEntity<Void> delete(@PathVariable String id) {
+    public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }

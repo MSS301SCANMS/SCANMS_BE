@@ -9,27 +9,28 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
-@org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'PAYMENT_INTERNAL')")
+@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'PAYMENT_INTERNAL')")
 @RestController
 @RequestMapping("/api/v1/bank-accounts")
 @RequiredArgsConstructor
 public class BankAccountController {
     private final BankAccountService service;
 
-    @org.springframework.security.access.prepost.PreAuthorize("denyAll()")
+    @PreAuthorize("denyAll()")
     @PostMapping
-    ResponseEntity<ApiResponse<BankAccountResponse>> create(@Valid @RequestBody RegisterBankAccountRequest request) {
+    public ResponseEntity<ApiResponse<BankAccountResponse>> create(@Valid @RequestBody RegisterBankAccountRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<BankAccountResponse> getById(@PathVariable String id) {
+    public ApiResponse<BankAccountResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<BankAccountResponse>> findAll() {
+    public ApiResponse<List<BankAccountResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 }

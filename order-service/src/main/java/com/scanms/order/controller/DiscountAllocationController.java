@@ -9,23 +9,24 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/discount-allocations")
 @RequiredArgsConstructor
 public class DiscountAllocationController {
     private final DiscountAllocationService service;
-    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
-    ResponseEntity<ApiResponse<DiscountAllocationResponse>> create(@Valid @RequestBody CreateDiscountAllocationRequest request) {
+    public ResponseEntity<ApiResponse<DiscountAllocationResponse>> create(@Valid @RequestBody CreateDiscountAllocationRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
     @GetMapping("/{id}")
-    ApiResponse<DiscountAllocationResponse> getById(@PathVariable String id) {
+    public ApiResponse<DiscountAllocationResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
     @GetMapping
-    ApiResponse<List<DiscountAllocationResponse>> findAll() {
+    public ApiResponse<List<DiscountAllocationResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 }

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.List;
+import java.time.temporal.ChronoUnit;
 
 @RestController @RequestMapping("/api/v1/stores") @RequiredArgsConstructor
 public class StorePresenceController {
@@ -21,7 +22,7 @@ public class StorePresenceController {
 
     @PostMapping("/my-store/presence") @Transactional
     public ApiResponse<List<Presence>> heartbeat() {
-        String owner=access.userId();Instant now=Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        String owner=access.userId();Instant now=Instant.now().truncatedTo(ChronoUnit.MILLIS);
         stores.touchPresence(owner,StoreStatus.APPROVED,now);
         var owned=stores.findByOwnerUserId(owner);Instant checkedAt=Instant.now();
         var result=owned.stream().filter(s->s.getApprovalStatus()==StoreStatus.APPROVED).map(s->view(s,checkedAt)).toList();

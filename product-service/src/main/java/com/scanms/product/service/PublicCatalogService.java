@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.stream.Stream;
 
 /**
  * Dữ liệu catalog công khai (marketplace / storefront), cache trong Redis.
@@ -76,7 +77,7 @@ public class PublicCatalogService {
                         .thenComparing(ProductImage::getImageId, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(ProductImage::getImageUrl).filter(Objects::nonNull).filter(url -> !url.isBlank()).distinct().toList();
         if (gallery.isEmpty() && product.getImageRefs() != null) {
-            gallery = java.util.stream.Stream.concat(java.util.stream.Stream.of(firstImage(product.getImageRefs())),
+            gallery = Stream.concat(Stream.of(firstImage(product.getImageRefs())),
                             product.getImageRefs().values().stream()).filter(Objects::nonNull)
                     .map(Object::toString).filter(url -> !url.isBlank()).distinct().toList();
         }
@@ -88,7 +89,7 @@ public class PublicCatalogService {
                     boolean active = v.getStatus() == ProductVariantStatus.ACTIVE;
                     variant.put("id", v.getVariantId());
                     variant.put("sku", v.getSku());
-                    variant.put("name", java.util.stream.Stream.of(v.getColor(), v.getSize())
+                    variant.put("name", Stream.of(v.getColor(), v.getSize())
                             .filter(Objects::nonNull).filter(s -> !s.isBlank()).collect(Collectors.joining(" / ")));
                     Map<String, String> attributes = new LinkedHashMap<>();
                     if (v.getSize() != null) attributes.put("size", v.getSize());

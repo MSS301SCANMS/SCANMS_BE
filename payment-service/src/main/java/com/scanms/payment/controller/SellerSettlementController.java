@@ -9,27 +9,28 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
-@org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'PAYMENT_INTERNAL')")
+@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'PAYMENT_INTERNAL')")
 @RestController
 @RequestMapping("/api/v1/settlements")
 @RequiredArgsConstructor
 public class SellerSettlementController {
     private final SellerSettlementService service;
 
-    @org.springframework.security.access.prepost.PreAuthorize("denyAll()")
+    @PreAuthorize("denyAll()")
     @PostMapping
-    ResponseEntity<ApiResponse<SellerSettlementResponse>> create(@Valid @RequestBody CreateSellerSettlementRequest request) {
+    public ResponseEntity<ApiResponse<SellerSettlementResponse>> create(@Valid @RequestBody CreateSellerSettlementRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<SellerSettlementResponse> getById(@PathVariable String id) {
+    public ApiResponse<SellerSettlementResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<SellerSettlementResponse>> findAll() {
+    public ApiResponse<List<SellerSettlementResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 }

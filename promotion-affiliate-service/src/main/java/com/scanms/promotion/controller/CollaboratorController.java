@@ -12,6 +12,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import com.scanms.promotion.service.VoucherAccess;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/collaborators")
@@ -19,28 +21,28 @@ import java.util.*;
 public class CollaboratorController {
 
     private final CollaboratorService service;
-    private final com.scanms.promotion.service.VoucherAccess access;
+    private final VoucherAccess access;
 
     /** KOL tự nộp đơn đăng ký — user đã đăng nhập (PENDING chờ MANAGER/ADMIN duyệt) */
     @PreAuthorize("@financeBoundary.canApply(authentication)")
     @PostMapping
-    ResponseEntity<ApiResponse<CollaboratorProfileResponse>> create(
+    public ResponseEntity<ApiResponse<CollaboratorProfileResponse>> create(
             @Valid @RequestBody ApplyCollaboratorRequest request) {
-        if(!Objects.equals(request.userId(),access.userId())) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN,"Không thể nộp hồ sơ cho tài khoản khác.");
+        if(!Objects.equals(request.userId(),access.userId())) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Không thể nộp hồ sơ cho tài khoản khác.");
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<CollaboratorProfileResponse> getById(@PathVariable String id) {
+    public ApiResponse<CollaboratorProfileResponse> getById(@PathVariable String id) {
         var profile=service.getById(id);
         if(access.isManager())access.requireManager();
-        else if(!Objects.equals(profile.userId(),access.userId()))throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN,"Không có quyền xem hồ sơ này.");
+        else if(!Objects.equals(profile.userId(),access.userId()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Không có quyền xem hồ sơ này.");
         return ApiResponse.success(profile);
     }
 
     @GetMapping
-    ApiResponse<List<CollaboratorProfileResponse>> findAll() {
+    public ApiResponse<List<CollaboratorProfileResponse>> findAll() {
         if(access.isManager()) { access.requireManager(); return ApiResponse.success(service.findAll()); }
         // Public collaborator summaries never expose identity documents or banking details.
         return ApiResponse.success(service.findAll().stream().map(profile -> new CollaboratorProfileResponse(profile.collaboratorId(),profile.userId(),profile.approvalStatus(),profile.joinedAt(),profile.policyVersion(),profile.createdAt(),profile.updatedAt(),null,null)).toList());
@@ -52,7 +54,7 @@ public class CollaboratorController {
      */
     @PreAuthorize("@financeBoundary.canManage(authentication)")
     @PatchMapping("/{id}/approve")
-    ApiResponse<CollaboratorProfileResponse> approve(@PathVariable String id) {
+    public ApiResponse<CollaboratorProfileResponse> approve(@PathVariable String id) {
         return ApiResponse.success(service.approve(id));
     }
 
@@ -65,7 +67,7 @@ public class CollaboratorController {
      */
     @PreAuthorize("@financeBoundary.canManage(authentication)")
     @PatchMapping("/{id}/reject")
-    ApiResponse<CollaboratorProfileResponse> reject(
+    public ApiResponse<CollaboratorProfileResponse> reject(
             @PathVariable String id,
             @Valid @RequestBody RejectRequest request) {
         return ApiResponse.success(service.reject(id, request.reason()));

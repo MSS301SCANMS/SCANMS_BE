@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Public catalog endpoints consumed by SCANMS_FE marketplace / chat / storefront.
@@ -40,7 +42,7 @@ public class PublicProductController {
     }
 
     @GetMapping("/products")
-    ApiResponse<Map<String, Object>> listProducts(
+    public ApiResponse<Map<String, Object>> listProducts(
             @RequestParam(required = false) String storeId,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
@@ -115,12 +117,12 @@ public class PublicProductController {
     }
 
     @GetMapping("/products/categories")
-    ApiResponse<List<Map<String, Object>>> listCategories() {
+    public ApiResponse<List<Map<String, Object>>> listCategories() {
         return ApiResponse.success(catalog != null ? catalog.categories() : Collections.emptyList());
     }
 
     @GetMapping("/products/stores")
-    ApiResponse<List<Map<String, Object>>> listProductStores() {
+    public ApiResponse<List<Map<String, Object>>> listProductStores() {
         if (catalog == null) return ApiResponse.success(Collections.emptyList());
         List<Map<String, Object>> rows = catalog.approvedStores().stream().map(s -> {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -133,16 +135,16 @@ public class PublicProductController {
     }
 
     @GetMapping("/products/{id}")
-    ApiResponse<Map<String, Object>> getProduct(@PathVariable String id) {
+    public ApiResponse<Map<String, Object>> getProduct(@PathVariable String id) {
         Product product = products.findById(id)
-                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND, "Product not found"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Product not found"));
         Store store = product.getStoreId() != null ? stores.findById(product.getStoreId()).orElse(null) : null;
         return ApiResponse.success(catalog != null ? catalog.productDetails(product, store) : PublicCatalogService.toPublicProduct(product, store));
     }
 
     @GetMapping("/products/{id}/landing")
-    ApiResponse<Map<String, Object>> landing(@PathVariable String id) {
+    public ApiResponse<Map<String, Object>> landing(@PathVariable String id) {
         Map<String, Object> product = getProduct(id).result();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("product", product);
@@ -167,10 +169,10 @@ public class PublicProductController {
     }
 
     @GetMapping("/products/{id}/stock")
-    ApiResponse<Map<String, Object>> stock(@PathVariable String id) {
+    public ApiResponse<Map<String, Object>> stock(@PathVariable String id) {
         Product product = products.findById(id)
-                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND, "Product not found"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Product not found"));
         Store store = product.getStoreId() == null ? null : stores.findById(product.getStoreId()).orElse(null);
         Map<String, Object> details = catalog != null ? catalog.productDetails(product, store) : Map.of();
         long stock = ((Number) details.getOrDefault("stockQuantity", 0)).longValue();
@@ -191,13 +193,13 @@ public class PublicProductController {
     }
 
     @PostMapping("/products/analytics/events")
-    ApiResponse<Map<String, Object>> analytics(@RequestBody(required = false) Map<String, Object> body) {
+    public ApiResponse<Map<String, Object>> analytics(@RequestBody(required = false) Map<String, Object> body) {
         // Soft no-op for FE analytics calls in local/dev.
         return ApiResponse.success(Map.of("accepted", true));
     }
 
     @GetMapping("/stores")
-    ApiResponse<List<Map<String, Object>>> marketplaceStores() {
+    public ApiResponse<List<Map<String, Object>>> marketplaceStores() {
         return ApiResponse.success(catalog.approvedStores());
     }
 

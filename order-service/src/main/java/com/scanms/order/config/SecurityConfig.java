@@ -5,8 +5,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 
-@org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
+@EnableMethodSecurity
 @Configuration
 public class SecurityConfig {
     @Bean
@@ -18,7 +20,7 @@ public class SecurityConfig {
                                 "/v3/api-docs/**", "/v3/api-docs.yaml",
                                 "/webjars/**", "/actuator/health", "/error")
                         .permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/orders/track").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/orders/track").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
                 .build();

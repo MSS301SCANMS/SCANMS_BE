@@ -20,6 +20,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import java.util.Objects;
 
 @Component
 @RequiredArgsConstructor
@@ -66,7 +67,7 @@ public class ProductAccess {
     public Store requireOwnedStore(String storeId) {
         Store store = stores.findById(storeId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Store not found: " + storeId));
-        if (!java.util.Objects.equals(store.getOwnerUserId(), userId()) && !roles().contains("ADMIN"))
+        if (!Objects.equals(store.getOwnerUserId(), userId()) && !roles().contains("ADMIN"))
             throw new AppException(ErrorCode.FORBIDDEN, "Store owner required");
         return store;
     }

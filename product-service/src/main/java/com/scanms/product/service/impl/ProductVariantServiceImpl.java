@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import com.scanms.product.constant.ProductVariantStatus;
 
 @Service
 @RequiredArgsConstructor
@@ -69,7 +70,7 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         var product = products.findById(variant.getProductId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found"));
         access.requireApprovedStore(product.getStoreId());
-        variant.setStatus(com.scanms.product.constant.ProductVariantStatus.INACTIVE);
+        variant.setStatus(ProductVariantStatus.INACTIVE);
         return mapper.toResponse(repository.save(variant));
     }
 }

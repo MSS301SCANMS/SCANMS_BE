@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import com.scanms.product.dto.request.UpdateProductCategoryRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -40,7 +41,7 @@ public class ProductCategoryServiceImpl implements ProductCategoryService {
         return repository.findAll().stream().map(mapper::toResponse).toList();
     }
 
-    public ProductCategoryResponse update(String id, com.scanms.product.dto.request.UpdateProductCategoryRequest request) {
+    public ProductCategoryResponse update(String id, UpdateProductCategoryRequest request) {
         access.requireManager();
         var category = repository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product category not found"));

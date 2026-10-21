@@ -5,10 +5,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import com.scanms.payment.config.PaymentProviderConfig;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableFeignClients
-@org.springframework.scheduling.annotation.EnableScheduling
+@EnableScheduling
 @EnableConfigurationProperties(PaymentProviderConfig.class)
 public class PaymentServiceApplication {
     public static void main(String[] args) {

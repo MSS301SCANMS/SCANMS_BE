@@ -8,16 +8,18 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
-    ResponseEntity<ApiResponse<Void>> handleMissingEndpoint(org.springframework.web.servlet.resource.NoResourceFoundException exception) {
+    @ExceptionHandler(NoResourceFoundException.class)
+    ResponseEntity<ApiResponse<Void>> handleMissingEndpoint(NoResourceFoundException exception) {
         return ResponseEntity.status(404).body(ApiResponse.error(404, "API chưa tồn tại trên dịch vụ đang chạy. Vui lòng kiểm tra phiên bản backend."));
     }
 
-    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    @ExceptionHandler(OptimisticLockingFailureException.class)
     ResponseEntity<ApiResponse<Void>> handleConcurrentUpdate(Exception exception) {
         return ResponseEntity.status(409).body(ApiResponse.error(409, "Dữ liệu đã thay đổi. Vui lòng tải lại trước khi sửa."));
     }
