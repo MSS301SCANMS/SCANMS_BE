@@ -108,7 +108,7 @@ public class LivestreamServiceImpl implements LivestreamService {
     }
 
     @Override
-    public LivestreamResponse respondInvite(String id, boolean accepted, org.springframework.security.oauth2.jwt.Jwt jwt) {
+    public LivestreamResponse respondInvite(String id, boolean accepted, String respondedBySubject) {
         var livestream = repository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Livestream not found: " + id));
         if (livestream.getStatus() == LivestreamStatus.ENDED || livestream.getStatus() == LivestreamStatus.CANCELLED)
@@ -116,10 +116,10 @@ public class LivestreamServiceImpl implements LivestreamService {
         java.util.Map<String, Object> participants = new java.util.LinkedHashMap<>(
                 livestream.getParticipantRefs() == null ? java.util.Map.of() : livestream.getParticipantRefs());
         participants.put("inviteStatus", accepted ? "ACCEPTED" : "REJECTED");
-        if (jwt != null) {
-            participants.put("respondedBySubject", jwt.getSubject());
-            participants.put("respondedAt", java.time.Instant.now().toString());
+        if (respondedBySubject != null && !respondedBySubject.isBlank()) {
+            participants.put("respondedBySubject", respondedBySubject);
         }
+        participants.put("respondedAt", java.time.Instant.now().toString());
         livestream.setParticipantRefs(participants);
         return mapper.toResponse(repository.save(livestream));
     }

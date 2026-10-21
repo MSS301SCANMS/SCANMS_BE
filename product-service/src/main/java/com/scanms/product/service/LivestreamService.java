@@ -11,5 +11,5 @@ public interface LivestreamService {
     LivestreamResponse update(String id, com.scanms.product.dto.request.UpdateLivestreamRequest request);
     LivestreamResponse transition(String id, com.scanms.product.constant.LivestreamStatus next);
     LivestreamResponse updateStats(String id, long viewers, long uniqueViewers, long concurrentViewers);
-    LivestreamResponse respondInvite(String id, boolean accepted, org.springframework.security.oauth2.jwt.Jwt jwt);
+    LivestreamResponse respondInvite(String id, boolean accepted, String respondedBySubject);
 }
