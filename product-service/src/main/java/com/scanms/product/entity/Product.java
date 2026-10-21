@@ -13,6 +13,7 @@ import java.util.*;
 @Entity
 @Table(name = "products")
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
+@jakarta.persistence.EntityListeners(com.scanms.product.config.CatalogEntityListener.class)
 public class Product {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

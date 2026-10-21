@@ -27,6 +27,22 @@ services:
     depends_on:
       - keycloak-db
 
+  # Redis: cache dùng chung + OTP (user/product/order-service)
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis-data:/data
+
 volumes:
   keycloak-db-data:
     name: scanms-keycloak_keycloak-db-data
+  redis-data:
+    name: scanms-redis-data

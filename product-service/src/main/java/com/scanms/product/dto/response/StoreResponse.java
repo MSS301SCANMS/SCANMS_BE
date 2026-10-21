@@ -17,4 +17,4 @@ public record StoreResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         Long version
-) {}
+) implements java.io.Serializable {}

@@ -43,6 +43,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(com.scanms.product.config.CacheNames.PRODUCTS_ALL)
     public List<ProductResponse> findAll() {
         return repository.findAll().stream().map(mapper::toResponse).toList();
     }
