@@ -10,6 +10,13 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 110MB
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Timeout ngắn: Redis lỗi thì cache bị bỏ qua nhanh, request vẫn đọc DB.
+      timeout: ${REDIS_TIMEOUT:500ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:${USER_DB_PORT:5433}/${USER_DB_NAME:user_db}}
     username: ${DB_USERNAME:${POSTGRES_USER:postgres}}
@@ -47,7 +54,7 @@ keycloak:
   auth-server-url: http://localhost:8180
   realm: scanms
   client-id: scanms-client
-  client-secret: ${CLIENT_SECRET:54wR8HtHb3tKEBAetWf418bzCqTQP1k1}
+  client-secret: ${CLIENT_SECRET:4PZDQzhZgoKdMyepscQBtEk2SnFwC8j7}
 
 app:
   auth:

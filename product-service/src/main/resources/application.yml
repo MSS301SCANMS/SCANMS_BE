@@ -6,6 +6,13 @@ spring:
     import: optional:file:.env[.properties],optional:file:product-service/.env[.properties]
   application:
     name: product-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Timeout ngắn: Redis lỗi thì cache bị bỏ qua nhanh, request vẫn đọc DB.
+      timeout: ${REDIS_TIMEOUT:500ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:${PRODUCT_DB_PORT:5432}/${PRODUCT_DB_NAME:product_db}}
     username: ${DB_USERNAME:${POSTGRES_USER:postgres}}

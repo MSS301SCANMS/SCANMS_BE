@@ -1,21 +1,20 @@
 package com.scanms.product.controller;
 
-import com.scanms.product.constant.ProductStatus;
-import com.scanms.product.constant.StoreStatus;
 import com.scanms.product.dto.ApiResponse;
 import com.scanms.product.entity.Product;
 import com.scanms.product.entity.Store;
 import com.scanms.product.repository.ProductRepository;
 import com.scanms.product.repository.StoreRepository;
+import com.scanms.product.service.PublicCatalogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Public catalog endpoints consumed by SCANMS_FE marketplace / chat / storefront.
- * No authentication required.
+ * No authentication required. Danh sách lấy từ cache Redis ({@link PublicCatalogService});
+ * chi tiết và tồn kho từng sản phẩm luôn đọc trực tiếp DB.
  */
 @RestController
 @RequestMapping("/api/v1/public")
@@ -24,6 +23,7 @@ public class PublicProductController {
 
     private final ProductRepository products;
     private final StoreRepository stores;
+    private final PublicCatalogService catalog;
 
     @GetMapping("/products")
     ApiResponse<Map<String, Object>> listProducts(
@@ -34,25 +34,17 @@ public class PublicProductController {
             @RequestParam(required = false, defaultValue = "1") int page,
             @RequestParam(required = false, defaultValue = "48") int limit) {
 
-        List<Product> source = storeId != null && !storeId.isBlank()
-                ? products.findByStoreId(storeId)
-                : products.findAll();
-
-        Map<String, Store> storeById = stores.findAll().stream()
-                .collect(Collectors.toMap(Store::getStoreId, s -> s, (a, b) -> a));
-
-        List<Map<String, Object>> items = source.stream()
-                .filter(p -> p.getStatus() == null || p.getStatus() == ProductStatus.ACTIVE
-                        || p.getStatus() == ProductStatus.OUT_OF_STOCK)
+        Stream<Map<String, Object>> stream = catalog.visibleProducts().stream()
+                .filter(p -> storeId == null || storeId.isBlank() || storeId.equals(p.get("storeId")))
                 .filter(p -> search == null || search.isBlank()
-                        || containsIgnoreCase(p.getName(), search)
-                        || containsIgnoreCase(p.getDescription(), search))
+                        || containsIgnoreCase(str(p.get("name")), search)
+                        || containsIgnoreCase(str(p.get("description")), search))
                 .filter(p -> category == null || category.isBlank()
-                        || category.equalsIgnoreCase(p.getCategory())
-                        || category.equalsIgnoreCase(p.getCategoryId()))
-                .sorted(productComparator(sortBy))
-                .map(p -> toPublicProduct(p, storeById.get(p.getStoreId())))
-                .toList();
+                        || category.equalsIgnoreCase(str(p.get("category")))
+                        || category.equalsIgnoreCase(str(p.get("categoryId"))));
+        Comparator<Map<String, Object>> comparator = productComparator(sortBy);
+        if (comparator != null) stream = stream.sorted(comparator);
+        List<Map<String, Object>> items = stream.toList();
 
         int safePage = Math.max(page, 1);
         int safeLimit = Math.min(Math.max(limit, 1), 100);
@@ -71,25 +63,19 @@ public class PublicProductController {
 
     @GetMapping("/products/categories")
     ApiResponse<List<Map<String, Object>>> listCategories() {
-        List<Map<String, Object>> categories = products.findAll().stream()
-                .map(Product::getCategory)
-                .filter(Objects::nonNull)
-                .filter(c -> !c.isBlank())
-                .distinct()
-                .sorted(String.CASE_INSENSITIVE_ORDER)
-                .map(name -> {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("id", name);
-                    row.put("name", name);
-                    return row;
-                })
-                .toList();
-        return ApiResponse.success(categories);
+        return ApiResponse.success(catalog.categories());
     }
 
     @GetMapping("/products/stores")
     ApiResponse<List<Map<String, Object>>> listProductStores() {
-        return ApiResponse.success(publicStores());
+        List<Map<String, Object>> rows = catalog.approvedStores().stream().map(s -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            for (String key : List.of("id", "storeId", "name", "description", "logoUrl", "approvalStatus")) {
+                row.put(key, s.get(key));
+            }
+            return row;
+        }).toList();
+        return ApiResponse.success(rows);
     }
 
     @GetMapping("/products/{id}")
@@ -98,7 +84,7 @@ public class PublicProductController {
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.NOT_FOUND, "Product not found"));
         Store store = product.getStoreId() != null ? stores.findById(product.getStoreId()).orElse(null) : null;
-        return ApiResponse.success(toPublicProduct(product, store));
+        return ApiResponse.success(PublicCatalogService.toPublicProduct(product, store));
     }
 
     @GetMapping("/products/{id}/landing")
@@ -133,71 +119,26 @@ public class PublicProductController {
         return ApiResponse.success(Map.of("accepted", true));
     }
 
-    private List<Map<String, Object>> publicStores() {
-        return stores.findAll().stream()
-                .filter(s -> s.getApprovalStatus() == StoreStatus.APPROVED)
-                .map(this::toPublicStore)
-                .toList();
-    }
-
-    private Map<String, Object> toPublicProduct(Product p, Store store) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("id", p.getProductId());
-        row.put("productId", p.getProductId());
-        row.put("storeId", p.getStoreId());
-        row.put("title", p.getName());
-        row.put("name", p.getName());
-        row.put("description", p.getDescription());
-        row.put("categoryName", p.getCategory());
-        row.put("category", p.getCategory());
-        row.put("price", p.getPriceVnd() != null ? p.getPriceVnd() : 0);
-        row.put("priceVnd", p.getPriceVnd() != null ? p.getPriceVnd() : 0);
-        row.put("status", p.getStatus() != null ? p.getStatus().name() : null);
-        row.put("imageUrl", firstImage(p.getImageRefs()));
-        row.put("imageRefs", p.getImageRefs());
-        row.put("sizesStock", p.getSizesStock());
-        row.put("attributes", p.getAttributes());
-        row.put("createdAt", p.getCreatedAt());
-        if (store != null) {
-            Map<String, Object> storeInfo = new LinkedHashMap<>();
-            storeInfo.put("id", store.getStoreId());
-            storeInfo.put("name", store.getName());
-            storeInfo.put("logoUrl", store.getLogoRef());
-            row.put("store", storeInfo);
-        }
-        return row;
-    }
-
-    private Map<String, Object> toPublicStore(Store store) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("id", store.getStoreId());
-        row.put("storeId", store.getStoreId());
-        row.put("name", store.getName());
-        row.put("description", store.getDescription());
-        row.put("logoUrl", store.getLogoRef());
-        row.put("approvalStatus", store.getApprovalStatus());
-        return row;
-    }
-
-    private static String firstImage(Map<String, Object> imageRefs) {
-        if (imageRefs == null || imageRefs.isEmpty()) return null;
-        Object main = imageRefs.get("main");
-        if (main != null && !String.valueOf(main).isBlank()) return String.valueOf(main);
-        Object first = imageRefs.values().stream().filter(Objects::nonNull).findFirst().orElse(null);
-        return first != null ? String.valueOf(first) : null;
+    private static String str(Object value) {
+        return value == null ? null : value.toString();
     }
 
     private static boolean containsIgnoreCase(String haystack, String needle) {
         return haystack != null && needle != null && haystack.toLowerCase().contains(needle.toLowerCase());
     }
 
-    private static Comparator<Product> productComparator(String sortBy) {
+    private static long price(Map<String, Object> p) {
+        return p.get("priceVnd") instanceof Number n ? n.longValue() : 0L;
+    }
+
+    /** null = giữ thứ tự cache (mới nhất trước). */
+    private static Comparator<Map<String, Object>> productComparator(String sortBy) {
         if ("price_asc".equalsIgnoreCase(sortBy)) {
-            return Comparator.comparing(p -> p.getPriceVnd() == null ? 0L : p.getPriceVnd());
+            return Comparator.comparingLong(PublicProductController::price);
         }
         if ("price_desc".equalsIgnoreCase(sortBy)) {
-            return Comparator.comparing((Product p) -> p.getPriceVnd() == null ? 0L : p.getPriceVnd()).reversed();
+            return Comparator.comparingLong(PublicProductController::price).reversed();
         }
-        return Comparator.comparing(Product::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
+        return null;
     }
 }

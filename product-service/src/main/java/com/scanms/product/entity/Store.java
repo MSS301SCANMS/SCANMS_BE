@@ -13,6 +13,7 @@ import java.util.*;
 @Entity
 @Table(name = "stores", uniqueConstraints = @UniqueConstraint(name = "uk_store_owner", columnNames = "ownerUserId"))
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
+@jakarta.persistence.EntityListeners(com.scanms.product.config.CatalogEntityListener.class)
 public class Store {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
