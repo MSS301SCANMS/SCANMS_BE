@@ -14,7 +14,7 @@ spring:
       timeout: ${REDIS_TIMEOUT:500ms}
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:${PRODUCT_DB_PORT:5432}/${PRODUCT_DB_NAME:product_db}}
+    url: ${DB_URL:jdbc:postgresql://localhost:${PRODUCT_DB_PORT:5437}/${PRODUCT_DB_NAME:product_db}}
     username: ${DB_USERNAME:${POSTGRES_USER:postgres}}
     password: ${DB_PASSWORD:${POSTGRES_PASSWORD:postgres}}
   jpa:

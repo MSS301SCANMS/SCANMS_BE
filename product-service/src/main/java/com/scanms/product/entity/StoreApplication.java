@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.*;
 import java.time.Instant;
+import java.util.Map;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "store_applications")
@@ -17,6 +19,9 @@ public class StoreApplication {
     @Column(nullable = false)
     private String proposedStoreName;
     private String description;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String, Object> onboardingData;
     @Enumerated(EnumType.STRING) @Column(nullable = false)
     private StoreApplicationStatus status;
     private String reviewedByUserId;

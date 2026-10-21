@@ -27,7 +27,43 @@ public class CommissionPolicyServiceImpl implements CommissionPolicyService {
     private final CommissionPolicyMapper mapper;
 
     public CommissionPolicyResponse create(CreateCommissionPolicyRequest request) {
+        validate(request);
         return mapper.toResponse(repository.save(mapper.toEntity(request)));
+    }
+
+    public CommissionPolicyResponse update(String id, Long version, CreateCommissionPolicyRequest request) {
+        validate(request);
+        var entity = repository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy chính sách."));
+        if (!Objects.equals(entity.getVersion(), version))
+            throw new AppException(ErrorCode.CONFLICT, "Chính sách đã thay đổi. Vui lòng tải lại trước khi sửa.");
+        entity.setPolicyName(request.policyName().trim());
+        entity.setScopeType(request.scopeType());
+        entity.setStoreId(request.storeId());
+        entity.setProductId(request.productId());
+        entity.setLivestreamId(request.livestreamId());
+        entity.setCollaboratorId(request.collaboratorId());
+        entity.setCommissionRate(request.commissionRate());
+        entity.setReturnWindowDays(request.returnWindowDays());
+        entity.setValidFrom(request.validFrom());
+        entity.setValidTo(request.validTo());
+        entity.setStatus(request.status());
+        entity.setPriority(request.priority());
+        return mapper.toResponse(repository.saveAndFlush(entity));
+    }
+
+    private void validate(CreateCommissionPolicyRequest request) {
+        if (request.validTo() != null && !request.validTo().isAfter(request.validFrom()))
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Ngày kết thúc phải sau ngày bắt đầu.");
+        String target = switch (request.scopeType()) {
+            case PLATFORM -> null;
+            case STORE -> request.storeId();
+            case PRODUCT -> request.productId();
+            case LIVESTREAM -> request.livestreamId();
+            case COLLABORATOR -> request.collaboratorId();
+        };
+        if (request.scopeType() != CommissionPolicyScope.PLATFORM && (target == null || target.isBlank()))
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Vui lòng chọn đối tượng áp dụng cho chính sách.");
     }
 
     @Transactional(readOnly = true)

@@ -24,6 +24,8 @@ public class CollaboratorProfileMapper {
                 entity.getJoinedAt(),
                 entity.getPolicyVersion(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getUpdatedAt(),
+                entity.getApplicationData(),
+                entity.getRejectionReason());
     }
 }

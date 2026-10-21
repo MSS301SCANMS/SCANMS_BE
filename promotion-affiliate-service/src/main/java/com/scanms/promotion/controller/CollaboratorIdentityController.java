@@ -17,11 +17,10 @@ import java.util.Objects;
 public class CollaboratorIdentityController {
     private final CollaboratorProfileRepository repository;
     private final CollaboratorProfileMapper mapper;
+    private final com.scanms.promotion.service.VoucherAccess access;
     @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
     @GetMapping("/api/v1/collaborators/me") ApiResponse<CollaboratorProfileResponse> me(@AuthenticationPrincipal Jwt jwt) {
-        Map<?,?> envelope=RestClient.create().get().uri(userUrl+"/api/v1/users/me").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
-        if(envelope==null || !(envelope.get("result") instanceof Map<?,?> user)) throw new ResponseStatusException(HttpStatus.CONFLICT);
-        Object userId = user.get("userId");
+        String userId=access.userId();
         return ApiResponse.success(repository.findByUserId(Objects.toString(userId, null))
                 .map(mapper::toResponse)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Collaborator profile not found")));

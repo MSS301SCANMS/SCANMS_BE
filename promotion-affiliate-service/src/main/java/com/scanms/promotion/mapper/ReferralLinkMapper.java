@@ -15,6 +15,8 @@ public class ReferralLinkMapper {
                 .token(request.token())
                 .status(request.status())
                 .expiresAt(request.expiresAt())
+                .label(request.label())
+                .channel(request.channel())
                 .build();
     }
 
@@ -27,6 +29,8 @@ public class ReferralLinkMapper {
                 entity.getToken(),
                 entity.getStatus(),
                 entity.getExpiresAt(),
-                entity.getCreatedAt());
+                entity.getCreatedAt(),
+                entity.getLabel(),
+                entity.getChannel());
     }
 }

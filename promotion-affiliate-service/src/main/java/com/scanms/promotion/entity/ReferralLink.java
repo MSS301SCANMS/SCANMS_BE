@@ -24,7 +24,13 @@ public class ReferralLink {
 
     private String livestreamId;
 
+    @Column(unique = true)
     private String token;
+
+    @Column(length = 150)
+    private String label;
+
+    private String channel;
 
     @Enumerated(EnumType.STRING)
     private ReferralLinkStatus status;

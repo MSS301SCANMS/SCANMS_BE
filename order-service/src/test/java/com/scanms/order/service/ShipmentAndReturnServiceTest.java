@@ -247,7 +247,7 @@ class ShipmentAndReturnServiceTest {
                 .status(ReturnRequestStatus.REQUESTED)
                 .build();
 
-        when(returnRequestRepository.findById("ret-123")).thenReturn(Optional.of(rr));
+        when(returnRequestRepository.lockById("ret-123")).thenReturn(Optional.of(rr));
         when(returnRequestRepository.save(any(ReturnRequest.class))).thenAnswer(i -> i.getArgument(0));
 
         ReturnDecisionRequest decision = new ReturnDecisionRequest(ReturnRequestStatus.APPROVED, "Hang dung loi", 90000L, null);

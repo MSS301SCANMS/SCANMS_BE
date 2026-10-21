@@ -9,6 +9,7 @@ import com.scanms.promotion.exception.ErrorCode;
 import com.scanms.promotion.mapper.CollaboratorProfileMapper;
 import com.scanms.promotion.repository.CollaboratorProfileRepository;
 import com.scanms.promotion.service.CollaboratorService;
+import com.scanms.promotion.service.KolRoleGranter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ public class CollaboratorServiceImpl implements CollaboratorService {
 
     private final CollaboratorProfileRepository repository;
     private final CollaboratorProfileMapper mapper;
+    private final KolRoleGranter roleGranter;
 
     public CollaboratorProfileResponse create(ApplyCollaboratorRequest request) {
         // Idempotent: user đã có hồ sơ thì trả về (không tạo trùng)
@@ -63,6 +65,7 @@ public class CollaboratorServiceImpl implements CollaboratorService {
 
         // Idempotent: đã APPROVED rồi thì trả về luôn
         if (profile.getApprovalStatus() == CollaboratorStatus.APPROVED) {
+            roleGranter.grant(profile.getUserId());
             return mapper.toResponse(profile);
         }
         // Không cho approve KOL đã bị SUSPENDED hoặc REJECTED
@@ -72,9 +75,13 @@ public class CollaboratorServiceImpl implements CollaboratorService {
                     "Cannot approve a collaborator with status: " + profile.getApprovalStatus());
         }
 
+        com.scanms.promotion.service.KolApplicationService.validate(profile.getApplicationData());
+
         profile.setApprovalStatus(CollaboratorStatus.APPROVED);
         profile.setJoinedAt(LocalDateTime.now());
-        return mapper.toResponse(repository.save(profile));
+        var saved = repository.saveAndFlush(profile);
+        roleGranter.grant(profile.getUserId());
+        return mapper.toResponse(saved);
     }
 
     /**
@@ -95,11 +102,12 @@ public class CollaboratorServiceImpl implements CollaboratorService {
         }
 
         profile.setApprovalStatus(CollaboratorStatus.REJECTED);
+        profile.setRejectionReason(reason);
         return mapper.toResponse(repository.save(profile));
     }
 
     private CollaboratorProfile findOrThrow(String id) {
-        return repository.findById(id)
+        return repository.lockById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "CollaboratorProfile not found: " + id));
     }
 }

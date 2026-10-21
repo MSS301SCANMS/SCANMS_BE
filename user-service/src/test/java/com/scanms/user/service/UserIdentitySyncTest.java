@@ -8,6 +8,7 @@ import com.scanms.user.exception.AppException;
 import com.scanms.user.mapper.UserMapper;
 import com.scanms.user.repository.RoleRepository;
 import com.scanms.user.repository.UserRepository;
+import com.scanms.user.service.KeycloakAdminClient;
 import com.scanms.user.service.impl.UserServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,8 @@ import static org.mockito.ArgumentMatchers.*;
 class UserIdentitySyncTest {
     private final UserRepository users = mock(UserRepository.class);
     private final RoleRepository roles = mock(RoleRepository.class);
-    private final UserServiceImpl service = new UserServiceImpl(users, new UserMapper(), roles);
+    private final KeycloakAdminClient keycloakAdminClient = mock(KeycloakAdminClient.class);
+    private final UserServiceImpl service = new UserServiceImpl(users, roles, keycloakAdminClient, new UserMapper());
 
     @BeforeEach
     void setup() {

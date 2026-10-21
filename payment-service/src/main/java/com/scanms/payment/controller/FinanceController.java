@@ -61,6 +61,7 @@ public class FinanceController {
     @PostMapping("/payments") ApiResponse<PaymentView> payment(@Valid @RequestBody PaymentInput input) { return ApiResponse.created(payments.create(input)); }
     @GetMapping("/payments") ApiResponse<PageView<PaymentView>> payments(@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) { return ApiResponse.success(payments.history(page,size)); }
     @PostMapping("/top-ups") ApiResponse<PaymentView> topup(@Valid @RequestBody TopUpInput input) { return ApiResponse.created(payments.topup(input)); }
+    @PostMapping("/sandbox/top-ups") ApiResponse<WalletTransactionResponse> sandboxTopup(@Valid @RequestBody TopUpInput input) { return ApiResponse.created(service.sandboxTopUp(input)); }
     @PostMapping("/wallet-payments") ApiResponse<PaymentView> payWallet(@Valid @RequestBody WalletPayInput input) { return ApiResponse.created(payments.payWallet(input)); }
     @GetMapping("/payments/{id}") ApiResponse<PaymentView> payment(@PathVariable String id,@RequestParam(defaultValue="false") boolean refresh) { return ApiResponse.success(payments.status(id,refresh)); }
     @PostMapping("/payments/{id}/cancel") ApiResponse<PaymentView> paymentCancel(@PathVariable String id) { return ApiResponse.success(payments.cancel(id)); }

@@ -2,6 +2,8 @@ server:
   port: ${SERVER_PORT:8084}
 
 spring:
+  config:
+    import: optional:file:../.env[.properties],optional:file:.env[.properties],optional:file:payment-service/.env[.properties]
   application:
     name: payment-service
   datasource:
@@ -27,6 +29,7 @@ springdoc:
 
 scanms:
   payment:
+    sandbox-enabled: ${PAYMENT_SANDBOX_ENABLED:false}
     frontend-url: ${FRONTEND_URL:http://localhost:5173}
     bank-encryption-key: ${BANK_ENCRYPTION_KEY:}
     bank-closed-dates: ${BANK_CLOSED_DATES:}
