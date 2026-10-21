@@ -55,6 +55,12 @@ public class AuthController {
         service.grantShopOwnerRole(userId);
         return ApiResponse.success("SHOP_OWNER role granted");
     }
+    @PostMapping("/{userId}/roles/kol-ctv")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ApiResponse<String> grantKolRole(@PathVariable String userId) {
+        service.grantKolRole(userId);
+        return ApiResponse.success("KOL_CTV role granted");
+    }
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<String> createRole(@RequestParam @NotBlank String roleName) {

@@ -6,6 +6,8 @@ import com.scanms.user.entity.Role;
 import com.scanms.user.entity.User;
 import com.scanms.user.repository.RoleRepository;
 import com.scanms.user.repository.UserRepository;
+import com.scanms.user.service.OtpService;
+import com.scanms.user.service.MailService;
 import com.scanms.user.service.impl.AuthServiceImpl;
 import java.util.HashSet;
 import java.util.List;
@@ -27,7 +29,9 @@ class ShopOwnerRoleGrantTest {
     @Test void grantsRealmRoleUsingIdentitySubjectAndUpdatesLocalRoles() {
         var users = mock(UserRepository.class);
         var roles = mock(RoleRepository.class);
-        var service = new AuthServiceImpl(users, roles);
+        var otpService = mock(OtpService.class);
+        var mailService = mock(MailService.class);
+        var service = new AuthServiceImpl(users, roles, otpService, mailService);
         ReflectionTestUtils.setField(service, "serverUrl", "http://keycloak.test");
         ReflectionTestUtils.setField(service, "realm", "scanms");
         ReflectionTestUtils.setField(service, "clientId", "scanms-client");

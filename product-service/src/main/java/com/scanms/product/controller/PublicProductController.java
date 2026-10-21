@@ -30,6 +30,7 @@ public class PublicProductController {
             @RequestParam(required = false) String storeId,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "false") boolean eligibleForReferral,
             @RequestParam(required = false, defaultValue = "newest") String sortBy,
             @RequestParam(required = false, defaultValue = "1") int page,
             @RequestParam(required = false, defaultValue = "48") int limit) {
@@ -42,6 +43,9 @@ public class PublicProductController {
                 .collect(Collectors.toMap(Store::getStoreId, s -> s, (a, b) -> a));
 
         List<Map<String, Object>> items = source.stream()
+                .filter(p -> !eligibleForReferral || (p.getStatus() == ProductStatus.ACTIVE
+                        && storeById.containsKey(p.getStoreId())
+                        && storeById.get(p.getStoreId()).getApprovalStatus() == StoreStatus.APPROVED))
                 .filter(p -> p.getStatus() == null || p.getStatus() == ProductStatus.ACTIVE
                         || p.getStatus() == ProductStatus.OUT_OF_STOCK)
                 .filter(p -> search == null || search.isBlank()

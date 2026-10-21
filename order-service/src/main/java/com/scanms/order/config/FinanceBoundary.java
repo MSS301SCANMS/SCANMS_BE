@@ -11,6 +11,9 @@ public class FinanceBoundary {
     public boolean canDecideReturn(Authentication authentication) {
         return roles(authentication).stream().anyMatch(Set.of("ADMIN","SYSTEM_ADMIN","MANAGER","ORDER_INTERNAL")::contains);
     }
+    public boolean canRespondReturn(Authentication authentication) {
+        return roles(authentication).stream().anyMatch(Set.of("SHOP_OWNER","SHOP_MANAGER")::contains);
+    }
     private Set<String> roles(Authentication authentication) {
         if(!(authentication instanceof JwtAuthenticationToken auth)) return Set.of();
         Set<String> roles=new HashSet<>();

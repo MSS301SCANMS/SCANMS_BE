@@ -47,7 +47,7 @@ keycloak:
   auth-server-url: http://localhost:8180
   realm: scanms
   client-id: scanms-client
-  client-secret: ${CLIENT_SECRET:54wR8HtHb3tKEBAetWf418bzCqTQP1k1}
+  client-secret: ${CLIENT_SECRET:}
 
 app:
   auth:

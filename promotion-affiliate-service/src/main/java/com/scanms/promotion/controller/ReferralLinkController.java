@@ -30,4 +30,9 @@ public class ReferralLinkController {
     ApiResponse<List<ReferralLinkResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
+
+    @GetMapping("/store/{storeId}")
+    ApiResponse<List<Map<String, Object>>> findStoreLinks(@PathVariable String storeId) {
+        return ApiResponse.success(service.findStoreLinks(storeId));
+    }
 }

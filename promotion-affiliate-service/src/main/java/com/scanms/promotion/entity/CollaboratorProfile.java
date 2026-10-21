@@ -18,6 +18,7 @@ public class CollaboratorProfile {
     @GeneratedValue(strategy = GenerationType.UUID)
     private String collaboratorId;
 
+    @Column(unique = true)
     private String userId;
 
     @Enumerated(EnumType.STRING)
@@ -26,6 +27,12 @@ public class CollaboratorProfile {
     private LocalDateTime joinedAt;
 
     private String policyVersion;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String, Object> applicationData;
+
+    private String rejectionReason;
 
     @CreationTimestamp
     @Column(updatable = false)

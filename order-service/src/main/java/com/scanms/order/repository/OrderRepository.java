@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface OrderRepository extends JpaRepository<Order, String> {
+    List<Order> findByCreatedAtGreaterThanEqualAndCreatedAtLessThan(java.time.LocalDateTime from, java.time.LocalDateTime to);
     Optional<Order> findByIdempotencyKey(String idempotencyKey);
     List<Order> findByCustomerIdOrderByCreatedAtDesc(String customerId);
     List<Order> findAllByOrderByCreatedAtDesc();

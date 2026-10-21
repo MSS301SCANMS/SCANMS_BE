@@ -168,21 +168,23 @@ public class AuthServiceImpl implements AuthService {
                         (String) tokenData.get("token_type")
                 );
             }
-        } catch (Exception e) {
-            String detail = e.getMessage() != null ? e.getMessage() : "";
-            log.error("Keycloak login error: {}", detail);
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            String detail = e.getResponseBodyAsString();
+            log.warn("Identity provider rejected login, status={}", e.getStatusCode().value());
             if (detail.contains("Account is not fully set up")) {
                 throw new AppException(ErrorCode.INVALID_CREDENTIALS,
                         "Tài khoản chưa hoàn tất thiết lập trên Keycloak (cần đổi mật khẩu / xác minh email). Liên hệ admin.");
             }
-            if (detail.contains("401 Unauthorized")) {
-                throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION,
-                        "Keycloak từ chối client (sai CLIENT_SECRET). Kiểm tra .env khớp Credentials của scanms-client.");
+            if (detail.contains("invalid_client") || detail.contains("unauthorized_client") || e.getStatusCode().value() == 401) {
+                throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "Dịch vụ đăng nhập chưa sẵn sàng do cấu hình xác thực. Vui lòng liên hệ quản trị viên.");
             }
-            if (detail.contains("invalid_grant") || detail.contains("400 Bad Request")) {
+            if (detail.contains("invalid_grant")) {
                 throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai tên đăng nhập hoặc mật khẩu!");
             }
-            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đăng nhập thất bại");
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ đăng nhập chưa sẵn sàng. Vui lòng thử lại.");
+        } catch (org.springframework.web.client.RestClientException e) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
         }
         throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đăng nhập thất bại");
     }
@@ -528,6 +530,34 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "Cannot grant SHOP_OWNER role in Keycloak");
         }
     }
+
+    @Transactional
+    @Override
+    public void grantKolRole(String userId) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "User not found"));
+        if (user.getStatus() != UserStatus.ACTIVE)
+            throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
+        Role role = roleRepository.findAllByNameIn(List.of(RoleName.KOL_CTV)).stream().findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.CONFLICT, "KOL_CTV role is not initialized"));
+        try {
+            String adminToken = getAdminAccessToken();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(adminToken);
+            String base = serverUrl + "/admin/realms/" + realm;
+            Map<?, ?> keycloakRole = restTemplate.exchange(base + "/roles/KOL_CTV", HttpMethod.GET,
+                    new HttpEntity<>(headers), Map.class).getBody();
+            if (keycloakRole == null || keycloakRole.get("id") == null)
+                throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "KOL_CTV role is missing in Keycloak");
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            restTemplate.postForEntity(base + "/users/" + user.getIdentitySubject() + "/role-mappings/realm",
+                    new HttpEntity<>(List.of(keycloakRole), headers), Void.class);
+            user.getRoles().add(role);
+            repository.save(user);
+        } catch (org.springframework.web.client.RestClientException ex) {
+            throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "Cannot grant KOL_CTV role in Keycloak");
+        }
+    }
     @Override
     public void removeRoleFromUser(String userId, String roleName) {
         String adminToken = getAdminAccessToken();
@@ -635,6 +665,8 @@ public class AuthServiceImpl implements AuthService {
     }
     @Override
     public AuthResponse refreshToken(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank())
+            throw new AppException(ErrorCode.UNAUTHENTICATED, "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
         String tokenUrl = serverUrl + "/realms/" + realm + "/protocol/openid-connect/token";
 
         HttpHeaders headers = new HttpHeaders();
@@ -661,8 +693,14 @@ public class AuthServiceImpl implements AuthService {
                         .build();
             }
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không thể làm mới token");
-        } catch (Exception e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Refresh token không hợp lệ hoặc đã hết hạn: " + e.getMessage());
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // Only invalid_grant is a rejected session. A bad client configuration
+            // or provider outage must not erase the user's local session.
+            if (e.getResponseBodyAsString().contains("\"invalid_grant\""))
+                throw new AppException(ErrorCode.UNAUTHENTICATED, "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa thể gia hạn đăng nhập. Vui lòng thử lại.");
+        } catch (org.springframework.web.client.RestClientException e) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
         }
     }
 }

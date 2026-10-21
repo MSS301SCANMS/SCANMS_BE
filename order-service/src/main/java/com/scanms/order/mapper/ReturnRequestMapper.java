@@ -34,6 +34,7 @@ public class ReturnRequestMapper {
                 entity.getRefundAmountVnd(),
                 entity.getRefundReference(),
                 entity.getRequestedAt(),
-                entity.getResolvedAt());
+                entity.getResolvedAt(),
+                entity.getShopResponse());
     }
 }

@@ -2,6 +2,7 @@ package com.scanms.product.dto.response;
 
 import com.scanms.product.constant.StoreApplicationStatus;
 import java.time.Instant;
+import java.util.Map;
 
 public record StoreApplicationResponse(
         String applicationId,
@@ -14,6 +15,7 @@ public record StoreApplicationResponse(
         Instant submittedAt,
         Instant reviewedAt,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        Map<String, Object> onboardingData
 ) {}
 

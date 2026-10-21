@@ -5,7 +5,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:users;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver","spring.datasource.username=sa","spring.datasource.password=",
-        "spring.jpa.hibernate.ddl-auto=create-drop","logging.level.root=WARN"})
+        "spring.jpa.hibernate.ddl-auto=create-drop","logging.level.root=WARN",
+        "cloudinary.cloud-name=test", "cloudinary.api-key=test", "cloudinary.api-secret=test",
+        "google.client-id=test", "keycloak.client-secret=test"})
 class UserServiceApplicationTests {
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean

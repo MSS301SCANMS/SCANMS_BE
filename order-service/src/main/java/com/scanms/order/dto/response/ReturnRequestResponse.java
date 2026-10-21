@@ -16,5 +16,6 @@ public record ReturnRequestResponse(
         Long refundAmount,
         String refundReference,
         LocalDateTime requestedAt,
-        LocalDateTime resolvedAt
+        LocalDateTime resolvedAt,
+        Map<String, Object> shopResponse
 ) {}

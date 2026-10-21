@@ -37,7 +37,7 @@ public class PayosProvider {
     }
     public Map<String,Object> createLink(Payment p) {
         Map<String,Object> body = new TreeMap<>();
-        String back = frontendUrl + "/payment/payos-return?payment=" + p.getPaymentId();
+        String back = frontendUrl + ("TOP_UP".equals(p.getPurpose()) ? "/customer/wallet?topup=" : "/payment/payos-return?payment=") + p.getPaymentId();
         body.put("amount", p.getAmountVnd()); body.put("cancelUrl", back + "&cancel=true");
         body.put("description", "SC" + p.getProviderOrderCode().toString().substring(0,7));
         body.put("orderCode", p.getProviderOrderCode()); body.put("returnUrl", back);

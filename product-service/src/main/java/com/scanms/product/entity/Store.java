@@ -30,6 +30,8 @@ public class Store {
 
     private Long ratingCount;
 
+    private java.time.Instant lastActiveAt;
+
     @Enumerated(EnumType.STRING)
     private StoreStatus approvalStatus;
 

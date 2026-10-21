@@ -13,6 +13,10 @@ import org.springframework.security.access.AccessDeniedException;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ApiResponse<Void>> handleInvalidParameter(Exception exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(400, "Tham số không hợp lệ. Vui lòng kiểm tra ngày và kỳ thống kê."));
+    }
 
     @ExceptionHandler(AppException.class)
     ResponseEntity<ApiResponse<Void>> handleAppException(AppException exception) {
