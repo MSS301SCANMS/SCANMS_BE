@@ -91,7 +91,7 @@ public class PublicProductController {
                 .filter(p -> search == null || search.isBlank()
                         || containsIgnoreCase(str(p.get("name")), search)
                         || containsIgnoreCase(str(p.get("description")), search))
-                .filter(p -> category == null || category.isBlank()
+                .filter(p -> category == null || category.isBlank() || "all".equalsIgnoreCase(category)
                         || category.equalsIgnoreCase(str(p.get("category")))
                         || category.equalsIgnoreCase(str(p.get("categoryId"))));
         Comparator<Map<String, Object>> comparator = productComparator(sortBy);
@@ -106,10 +106,11 @@ public class PublicProductController {
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("items", pageItems);
-        payload.put("data", pageItems);
         payload.put("total", items.size());
         payload.put("page", safePage);
         payload.put("limit", safeLimit);
+        payload.put("pagination", Map.of("total", items.size(), "page", safePage,
+                "limit", safeLimit, "totalPages", (items.size() + safeLimit - 1) / safeLimit));
         return ApiResponse.success(payload);
     }
 
@@ -137,12 +138,32 @@ public class PublicProductController {
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.NOT_FOUND, "Product not found"));
         Store store = product.getStoreId() != null ? stores.findById(product.getStoreId()).orElse(null) : null;
-        return ApiResponse.success(PublicCatalogService.toPublicProduct(product, store));
+        return ApiResponse.success(catalog != null ? catalog.productDetails(product, store) : PublicCatalogService.toPublicProduct(product, store));
     }
 
     @GetMapping("/products/{id}/landing")
     ApiResponse<Map<String, Object>> landing(@PathVariable String id) {
-        return getProduct(id);
+        Map<String, Object> product = getProduct(id).result();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("product", product);
+        payload.put("store", product.get("store"));
+        payload.put("images", product.getOrDefault("images", List.of()));
+        payload.put("videos", List.of());
+        // No review aggregation exists here yet; do not fabricate ratings.
+        Map<String, Object> reviews = new LinkedHashMap<>();
+        reviews.put("averageRating", null);
+        reviews.put("totalReviews", 0);
+        reviews.put("starDistribution", Map.of());
+        reviews.put("items", List.of());
+        payload.put("reviews", reviews);
+        long stock = ((Number) product.getOrDefault("stockQuantity", 0)).longValue();
+        payload.put("availability", Map.of("stockQuantity", stock, "inStock", stock > 0 && Boolean.TRUE.equals(product.get("canPurchase"))));
+        payload.put("policies", Map.of(
+                "returnPolicy", "Xem điều kiện đổi trả khi đặt hàng.",
+                "warranty", "Theo chính sách của từng gian hàng.",
+                "shipping", "Phí và thời gian vận chuyển được xác nhận khi thanh toán.",
+                "genuineCommitment", "Kiểm tra thông tin sản phẩm và gian hàng trước khi đặt hàng."));
+        return ApiResponse.success(payload);
     }
 
     @GetMapping("/products/{id}/stock")
@@ -150,8 +171,10 @@ public class PublicProductController {
         Product product = products.findById(id)
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.NOT_FOUND, "Product not found"));
-        long stock = 0;
-        if (product.getSizesStock() != null) {
+        Store store = product.getStoreId() == null ? null : stores.findById(product.getStoreId()).orElse(null);
+        Map<String, Object> details = catalog != null ? catalog.productDetails(product, store) : Map.of();
+        long stock = ((Number) details.getOrDefault("stockQuantity", 0)).longValue();
+        if (catalog == null && product.getSizesStock() != null) {
             stock = product.getSizesStock().values().stream()
                     .mapToLong(v -> {
                         if (v instanceof Number n) return n.longValue();
@@ -162,6 +185,7 @@ public class PublicProductController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("productId", product.getProductId());
         body.put("stockQuantity", stock);
+        body.put("variants", details.getOrDefault("variants", List.of()));
         body.put("status", product.getStatus());
         return ApiResponse.success(body);
     }
@@ -170,6 +194,11 @@ public class PublicProductController {
     ApiResponse<Map<String, Object>> analytics(@RequestBody(required = false) Map<String, Object> body) {
         // Soft no-op for FE analytics calls in local/dev.
         return ApiResponse.success(Map.of("accepted", true));
+    }
+
+    @GetMapping("/stores")
+    ApiResponse<List<Map<String, Object>>> marketplaceStores() {
+        return ApiResponse.success(catalog.approvedStores());
     }
 
     private static String str(Object value) {

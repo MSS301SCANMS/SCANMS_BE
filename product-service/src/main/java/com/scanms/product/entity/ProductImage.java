@@ -7,6 +7,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "product_images")
+@jakarta.persistence.EntityListeners(com.scanms.product.config.CatalogEntityListener.class)
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class ProductImage {
     @Id @GeneratedValue(strategy = GenerationType.UUID)

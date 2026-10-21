@@ -40,6 +40,8 @@ public class User {
     @Enumerated(EnumType.STRING)
     private Gender gender;
 
+    // The client stores its address book as JSON, including recipient details and coordinates.
+    @Column(columnDefinition = "text")
     private String address;
 
     @Column(length = 500)

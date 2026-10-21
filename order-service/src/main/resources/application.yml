@@ -2,6 +2,8 @@ server:
   port: ${SERVER_PORT:8083}
 
 spring:
+  config:
+    import: optional:file:../.env[.properties],optional:file:.env[.properties],optional:file:order-service/.env[.properties]
   application:
     name: order-service
   data:
@@ -13,8 +15,8 @@ spring:
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5434/order_db}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:postgres}
+    username: ${DB_USERNAME:${POSTGRES_USER:postgres}}
+    password: ${DB_PASSWORD:${POSTGRES_PASSWORD:postgres}}
   jpa:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:update}
