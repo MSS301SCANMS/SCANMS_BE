@@ -15,7 +15,8 @@ public class CatalogEntityListener {
     public void onChange(Object entity) {
         if (entity instanceof Store) {
             CatalogCacheInvalidator.storeChanged();
-        } else if (entity instanceof Product) {
+        } else if (entity instanceof Product || entity instanceof com.scanms.product.entity.ProductVariant
+                || entity instanceof com.scanms.product.entity.ProductImage) {
             CatalogCacheInvalidator.productChanged();
         }
     }

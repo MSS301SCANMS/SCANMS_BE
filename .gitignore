@@ -1,6 +1,7 @@
 **/target/
 .m2/
 .idea/
+/.local/
 .vscode/
 *.iml
 *.log
