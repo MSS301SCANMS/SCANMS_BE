@@ -4,10 +4,11 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.*;
 import java.time.Instant;
+import com.scanms.product.config.CatalogEntityListener;
 
 @Entity
 @Table(name = "product_images")
-@jakarta.persistence.EntityListeners(com.scanms.product.config.CatalogEntityListener.class)
+@EntityListeners(CatalogEntityListener.class)
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class ProductImage {
     @Id @GeneratedValue(strategy = GenerationType.UUID)

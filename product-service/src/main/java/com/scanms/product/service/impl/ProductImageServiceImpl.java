@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import com.scanms.product.dto.request.UpdateProductImageRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -44,7 +45,7 @@ public class ProductImageServiceImpl implements ProductImageService {
         return repository.findAll().stream().map(mapper::toResponse).toList();
     }
 
-    public ProductImageResponse update(String id, com.scanms.product.dto.request.UpdateProductImageRequest request) {
+    public ProductImageResponse update(String id, UpdateProductImageRequest request) {
         var image = repository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product image not found"));
         var product = products.findLockedByProductId(image.getProductId())
@@ -69,7 +70,7 @@ public class ProductImageServiceImpl implements ProductImageService {
         repository.delete(image);
         if (image.isPrimaryImage()) repository.findByProductId(image.getProductId()).stream()
                 .filter(other -> !other.getImageId().equals(id))
-                .min(java.util.Comparator.comparing(other -> other.getSortOrder() == null ? Integer.MAX_VALUE : other.getSortOrder()))
+                .min(Comparator.comparing(other -> other.getSortOrder() == null ? Integer.MAX_VALUE : other.getSortOrder()))
                 .ifPresent(next -> next.setPrimaryImage(true));
     }
 }

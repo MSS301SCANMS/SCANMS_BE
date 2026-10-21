@@ -16,11 +16,11 @@ public interface UserService {
     // --- Danh cho man Quan tri "Tai khoan & Phan quyen" (chi ADMIN) ---
 
     /** Danh sach user toan san, co phan trang, tim kiem va loc theo role/status. */
-    PageResponse<UserResponse> getAllUsersForAdmin(int page, int size, String search, RoleName role, UserStatus status);
+    PageResponse<UserResponse> getAllUsers(int page, int size, String search, RoleName role, UserStatus status);
 
     /** Xem chi tiet 1 user theo userId (khong phai identitySubject cua nguoi dang goi). */
-    UserResponse getUserByIdForAdmin(String userId);
+    UserResponse getUserById(String userId);
 
     /** Doi trang thai user (khoa/mo khoa tai khoan - soft delete). Khong cho phep doi voi tai khoan co role ADMIN. */
-    UserResponse updateUserStatusForAdmin(String userId, UpdateUserStatusRequest request);
+    UserResponse updateUserStatus(String userId, UpdateUserStatusRequest request);
 }

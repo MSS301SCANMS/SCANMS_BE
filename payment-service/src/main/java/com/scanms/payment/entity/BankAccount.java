@@ -9,6 +9,7 @@ import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.time.Instant;
 
 @Entity
 @Table(name = "bank_accounts")
@@ -37,7 +38,7 @@ public class BankAccount {
     @Column(unique=true) private String sourceKycReference;
     @Column(unique=true) private String replacesBankId;
     private String verifiedBy;
-    private java.time.Instant verifiedAt;
+    private Instant verifiedAt;
 
     @CreationTimestamp
     @Column(updatable = false)

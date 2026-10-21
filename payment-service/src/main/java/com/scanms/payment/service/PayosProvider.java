@@ -12,6 +12,7 @@ import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.time.ZoneOffset;
 
 @Service
 public class PayosProvider {
@@ -42,7 +43,7 @@ public class PayosProvider {
         body.put("description", "SC" + p.getProviderOrderCode().toString().substring(0,7));
         body.put("orderCode", p.getProviderOrderCode()); body.put("returnUrl", back);
         body.put("signature", signature(body, checksum, false));
-        body.put("expiredAt",p.getExpiresAt().toEpochSecond(java.time.ZoneOffset.UTC));
+        body.put("expiredAt",p.getExpiresAt().toEpochSecond(ZoneOffset.UTC));
         return data(client(false).post().uri("/v2/payment-requests").body(body).retrieve().body(Map.class));
     }
     public Map<String,Object> paymentStatus(long code) { return data(client(false).get().uri("/v2/payment-requests/{id}",code).retrieve().body(Map.class)); }

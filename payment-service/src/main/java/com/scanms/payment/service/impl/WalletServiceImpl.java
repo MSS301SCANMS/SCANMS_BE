@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import com.scanms.payment.constant.WalletStatus;
+import com.scanms.payment.service.PaymentAccess;
 
 @Service
 @RequiredArgsConstructor
@@ -17,10 +19,10 @@ import java.util.*;
 public class WalletServiceImpl implements WalletService {
     private final WalletRepository repository;
     private final WalletMapper mapper;
-    private final com.scanms.payment.service.PaymentAccess access;
+    private final PaymentAccess access;
     public WalletResponse create(CreateWalletRequest request) {
         access.owner(request.ownerType(), request.ownerRefId());
-        if (request.availableBalanceVnd() != 0 || request.heldBalanceVnd() != 0 || request.status() != com.scanms.payment.constant.WalletStatus.ACTIVE
+        if (request.availableBalanceVnd() != 0 || request.heldBalanceVnd() != 0 || request.status() != WalletStatus.ACTIVE
                 || !"VND".equals(request.currency())) throw new AppException(ErrorCode.INVALID_REQUEST, "New wallets must be ACTIVE with zero VND balances");
         return mapper.toResponse(repository.findByOwnerTypeAndOwnerRefIdAndCurrency(request.ownerType(), request.ownerRefId(), "VND")
                 .orElseGet(() -> repository.save(mapper.toEntity(request))));

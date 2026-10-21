@@ -16,15 +16,15 @@ import java.util.*;
 public class VoucherRedemptionController {
     private final VoucherRedemptionService service;
     @PostMapping
-    ResponseEntity<ApiResponse<VoucherRedemptionResponse>> create(@Valid @RequestBody CreateVoucherRedemptionRequest request) {
+    public ResponseEntity<ApiResponse<VoucherRedemptionResponse>> create(@Valid @RequestBody CreateVoucherRedemptionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
     @GetMapping("/{id}")
-    ApiResponse<VoucherRedemptionResponse> getById(@PathVariable String id) {
+    public ApiResponse<VoucherRedemptionResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
     @GetMapping
-    ApiResponse<List<VoucherRedemptionResponse>> findAll() {
+    public ApiResponse<List<VoucherRedemptionResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 }

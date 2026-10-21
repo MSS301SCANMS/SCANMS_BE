@@ -9,13 +9,15 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.web.server.ResponseStatusException;
+import java.sql.SQLException;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
-    ResponseEntity<ApiResponse<Void>> handleResponseStatus(org.springframework.web.server.ResponseStatusException exception) {
+    @ExceptionHandler(ResponseStatusException.class)
+    ResponseEntity<ApiResponse<Void>> handleResponseStatus(ResponseStatusException exception) {
         return ResponseEntity.status(exception.getStatusCode())
                 .body(ApiResponse.error(exception.getStatusCode().value(), exception.getReason()));
     }
@@ -23,7 +25,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiResponse<Void>> handleConflict(DataIntegrityViolationException exception) {
         Throwable cause = exception.getMostSpecificCause();
-        String state = cause instanceof java.sql.SQLException sql ? sql.getSQLState() : null;
+        String state = cause instanceof SQLException sql ? sql.getSQLState() : null;
         log.warn("Profile persistence rejected (SQL state {})", state);
         if ("22001".equals(state)) {
             return ResponseEntity.badRequest().body(ApiResponse.error(400,

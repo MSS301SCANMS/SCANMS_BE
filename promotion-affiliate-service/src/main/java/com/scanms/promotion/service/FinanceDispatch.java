@@ -10,6 +10,9 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.client.RestClient;
 import java.util.*;
 import java.time.Duration;
+import com.scanms.promotion.entity.Commission;
+import java.net.http.HttpClient;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 @Component @RequiredArgsConstructor
 public class FinanceDispatch {
     private final CommissionRepository commissions;
@@ -20,7 +23,7 @@ public class FinanceDispatch {
     @Value("${clients.payment.url:http://localhost:8084}") private String paymentUrl;
     private final RestClient http=client();
     private static RestClient client() {
-        var factory=new org.springframework.http.client.JdkClientHttpRequestFactory(java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
+        var factory=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
         factory.setReadTimeout(Duration.ofSeconds(15)); return RestClient.builder().requestFactory(factory).build();
     }
     @Scheduled(fixedDelayString="${scanms.finance.dispatch-delay-ms:60000}") public void dispatch() {
@@ -32,7 +35,7 @@ public class FinanceDispatch {
             if(response==null || !(response.get("access_token") instanceof String value)) return; token=value;
         } catch(Exception ex) { return; }
         var eligible=commissions.findAll().stream().filter(c -> c.getStatus()==CommissionStatus.ELIGIBLE || c.getStatus()==CommissionStatus.ADJUSTED)
-                .sorted(Comparator.comparing(com.scanms.promotion.entity.Commission::getCommissionId)).toList();
+                .sorted(Comparator.comparing(Commission::getCommissionId)).toList();
         if(eligible.isEmpty()) return;
         int start=Math.floorMod(cursor,eligible.size()), count=Math.min(20,eligible.size());
         for(int i=0;i<count;i++) {

@@ -4,6 +4,7 @@ import com.scanms.payment.constant.*;
 import jakarta.validation.constraints.*;
 import java.time.*;
 import java.util.*;
+import jakarta.validation.Valid;
 
 public final class MoneyDtos {
     private MoneyDtos() {}
@@ -17,7 +18,7 @@ public final class MoneyDtos {
             @NotBlank @Pattern(regexp="[0-9]{6,30}") String accountNumber) {}
     public record BankView(String bankAccountId, String storeId, String collaboratorId, String bankCode,
                            String holderName, String maskedNumber, BankAccountVerificationStatus verificationStatus, Boolean active, String sourceKycReference, String replacesBankId) {}
-    public record KycBankInput(@NotNull @jakarta.validation.Valid BankInput bank,@NotBlank @Size(max=120) String caseReference,boolean bankOwnershipVerified) {}
+    public record KycBankInput(@NotNull @Valid BankInput bank,@NotBlank @Size(max=120) String caseReference,boolean bankOwnershipVerified) {}
     public record WithdrawalInput(@NotBlank String walletId, @NotBlank String bankAccountId,
             @NotNull @Positive Long amountVnd, @NotBlank @Size(max=128) String idempotencyKey) {}
     public record WithdrawalView(String withdrawalId, String walletId, String bankAccountId, long amountVnd,

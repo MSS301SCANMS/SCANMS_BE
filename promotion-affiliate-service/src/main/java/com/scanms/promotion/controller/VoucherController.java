@@ -17,17 +17,17 @@ public class VoucherController {
     private final VoucherService service;
 
     @PostMapping
-    ResponseEntity<ApiResponse<VoucherResponse>> create(@Valid @RequestBody CreateVoucherRequest request) {
+    public ResponseEntity<ApiResponse<VoucherResponse>> create(@Valid @RequestBody CreateVoucherRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<VoucherResponse> getById(@PathVariable String id) {
+    public ApiResponse<VoucherResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<VoucherResponse>> findAll() {
+    public ApiResponse<List<VoucherResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 }

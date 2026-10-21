@@ -2,8 +2,10 @@ package com.scanms.product.repository;
 
 import com.scanms.product.entity.ProductVariant;
 import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.Collection;
+import java.util.List;
 
 public interface ProductVariantRepository extends JpaRepository<ProductVariant, String> {
-    java.util.List<ProductVariant> findByProductIdIn(java.util.Collection<String> productIds);
+    List<ProductVariant> findByProductIdIn(Collection<String> productIds);
 }
 

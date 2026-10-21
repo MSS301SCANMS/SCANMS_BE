@@ -16,15 +16,15 @@ import java.util.*;
 public class WalletController {
     private final WalletService service;
     @PostMapping
-    ResponseEntity<ApiResponse<WalletResponse>> create(@Valid @RequestBody CreateWalletRequest request) {
+    public ResponseEntity<ApiResponse<WalletResponse>> create(@Valid @RequestBody CreateWalletRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
     @GetMapping("/{id}")
-    ApiResponse<WalletResponse> getById(@PathVariable String id) {
+    public ApiResponse<WalletResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
     @GetMapping
-    ApiResponse<List<WalletResponse>> findAll() {
+    public ApiResponse<List<WalletResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 }

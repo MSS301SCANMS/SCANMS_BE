@@ -9,11 +9,13 @@ import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
+import com.scanms.product.config.CatalogEntityListener;
+import java.time.Instant;
 
 @Entity
 @Table(name = "stores", uniqueConstraints = @UniqueConstraint(name = "uk_store_owner", columnNames = "ownerUserId"))
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
-@jakarta.persistence.EntityListeners(com.scanms.product.config.CatalogEntityListener.class)
+@EntityListeners(CatalogEntityListener.class)
 public class Store {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -31,7 +33,7 @@ public class Store {
 
     private Long ratingCount;
 
-    private java.time.Instant lastActiveAt;
+    private Instant lastActiveAt;
 
     @Enumerated(EnumType.STRING)
     private StoreStatus approvalStatus;
