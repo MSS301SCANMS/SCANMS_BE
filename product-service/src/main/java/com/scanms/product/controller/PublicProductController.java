@@ -1,14 +1,18 @@
 package com.scanms.product.controller;
 
+import com.scanms.product.constant.ProductStatus;
+import com.scanms.product.constant.StoreStatus;
 import com.scanms.product.dto.ApiResponse;
 import com.scanms.product.entity.Product;
 import com.scanms.product.entity.Store;
 import com.scanms.product.repository.ProductRepository;
 import com.scanms.product.repository.StoreRepository;
 import com.scanms.product.service.PublicCatalogService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -18,24 +22,72 @@ import java.util.stream.Stream;
  */
 @RestController
 @RequestMapping("/api/v1/public")
-@RequiredArgsConstructor
 public class PublicProductController {
 
     private final ProductRepository products;
     private final StoreRepository stores;
     private final PublicCatalogService catalog;
 
+    @Autowired
+    public PublicProductController(ProductRepository products, StoreRepository stores, PublicCatalogService catalog) {
+        this.products = products;
+        this.stores = stores;
+        this.catalog = catalog;
+    }
+
+    public PublicProductController(ProductRepository products, StoreRepository stores) {
+        this(products, stores, null);
+    }
+
     @GetMapping("/products")
     ApiResponse<Map<String, Object>> listProducts(
             @RequestParam(required = false) String storeId,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "false") boolean eligibleForReferral,
             @RequestParam(required = false, defaultValue = "newest") String sortBy,
             @RequestParam(required = false, defaultValue = "1") int page,
             @RequestParam(required = false, defaultValue = "48") int limit) {
 
-        Stream<Map<String, Object>> stream = catalog.visibleProducts().stream()
-                .filter(p -> storeId == null || storeId.isBlank() || storeId.equals(p.get("storeId")))
+        Stream<Map<String, Object>> stream;
+        if (catalog != null) {
+            stream = catalog.visibleProducts().stream();
+        } else {
+            Map<String, Store> storeById = stores.findAll().stream()
+                    .collect(Collectors.toMap(Store::getStoreId, s -> s, (a, b) -> a));
+            List<Product> source = storeId != null && !storeId.isBlank()
+                    ? products.findByStoreId(storeId)
+                    : products.findAll();
+            stream = source.stream()
+                    .filter(p -> p.getStatus() == null || p.getStatus() == ProductStatus.ACTIVE
+                            || p.getStatus() == ProductStatus.OUT_OF_STOCK)
+                    .map(p -> PublicCatalogService.toPublicProduct(p, storeById.get(p.getStoreId())));
+        }
+
+        if (storeId != null && !storeId.isBlank()) {
+            stream = stream.filter(p -> storeId.equals(p.get("storeId")));
+        }
+
+        if (eligibleForReferral) {
+            if (catalog != null) {
+                Set<String> approvedStoreIds = catalog.approvedStores().stream()
+                        .map(s -> str(s.get("storeId")))
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                stream = stream.filter(p -> "ACTIVE".equalsIgnoreCase(str(p.get("status")))
+                        && p.get("storeId") != null
+                        && approvedStoreIds.contains(str(p.get("storeId"))));
+            } else {
+                Map<String, Store> storeById = stores.findAll().stream()
+                        .collect(Collectors.toMap(Store::getStoreId, s -> s, (a, b) -> a));
+                stream = stream.filter(p -> "ACTIVE".equalsIgnoreCase(str(p.get("status")))
+                        && p.get("storeId") != null
+                        && storeById.containsKey(str(p.get("storeId")))
+                        && storeById.get(str(p.get("storeId"))).getApprovalStatus() == StoreStatus.APPROVED);
+            }
+        }
+
+        stream = stream
                 .filter(p -> search == null || search.isBlank()
                         || containsIgnoreCase(str(p.get("name")), search)
                         || containsIgnoreCase(str(p.get("description")), search))
@@ -63,11 +115,12 @@ public class PublicProductController {
 
     @GetMapping("/products/categories")
     ApiResponse<List<Map<String, Object>>> listCategories() {
-        return ApiResponse.success(catalog.categories());
+        return ApiResponse.success(catalog != null ? catalog.categories() : Collections.emptyList());
     }
 
     @GetMapping("/products/stores")
     ApiResponse<List<Map<String, Object>>> listProductStores() {
+        if (catalog == null) return ApiResponse.success(Collections.emptyList());
         List<Map<String, Object>> rows = catalog.approvedStores().stream().map(s -> {
             Map<String, Object> row = new LinkedHashMap<>();
             for (String key : List.of("id", "storeId", "name", "description", "logoUrl", "approvalStatus")) {

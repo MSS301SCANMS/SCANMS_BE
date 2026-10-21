@@ -1,0 +1,55 @@
+package com.scanms.user.service;
+
+import com.scanms.user.constant.RoleName;
+import com.scanms.user.constant.UserStatus;
+import com.scanms.user.entity.Role;
+import com.scanms.user.entity.User;
+import com.scanms.user.repository.RoleRepository;
+import com.scanms.user.repository.UserRepository;
+import com.scanms.user.service.impl.AuthServiceImpl;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestTemplate;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+class KolRoleGrantTest {
+    @Test void grantsRealmRoleUsingIdentitySubjectAndUpdatesLocalRoles() {
+        var users = mock(UserRepository.class);
+        var roles = mock(RoleRepository.class);
+        var service = new AuthServiceImpl(users, roles, mock(OtpService.class), mock(MailService.class));
+        ReflectionTestUtils.setField(service, "serverUrl", "http://keycloak.test");
+        ReflectionTestUtils.setField(service, "realm", "scanms");
+        ReflectionTestUtils.setField(service, "clientId", "scanms-client");
+        ReflectionTestUtils.setField(service, "clientSecret", "test-secret");
+        var rest = (RestTemplate) ReflectionTestUtils.getField(service, "restTemplate");
+        var server = MockRestServiceServer.createServer(rest);
+        server.expect(requestTo("http://keycloak.test/realms/scanms/protocol/openid-connect/token"))
+                .andRespond(withSuccess("{\"access_token\":\"admin-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://keycloak.test/admin/realms/scanms/roles/KOL_CTV"))
+                .andRespond(withSuccess("{\"id\":\"role-id\",\"name\":\"KOL_CTV\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://keycloak.test/admin/realms/scanms/users/keycloak-sub/role-mappings/realm"))
+                .andRespond(withSuccess());
+
+        var user = User.builder().userId("internal-id").identitySubject("keycloak-sub")
+                .status(UserStatus.ACTIVE).roles(new HashSet<>()).build();
+        when(users.findById("internal-id")).thenReturn(Optional.of(user));
+        when(roles.findAllByNameIn(List.of(RoleName.KOL_CTV)))
+                .thenReturn(Set.of(Role.builder().name(RoleName.KOL_CTV).build()));
+
+        service.grantKolRole("internal-id");
+
+        server.verify();
+        assertTrue(user.getRoles().stream().anyMatch(role -> role.getName() == RoleName.KOL_CTV));
+        verify(users).save(user);
+    }
+}

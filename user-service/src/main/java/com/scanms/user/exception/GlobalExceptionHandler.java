@@ -14,6 +14,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    ResponseEntity<ApiResponse<Void>> handleResponseStatus(org.springframework.web.server.ResponseStatusException exception) {
+        return ResponseEntity.status(exception.getStatusCode())
+                .body(ApiResponse.error(exception.getStatusCode().value(), exception.getReason()));
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiResponse<Void>> handleConflict(DataIntegrityViolationException exception) {
         return ResponseEntity.status(409).body(ApiResponse.error(409,

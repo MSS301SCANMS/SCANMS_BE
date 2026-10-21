@@ -34,6 +34,8 @@ public class FinanceService {
     private final FinanceOutbox outbox;
     private final PaymentRepository payments;
     private final jakarta.persistence.EntityManager entityManager;
+    private final org.springframework.core.env.Environment environment;
+    @Value("${scanms.payment.sandbox-enabled:false}") private boolean sandboxEnabled;
     @Value("${clients.order.url:http://localhost:8083}") private String orderUrl;
     @Value("${clients.promotion.url:http://localhost:8085}") private String promotionUrl;
     @Value("${scanms.payment.minimum-withdrawal-vnd:200000}") private long minimum;
@@ -56,7 +58,24 @@ public class FinanceService {
     public Wallet lockOwnedWallet(String id) {
         Wallet w=ownedWallet(id); entityManager.refresh(w,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE); return w;
     }
-    public Map<String,Object> capabilities() { return Map.of("minimumWithdrawalVnd",minimum,"currency","VND"); }
+    public boolean sandboxTopUpAvailable() {
+        return sandboxEnabled && environment.acceptsProfiles(org.springframework.core.env.Profiles.of("local"))
+                && !environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod", "production"));
+    }
+    public Map<String,Object> capabilities() { return Map.of("minimumWithdrawalVnd",minimum,"currency","VND","sandboxTopUpAvailable",sandboxTopUpAvailable()); }
+    public WalletTransactionResponse sandboxTopUp(TopUpInput input) {
+        if (!sandboxTopUpAvailable()) throw new AppException(ErrorCode.FORBIDDEN,"Sandbox top-up is disabled in this environment");
+        if (input.amountVnd()==null || input.amountVnd()<10_000 || input.amountVnd()>50_000_000
+                || input.idempotencyKey()==null || input.idempotencyKey().isBlank() || input.idempotencyKey().length()>128)
+            throw new AppException(ErrorCode.INVALID_REQUEST,"Enter an integer amount from 10,000 to 50,000,000 VND");
+        Wallet wallet=lockOwnedWallet(input.walletId());
+        if (wallet.getOwnerType()!=WalletOwnerType.CUSTOMER || !Objects.equals(wallet.getOwnerRefId(),access.userId()))
+            throw new AppException(ErrorCode.FORBIDDEN,"Only your own customer wallet supports sandbox top-up");
+        if (wallet.getStatus()!=WalletStatus.ACTIVE) throw new AppException(ErrorCode.CONFLICT,"Wallet is not active");
+        String key="sandbox:"+UUID.nameUUIDFromBytes((wallet.getWalletId()+":"+input.idempotencyKey()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return post(wallet.getWalletId(),WalletTransactionType.TOP_UP,WalletTransactionDirection.CREDIT,
+                input.amountVnd(),"TOPUP_DEMO",wallet.getWalletId(),key);
+    }
     @Transactional(readOnly=true) public PageView<LedgerView> history(String id,int page,int size) {
         return history(id,page,size,null,null,null,null);
     }

@@ -12,6 +12,16 @@ import org.springframework.security.access.AccessDeniedException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    ResponseEntity<ApiResponse<Void>> handleMissingEndpoint(org.springframework.web.servlet.resource.NoResourceFoundException exception) {
+        return ResponseEntity.status(404).body(ApiResponse.error(404, "API chưa tồn tại trên dịch vụ đang chạy. Vui lòng kiểm tra phiên bản backend."));
+    }
+
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    ResponseEntity<ApiResponse<Void>> handleConcurrentUpdate(Exception exception) {
+        return ResponseEntity.status(409).body(ApiResponse.error(409, "Dữ liệu đã thay đổi. Vui lòng tải lại trước khi sửa."));
+    }
+
     @ExceptionHandler(AppException.class)
     ResponseEntity<ApiResponse<Void>> handleAppException(AppException exception) {
         ErrorCode errorCode = exception.getErrorCode();

@@ -28,6 +28,11 @@ public class StoreApplicationController {
         return ApiResponse.success(service.getById(id));
     }
 
+    @PutMapping("/{id}")
+    ApiResponse<StoreApplicationResponse> updatePending(@PathVariable String id, @Valid @RequestBody CreateStoreApplicationRequest request) {
+        return ApiResponse.success(service.updatePending(id, request));
+    }
+
     @GetMapping
     ApiResponse<List<StoreApplicationResponse>> findAll() {
         return ApiResponse.success(service.findAll());

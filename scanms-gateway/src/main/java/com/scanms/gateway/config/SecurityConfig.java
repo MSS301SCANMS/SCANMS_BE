@@ -37,6 +37,7 @@ public class SecurityConfig {
                 .authorizeExchange(auth -> auth
                         // Cho phép toàn bộ preflight OPTIONS request qua CORS
                         .pathMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                        .pathMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/auth/refresh-token").permitAll()
 
                         // Công khai Swagger, OpenAPI docs và các API public
                         .pathMatchers(
@@ -58,6 +59,7 @@ public class SecurityConfig {
                                 "/api/v1/stores/public/**"
                         ).permitAll()
                         .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/orders/track").permitAll()
+                        .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/referrals/resolve/*").permitAll()
 
                         // Các request còn lại bắt buộc phải có JWT hợp lệ
                         .anyExchange().authenticated()

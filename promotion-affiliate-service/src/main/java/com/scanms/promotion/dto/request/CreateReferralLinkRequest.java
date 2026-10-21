@@ -7,10 +7,12 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public record CreateReferralLinkRequest(
-        @NotNull String collaboratorId,
-        @NotNull String productId,
+        String collaboratorId,
+        @NotBlank @Pattern(regexp = "[A-Za-z0-9_-]{1,100}") String productId,
         String livestreamId,
-        @NotBlank String token,
+        @Pattern(regexp = "[A-Za-z0-9_-]{6,120}") String token,
         ReferralLinkStatus status,
-        LocalDateTime expiresAt
+        LocalDateTime expiresAt,
+        @Size(min = 2, max = 150) String label,
+        @Pattern(regexp = "TIKTOK|FACEBOOK|YOUTUBE|INSTAGRAM|WEBSITE|OTHER") String channel
 ) {}

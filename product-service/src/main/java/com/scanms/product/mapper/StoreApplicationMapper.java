@@ -12,6 +12,7 @@ public class StoreApplicationMapper {
                 .applicantUserId(request.applicantUserId())
                 .proposedStoreName(request.proposedStoreName())
                 .description(request.description())
+                .onboardingData(request.onboardingData())
                 .status(request.status())
                 .reviewedByUserId(request.reviewedByUserId())
                 .reviewNote(request.reviewNote())
@@ -32,7 +33,8 @@ public class StoreApplicationMapper {
                 entity.getSubmittedAt(),
                 entity.getReviewedAt(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getUpdatedAt(),
+                entity.getOnboardingData());
     }
 }
 

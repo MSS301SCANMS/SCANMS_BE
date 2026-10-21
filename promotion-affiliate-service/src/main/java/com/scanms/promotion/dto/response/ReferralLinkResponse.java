@@ -13,5 +13,7 @@ public record ReferralLinkResponse(
         String token,
         ReferralLinkStatus status,
         LocalDateTime expiresAt,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String label,
+        String channel
 ) {}

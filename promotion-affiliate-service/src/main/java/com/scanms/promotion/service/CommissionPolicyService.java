@@ -7,6 +7,7 @@ import java.util.*;
 
 public interface CommissionPolicyService {
     CommissionPolicyResponse create(CreateCommissionPolicyRequest request);
+    CommissionPolicyResponse update(String id, Long version, CreateCommissionPolicyRequest request);
     CommissionPolicyResponse getById(String id);
     List<CommissionPolicyResponse> findAll();
 

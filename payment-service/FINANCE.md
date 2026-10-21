@@ -24,7 +24,7 @@ Ví FROZEN chặn khoản trừ mới/HOLD nhưng cho phép nhận credit, RELEA
 
 ## Cấu hình để chạy thật
 
-1. Khởi chạy PostgreSQL các service, Keycloak, user/product/order/promotion/payment và gateway. Cổng frontend 5173. Spring nhận biến môi trường của tiến trình; `.env.finance.example` chỉ là mẫu, không tự được nạp.
+1. Khởi chạy PostgreSQL các service, Keycloak, user/product/order/promotion/payment và gateway. Cổng frontend 5173. Payment Service nạp `.env` gốc và `payment-service/.env` khi chạy từ thư mục backend hoặc thư mục service; biến môi trường tiến trình có thể ghi đè. `.env.finance.example` chỉ là mẫu.
 2. Cấu hình payOS payment keys. Payout keys dùng kênh chi hộ riêng đã được cấp quyền. Đăng ký webhook HTTPS công khai trỏ về gateway. Giữ khóa ở BE.
 3. Tạo `BANK_ENCRYPTION_KEY` từ 32 byte ngẫu nhiên, base64. Giữ ổn định và quản lý sao lưu khóa cùng dữ liệu mã hóa; thay khóa cần giải mã rồi mã hóa lại dữ liệu bằng quy trình riêng.
 4. Keycloak public client `scanms-fe`: Standard Flow bật, PKCE S256, redirect `http://localhost:5173/auth/keycloak/callback`, Web Origins `http://localhost:5173`. Không đặt client secret ở FE.
@@ -32,6 +32,16 @@ Ví FROZEN chặn khoản trừ mới/HOLD nhưng cho phép nhận credit, RELEA
 6. JWT realm/client roles: USER, KOL_CTV, SHOP_OWNER, ADMIN, MANAGER. Alias SYSTEM_ADMIN/SYSTEM_MANAGER/SHOP_MANAGER/COLLABORATOR hỗ trợ ở payment. Hồ sơ `/users/me` phải có identitySubject trùng JWT sub và status ACTIVE; KOL phải có CollaboratorProfile APPROVED/ACTIVE; shop phải có ownerUserId đúng User UUID.
 7. Gateway `FRONTEND_ORIGINS` hỗ trợ danh sách origin cách nhau dấu phẩy. Triển khai HTTPS thì thay URL mẫu tương ứng.
 8. Với DB cũ: sao lưu, kiểm tra dữ liệu trùng và chạy `db/finance-upgrade.sql` trong cửa sổ triển khai. Script chưa được chạy trên DB thật. Không tự điền số dư, chuyển trạng thái tiền hoặc xóa ledger cũ để làm migration qua.
+
+## Ví khách hàng trên môi trường local
+
+Frontend dùng `VITE_COMMERCE_BACKEND=spring`, `VITE_FINANCE_API_URL=http://localhost:8080/api/v1/finance`, `VITE_CHECKOUT_API_URL=http://localhost:8080/api/v1` và để trống `VITE_SOCKET_URL`. Không trỏ các biến này tới backend cũ ở 3000/3302.
+
+Sandbox chỉ bật khi đồng thời có profile `local` và `PAYMENT_SANDBOX_ENABLED=true`; profile `prod`/`production` luôn chặn. Trong file `payment-service/.env`, dùng `spring.profiles.active=local` để chọn profile; khi export biến môi trường hệ thống, dùng `SPRING_PROFILES_ACTIVE=local`. Mặc định Sandbox tắt. Đặt `AUTOMATIC_PAYOUTS=false` khi thử local.
+
+`POST /api/v1/finance/sandbox/top-ups` nhận cùng payload `{walletId, amountVnd, idempotencyKey}` như nạp payOS, chỉ ghi có ví CUSTOMER đang ACTIVE thuộc chính người đăng nhập. Giới hạn 10.000–50.000.000 VND, ledger `TOP_UP`/`TOPUP_DEMO`; retry cùng key không cộng lại. Đây là tiền kiểm thử local, không phải giao dịch ngân hàng. Capabilities trả `sandboxTopUpAvailable` để frontend hiển thị đúng phương thức.
+
+payOS dùng `/finance/top-ups`; trạng thái SUCCESS từ backend được hiển thị PAID ở frontend. Chỉ callback đã kiểm tra chữ ký hoặc truy vấn trạng thái payOS từ backend mới ghi có ví. Return/cancel URL của top-up trỏ về `/customer/wallet?topup=<paymentId>`, nơi frontend khôi phục và kiểm tra giao dịch. URL quay lại và thao tác frontend không tự cộng tiền.
 
 ## API cho dịch vụ nguồn
 

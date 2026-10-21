@@ -28,6 +28,10 @@ public class ReturnRequest {
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> evidenceRefs;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String, Object> shopResponse;
+
     @Enumerated(EnumType.STRING)
     private ReturnRequestStatus status;
 

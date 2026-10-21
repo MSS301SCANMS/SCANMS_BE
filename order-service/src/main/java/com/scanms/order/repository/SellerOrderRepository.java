@@ -7,6 +7,7 @@ import com.scanms.order.constant.SellerOrderStatus;
 import java.util.List;
 
 public interface SellerOrderRepository extends JpaRepository<SellerOrder, String> {
+    List<SellerOrder> findByOrderIdIn(java.util.Collection<String> orderIds);
     List<SellerOrder> findByOrderId(String orderId);
     List<SellerOrder> findByStoreIdOrderByCreatedAtDesc(String storeId);
     List<SellerOrder> findByStoreIdAndStatusOrderByCreatedAtDesc(String storeId, SellerOrderStatus status);
