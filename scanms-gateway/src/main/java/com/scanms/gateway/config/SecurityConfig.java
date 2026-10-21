@@ -38,6 +38,8 @@ public class SecurityConfig {
                         // Cho phép toàn bộ preflight OPTIONS request qua CORS
                         .pathMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .pathMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/auth/refresh-token").permitAll()
+                        // Đăng xuất dựa trên cookie refresh token (HttpOnly); access token có thể đã hết hạn.
+                        .pathMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/auth/logout").permitAll()
 
                         // Công khai Swagger, OpenAPI docs và các API public
                         .pathMatchers(
