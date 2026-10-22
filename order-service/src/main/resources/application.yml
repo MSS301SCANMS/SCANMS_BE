@@ -44,6 +44,8 @@ clients:
   promotion:
     url: ${PROMOTION_SERVICE_URL:http://localhost:8085}
 scanms:
+  shipping:
+    simulation-enabled: ${SHIPPING_SIMULATION_ENABLED:false}
   finance:
     token-url: ${FINANCE_TOKEN_URL:}
     client-id: ${ORDER_SERVICE_CLIENT_ID:order-service}
@@ -51,3 +53,4 @@ scanms:
     dispatch-delay-ms: ${FINANCE_DISPATCH_DELAY_MS:60000}
   checkout:
     shipping-fee-per-store-vnd: ${CHECKOUT_SHIPPING_FEE_PER_STORE_VND:0}
+    shipping-simulation-enabled: ${CHECKOUT_SHIPPING_SIMULATION_ENABLED:false}

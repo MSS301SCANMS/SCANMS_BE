@@ -8,5 +8,6 @@ import java.util.List;
 
 public interface FeedbackRepository extends JpaRepository<Feedback, String> {
     boolean existsByOrderItemIdAndCustomerId(String orderItemId, String customerId);
+    List<Feedback> findByCustomerIdAndOrderItemIdIn(String customerId, Collection<String> ids);
     List<Feedback> findByProductIdInAndStatus(Collection<String> productIds, FeedbackStatus status);
 }

@@ -11,6 +11,10 @@ import org.springframework.security.access.AccessDeniedException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    ResponseEntity<ApiResponse<Void>> sourceUnavailable(org.springframework.web.server.ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode()).body(ApiResponse.error(ex.getStatusCode().value(),ex.getReason()));
+    }
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ApiResponse<Void>> forbidden(Exception ex) {
         return ResponseEntity.status(403).body(ApiResponse.error(403, "Access is denied"));

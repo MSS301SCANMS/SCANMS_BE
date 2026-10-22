@@ -63,12 +63,12 @@ public class FinanceDispatch {
         String token;
         try { token=token(); } catch(Exception ex) { return; }
         if(token==null) return;
-        for(var r:batch(returns.findAll().stream().filter(r -> Set.of(ReturnRequestStatus.APPROVED,ReturnRequestStatus.RECEIVED,ReturnRequestStatus.REFUND_PENDING,ReturnRequestStatus.REFUNDED).contains(r.getStatus())).sorted(Comparator.comparing(ReturnRequest::getReturnRequestId)).toList(),refundCursor)) {
+        for(var r:batch(returns.findAll().stream().filter(r -> Set.of(ReturnRequestStatus.RECEIVED,ReturnRequestStatus.REFUND_PENDING,ReturnRequestStatus.REFUNDED).contains(r.getStatus())).sorted(Comparator.comparing(ReturnRequest::getReturnRequestId)).toList(),refundCursor)) {
             try {
                 if (r.getStatus() != ReturnRequestStatus.REFUNDED)
                     post(paymentUrl+"/api/v1/finance/refunds/"+r.getReturnRequestId(),token,Map.of());
                 // Return/refund → ADJUSTED commission theo basis còn lại
-                if (r.getOrderItemId() != null)
+                if (r.getStatus() == ReturnRequestStatus.REFUNDED && r.getOrderItemId() != null)
                     post(promotionUrl+"/api/v1/finance/commission-adjustments/"+r.getOrderItemId(),token,Map.of("reason","Return/refund adjustment for "+r.getReturnRequestId()));
             } catch(Exception ex) { /* Retry persisted source reference next cycle. */ }
         }
