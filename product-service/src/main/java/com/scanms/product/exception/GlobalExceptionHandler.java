@@ -12,6 +12,10 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    ResponseEntity<ApiResponse<Void>> handleUnreadableRequest(org.springframework.http.converter.HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(400,"Dữ liệu gửi lên không đúng định dạng. Vui lòng kiểm tra và thử lại."));
+    }
 
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiResponse<Void>> handleMissingEndpoint(NoResourceFoundException exception) {

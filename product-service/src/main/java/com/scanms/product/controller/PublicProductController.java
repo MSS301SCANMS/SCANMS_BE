@@ -29,6 +29,7 @@ public class PublicProductController {
     private final ProductRepository products;
     private final StoreRepository stores;
     private final PublicCatalogService catalog;
+    @Autowired(required=false) private com.scanms.product.service.PublicReviewService reviewSummaries;
 
     @Autowired
     public PublicProductController(ProductRepository products, StoreRepository stores, PublicCatalogService catalog) {
@@ -151,13 +152,12 @@ public class PublicProductController {
         payload.put("store", product.get("store"));
         payload.put("images", product.getOrDefault("images", List.of()));
         payload.put("videos", List.of());
-        // No review aggregation exists here yet; do not fabricate ratings.
         Map<String, Object> reviews = new LinkedHashMap<>();
         reviews.put("averageRating", null);
         reviews.put("totalReviews", 0);
         reviews.put("starDistribution", Map.of());
         reviews.put("items", List.of());
-        payload.put("reviews", reviews);
+        payload.put("reviews", reviewSummaries == null ? reviews : reviewSummaries.summary(id));
         long stock = ((Number) product.getOrDefault("stockQuantity", 0)).longValue();
         payload.put("availability", Map.of("stockQuantity", stock, "inStock", stock > 0 && Boolean.TRUE.equals(product.get("canPurchase"))));
         payload.put("policies", Map.of(

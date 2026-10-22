@@ -42,6 +42,14 @@ public class ReturnRequest {
 
     private String refundReference;
 
+    @Column(length = 128)
+    private String requestKey;
+
+    /** Server-owned return transport facts, never copied from customer evidence. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String, Object> logistics;
+
     private LocalDateTime requestedAt;
 
     private LocalDateTime resolvedAt;

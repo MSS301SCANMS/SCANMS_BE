@@ -29,6 +29,10 @@ public class Store {
 
     private String logoRef;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String, String> ownerDetails;
+
     private BigDecimal ratingAverage;
 
     private Long ratingCount;

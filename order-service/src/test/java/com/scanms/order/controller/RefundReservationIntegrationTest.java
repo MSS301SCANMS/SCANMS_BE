@@ -47,23 +47,23 @@ class RefundReservationIntegrationTest {
     }
     long basis(String id) { return ((Number)finance.refundBasis(id,jwt).result().get("amountVnd")).longValue(); }
     @Test void cancellationBeforeAnAlreadyReservedRefundDoesNotShiftMoneyOrOverRefund() {
-        var a=request(1,ReturnRequestStatus.REQUESTED,0); var b=request(2,ReturnRequestStatus.APPROVED,1);
+        var a=request(1,ReturnRequestStatus.REQUESTED,0); var b=request(2,ReturnRequestStatus.RECEIVED,1);
         long bAmount=basis(b.getReturnRequestId()); assertEquals(66,bAmount);
         finance.refunded(b.getReturnRequestId(),new FinanceContractController.RefundInput("ledger-b",bAmount),jwt);
         a.setStatus(ReturnRequestStatus.CANCELLED); returns.saveAndFlush(a);
         assertEquals(bAmount,basis(b.getReturnRequestId()));
-        var c=request(1,ReturnRequestStatus.APPROVED,2); long cAmount=basis(c.getReturnRequestId());
+        var c=request(1,ReturnRequestStatus.RECEIVED,2); long cAmount=basis(c.getReturnRequestId());
         assertEquals(34,cAmount); assertEquals(100,bAmount+cAmount);
     }
     @Test void pendingSnapshotSurvivesCancellationWhilePaymentAcknowledgementIsDelayed() {
-        var a=request(1,ReturnRequestStatus.REQUESTED,0); var b=request(2,ReturnRequestStatus.APPROVED,1);
+        var a=request(1,ReturnRequestStatus.REQUESTED,0); var b=request(2,ReturnRequestStatus.RECEIVED,1);
         long amount=basis(b.getReturnRequestId()); a.setStatus(ReturnRequestStatus.REJECTED); returns.saveAndFlush(a);
         assertEquals(amount,basis(b.getReturnRequestId()));
         finance.refunded(b.getReturnRequestId(),new FinanceContractController.RefundInput("ledger",amount),jwt);
         assertEquals(ReturnRequestStatus.REFUNDED,returns.findById(b.getReturnRequestId()).orElseThrow().getStatus());
     }
     @Test void simultaneousReservationsCannotExceedPurchasedQuantity() throws Exception {
-        var a=request(2,ReturnRequestStatus.APPROVED,0); var b=request(2,ReturnRequestStatus.APPROVED,1);
+        var a=request(2,ReturnRequestStatus.RECEIVED,0); var b=request(2,ReturnRequestStatus.RECEIVED,1);
         try(var executor=Executors.newFixedThreadPool(2)) {
             CountDownLatch start=new CountDownLatch(1); List<Future<Boolean>> results=new ArrayList<>();
             for(var r:List.of(a,b)) results.add(executor.submit(() -> { start.await(); try { basis(r.getReturnRequestId()); return true; } catch(ResponseStatusException ex) { return false; } }));

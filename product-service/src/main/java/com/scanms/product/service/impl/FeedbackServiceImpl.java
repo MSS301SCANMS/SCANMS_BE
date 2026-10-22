@@ -52,16 +52,28 @@ public class FeedbackServiceImpl implements FeedbackService {
                         .contains(Objects.toString(order.get("status"), ""))
                 || !Set.of("DELIVERED", "COMPLETED")
                         .contains(Objects.toString(sellerOrder.get("status"), "")))
-            throw new AppException(ErrorCode.FORBIDDEN, "Only the buyer of a delivered item may review it");
+            throw new AppException(ErrorCode.FORBIDDEN, "Chỉ người mua của sản phẩm đã giao và đã thanh toán mới được đánh giá.");
         if (repository.existsByOrderItemIdAndCustomerId(request.orderItemId(), customerId)) {
-            throw new AppException(ErrorCode.CONFLICT, "This order item has already been reviewed");
+            throw new AppException(ErrorCode.CONFLICT, "Sản phẩm trong đơn này đã được đánh giá.");
         }
         var feedback = mapper.toEntity(request);
         feedback.setCustomerId(customerId);
         feedback.setStatus(FeedbackStatus.ACTIVE);
-        var saved = repository.save(feedback);
+        com.scanms.product.entity.Feedback saved;
+        try { saved = repository.save(feedback); repository.flush(); }
+        catch(org.springframework.dao.DataIntegrityViolationException ex) {
+            if(!Objects.toString(ex.getMostSpecificCause().getMessage(),"").toLowerCase(Locale.ROOT).contains("uk_feedback_order_item_customer")) throw ex;
+            throw new AppException(ErrorCode.CONFLICT,"Sản phẩm trong đơn này đã được đánh giá. Vui lòng tải lại danh sách đơn hàng.");
+        }
         refreshStoreRating(product.getStoreId());
         return mapper.toResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<FeedbackResponse> findMine(List<String> orderItemIds) {
+        if(orderItemIds==null || orderItemIds.isEmpty() || orderItemIds.size()>100)
+            throw new AppException(ErrorCode.INVALID_REQUEST,"Danh sách sản phẩm trong đơn không hợp lệ.");
+        return repository.findByCustomerIdAndOrderItemIdIn(access.userId(),orderItemIds).stream().map(mapper::toResponse).toList();
     }
 
     @Transactional(readOnly = true)

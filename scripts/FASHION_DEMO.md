@@ -1,5 +1,7 @@
 # Dữ liệu thời trang mẫu
 
+Ngày 22/10/2026 đã bổ sung 30 ảnh góc chụp của đúng 15 mẫu hiện có lên Cloudinary và gắn qua API `product-images`. Catalog local hiện có **24 sản phẩm, 69 ảnh**; 15 mẫu được bổ sung có 4 ảnh/mẫu. Ảnh đại diện, giá và tồn kho được giữ nguyên. Các ảnh bổ sung lấy từ cùng ID sản phẩm DummyJSON đã dùng khi seed; không ghép ảnh của mẫu khác. Bản sao dữ liệu trước khi thêm, URL nguồn/Cloudinary và kết quả kiểm tra nằm trong `be/.local/fashion-images-20261022/`. Đã kiểm tra 30 URL CDN và thử chọn ảnh mới trên trang chi tiết của áo sơ mi, áo thun và đầm.
+
 Chạy tại `be`:
 
 ```powershell
