@@ -5,5 +5,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ProductImageRepository extends JpaRepository<ProductImage, String> {
     java.util.List<ProductImage> findByProductId(String productId);
+    java.util.List<ProductImage> findByProductIdIn(java.util.Collection<String> productIds);
 }
 

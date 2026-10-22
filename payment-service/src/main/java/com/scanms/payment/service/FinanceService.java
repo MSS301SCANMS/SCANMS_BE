@@ -224,7 +224,9 @@ public class FinanceService {
         return new PageView<>(result.stream().map(this::withdrawalView).toList(),result.getTotalElements(),page,size);
     }
     public WalletTransactionResponse refund(String id) {
-        access.trustedOnly();
+        // Order dispatcher may refund only this persisted, server-validated return.
+        // It does not gain access to arbitrary wallet adjustments or other commands.
+        if (!access.role("ORDER_INTERNAL")) access.trustedOnly();
         var previous=entries.findByIdempotencyKey("refund:"+id);
         if(previous.isPresent()) {
             var old=previous.get();

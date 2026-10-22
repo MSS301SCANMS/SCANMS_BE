@@ -22,8 +22,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiResponse<Void>> handleConflict(DataIntegrityViolationException exception) {
-        return ResponseEntity.status(409).body(ApiResponse.error(409,
-                "Identity conflicts with an existing profile; retry or contact support"));
+        Throwable cause = exception.getMostSpecificCause();
+        String state = cause instanceof java.sql.SQLException sql ? sql.getSQLState() : null;
+        log.warn("Profile persistence rejected (SQL state {})", state);
+        if ("22001".equals(state)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(400,
+                    "Thông tin hồ sơ vượt quá độ dài cho phép. Vui lòng rút gọn nội dung."));
+        }
+        String message = "23505".equals(state)
+                ? "Identity conflicts with an existing profile; retry or contact support"
+                : "Không thể lưu hồ sơ vì dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin.";
+        return ResponseEntity.status(409).body(ApiResponse.error(409, message));
     }
 
     @ExceptionHandler(AppException.class)

@@ -5,8 +5,13 @@ import com.scanms.product.constant.ProductStatus;
 import com.scanms.product.constant.StoreStatus;
 import com.scanms.product.entity.Product;
 import com.scanms.product.entity.Store;
+import com.scanms.product.entity.ProductImage;
+import com.scanms.product.entity.ProductVariant;
+import com.scanms.product.constant.ProductVariantStatus;
 import com.scanms.product.repository.ProductRepository;
 import com.scanms.product.repository.StoreRepository;
+import com.scanms.product.repository.ProductImageRepository;
+import com.scanms.product.repository.ProductVariantRepository;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -31,26 +36,106 @@ import org.springframework.transaction.annotation.Transactional;
 public class PublicCatalogService {
     private final ProductRepository products;
     private final StoreRepository stores;
+    private final ProductVariantRepository variants;
+    private final ProductImageRepository images;
 
     /** Sản phẩm được hiển thị công khai (ACTIVE / OUT_OF_STOCK / chưa đặt trạng thái), mới nhất trước. */
     @Cacheable(CacheNames.PUBLIC_PRODUCTS)
     public List<Map<String, Object>> visibleProducts() {
         Map<String, Store> storeById = stores.findAll().stream()
                 .collect(Collectors.toMap(Store::getStoreId, s -> s, (a, b) -> a));
-        return products.findAll().stream()
+        List<Product> source = products.findAll();
+        if (source.isEmpty()) return new ArrayList<>();
+        List<String> ids = source.stream().map(Product::getProductId).toList();
+        Map<String, List<ProductVariant>> variantsByProduct = variants.findByProductIdIn(ids).stream()
+                .collect(Collectors.groupingBy(ProductVariant::getProductId));
+        Map<String, List<ProductImage>> imagesByProduct = images.findByProductIdIn(ids).stream()
+                .collect(Collectors.groupingBy(ProductImage::getProductId));
+        return source.stream()
                 .filter(p -> p.getStatus() == null || p.getStatus() == ProductStatus.ACTIVE
                         || p.getStatus() == ProductStatus.OUT_OF_STOCK)
                 .sorted(Comparator.comparing(Product::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
-                .map(p -> toPublicProduct(p, storeById.get(p.getStoreId())))
+                .map(p -> enrich(p, storeById.get(p.getStoreId()),
+                        variantsByProduct.getOrDefault(p.getProductId(), List.of()),
+                        imagesByProduct.getOrDefault(p.getProductId(), List.of())))
                 .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    /** Read current variant stock directly; detail/stock endpoints must not serve cached inventory. */
+    public Map<String, Object> productDetails(Product product, Store store) {
+        return enrich(product, store, variants.findByProductIdIn(List.of(product.getProductId())),
+                images.findByProductId(product.getProductId()));
+    }
+
+    private static Map<String, Object> enrich(Product product, Store store,
+                                              List<ProductVariant> productVariants, List<ProductImage> productImages) {
+        Map<String, Object> row = toPublicProduct(product, store);
+        List<String> gallery = productImages.stream()
+                .sorted(Comparator.comparing(ProductImage::isPrimaryImage).reversed()
+                        .thenComparing(i -> i.getSortOrder() == null ? Integer.MAX_VALUE : i.getSortOrder())
+                        .thenComparing(ProductImage::getImageId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(ProductImage::getImageUrl).filter(Objects::nonNull).filter(url -> !url.isBlank()).distinct().toList();
+        if (gallery.isEmpty() && product.getImageRefs() != null) {
+            gallery = java.util.stream.Stream.concat(java.util.stream.Stream.of(firstImage(product.getImageRefs())),
+                            product.getImageRefs().values().stream()).filter(Objects::nonNull)
+                    .map(Object::toString).filter(url -> !url.isBlank()).distinct().toList();
+        }
+        String mainImage = gallery.isEmpty() ? null : gallery.getFirst();
+        List<Map<String, Object>> variantRows = productVariants.stream()
+                .sorted(Comparator.comparing(ProductVariant::getSku, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(v -> {
+                    Map<String, Object> variant = new LinkedHashMap<>();
+                    boolean active = v.getStatus() == ProductVariantStatus.ACTIVE;
+                    variant.put("id", v.getVariantId());
+                    variant.put("sku", v.getSku());
+                    variant.put("name", java.util.stream.Stream.of(v.getColor(), v.getSize())
+                            .filter(Objects::nonNull).filter(s -> !s.isBlank()).collect(Collectors.joining(" / ")));
+                    Map<String, String> attributes = new LinkedHashMap<>();
+                    if (v.getSize() != null) attributes.put("size", v.getSize());
+                    if (v.getColor() != null) attributes.put("color", v.getColor());
+                    variant.put("attributes", attributes);
+                    variant.put("size", v.getSize());
+                    variant.put("color", v.getColor());
+                    variant.put("price", v.getPriceVnd());
+                    variant.put("stockQuantity", active && v.getStockQuantity() != null ? Math.max(0, v.getStockQuantity()) : 0);
+                    variant.put("isActive", active);
+                    variant.put("imageUrl", mainImage);
+                    return variant;
+                }).toList();
+        long stock = variantRows.stream().mapToLong(v -> ((Number) v.get("stockQuantity")).longValue()).sum();
+        if (productVariants.isEmpty() && product.getSizesStock() != null) {
+            stock = product.getSizesStock().values().stream().filter(Number.class::isInstance)
+                    .mapToLong(v -> Math.max(0, ((Number) v).longValue())).sum();
+        }
+        boolean active = product.getStatus() == ProductStatus.ACTIVE;
+        row.put("sku", product.getProductId());
+        row.put("images", gallery);
+        row.put("imageUrl", mainImage);
+        row.put("variants", variantRows);
+        row.put("stockQuantity", stock);
+        row.put("isActive", active);
+        row.put("canPurchase", active && stock > 0 && store != null && store.getApprovalStatus() == StoreStatus.APPROVED);
+        row.put("material", product.getMaterial());
+        row.put("sizeGuide", product.getSizeGuide());
+        return row;
     }
 
     /** Gian hàng đã duyệt (marketplace), kèm rating. */
     @Cacheable(CacheNames.PUBLIC_STORES)
     public List<Map<String, Object>> approvedStores() {
+        Map<String, List<Product>> byStore = products.findAll().stream()
+                .filter(p -> p.getStoreId() != null && (p.getStatus() == ProductStatus.ACTIVE || p.getStatus() == ProductStatus.OUT_OF_STOCK))
+                .collect(Collectors.groupingBy(Product::getStoreId));
         return stores.findAll().stream()
                 .filter(s -> s.getApprovalStatus() == StoreStatus.APPROVED)
-                .map(PublicCatalogService::toPublicStore)
+                .map(s -> {
+                    Map<String, Object> row = toPublicStore(s);
+                    List<Product> catalog = byStore.getOrDefault(s.getStoreId(), List.of());
+                    row.put("productCount", catalog.size());
+                    row.put("totalProducts", catalog.size());
+                    row.put("categories", catalog.stream().map(Product::getCategory).filter(Objects::nonNull).distinct().sorted().toList());
+                    return row;
+                })
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
@@ -92,10 +177,7 @@ public class PublicCatalogService {
         row.put("attributes", p.getAttributes());
         row.put("createdAt", p.getCreatedAt());
         if (store != null) {
-            Map<String, Object> storeInfo = new LinkedHashMap<>();
-            storeInfo.put("id", store.getStoreId());
-            storeInfo.put("name", store.getName());
-            storeInfo.put("logoUrl", store.getLogoRef());
+            Map<String, Object> storeInfo = toPublicStore(store);
             row.put("store", storeInfo);
         }
         return row;
@@ -105,12 +187,18 @@ public class PublicCatalogService {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("id", store.getStoreId());
         row.put("storeId", store.getStoreId());
+        row.put("slug", store.getStoreId());
         row.put("name", store.getName());
         row.put("description", store.getDescription());
         row.put("logoUrl", store.getLogoRef());
         row.put("approvalStatus", store.getApprovalStatus());
         row.put("ratingAverage", store.getRatingAverage());
         row.put("ratingCount", store.getRatingCount());
+        row.put("rating", store.getRatingAverage());
+        row.put("reviewCount", store.getRatingCount() == null ? 0L : store.getRatingCount());
+        row.put("isVerified", store.getApprovalStatus() == StoreStatus.APPROVED);
+        row.put("isActive", store.getApprovalStatus() == StoreStatus.APPROVED);
+        row.put("followerCount", 0);
         return row;
     }
 

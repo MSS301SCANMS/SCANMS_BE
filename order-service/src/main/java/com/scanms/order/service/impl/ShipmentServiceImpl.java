@@ -66,7 +66,7 @@ public class ShipmentServiceImpl implements ShipmentService {
         if (trackingCode != null && !trackingCode.isBlank()) shipment.setTrackingCode(trackingCode);
 
         Instant nowInstant = Instant.now();
-        LocalDateTime nowLocal = LocalDateTime.now();
+        LocalDateTime nowLocal = LocalDateTime.now(java.time.ZoneOffset.UTC);
 
         if (status == ShipmentStatus.SHIPPED) {
             shipment.setShippedAt(nowInstant);
@@ -78,13 +78,15 @@ public class ShipmentServiceImpl implements ShipmentService {
             shipment.setFailedAt(nowInstant);
             shipment.setFailureReason(failureReason);
         } else if (status == ShipmentStatus.DELIVERED) {
-            shipment.setDeliveredAt(nowInstant);
+            if (shipment.getDeliveredAt() == null) shipment.setDeliveredAt(nowInstant);
 
             // Crucial: Update SellerOrder and compute 14-day return deadline!
             sellerOrderRepository.findById(shipment.getSellerOrderId()).ifPresent(so -> {
-                so.setStatus(SellerOrderStatus.DELIVERED);
-                so.setDeliveredAt(nowLocal);
-                so.setReturnDeadline(nowLocal.plusDays(14));
+                if (so.getStatus() != SellerOrderStatus.COMPLETED) so.setStatus(SellerOrderStatus.DELIVERED);
+                if (so.getDeliveredAt() == null) {
+                    so.setDeliveredAt(nowLocal);
+                    so.setReturnDeadline(nowLocal.plusDays(14));
+                }
                 sellerOrderRepository.save(so);
                 log.info("SellerOrder {} marked DELIVERED, return deadline set to: {}",
                         so.getSellerOrderId(), so.getReturnDeadline());
