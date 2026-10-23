@@ -9,10 +9,6 @@ public interface AuthService {
     void register(RegisterRequest request);
     AuthResponse login(LoginRequest request);
     AuthResponse googleLogin(GoogleLoginRequest request);
-    void removeRoleFromUser(String userId, String roleName);
-    void grantShopOwnerRole(String userId);
-    void grantKolRole(String userId);
-    void createNewRole(String roleName);
     void changePassword(String oldPassword, String newPassword);
     void logout(String refreshToken);
     AuthResponse refreshToken(String refreshToken);

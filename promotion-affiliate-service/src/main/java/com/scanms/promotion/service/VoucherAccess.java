@@ -33,7 +33,7 @@ public class VoucherAccess {
     }
 
     public String userId() {
-        var user = result(userUrl + "/api/v1/users/me");
+        var user = result(userUrl + "/api/v1/users");
         if (!"ACTIVE".equals(user.get("status")) || !jwt().getSubject().equals(user.get("identitySubject")))
             throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
         return user.get("userId").toString();

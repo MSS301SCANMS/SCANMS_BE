@@ -28,7 +28,7 @@ public class KolRoleGranter {
     public void grant(String userId) {
         try {
             http.post()
-                    .uri(userUrl + "/api/v1/auth/" + userId + "/roles/kol-ctv")
+                    .uri(userUrl + "/api/v1/roles/" + userId + "/kol-ctv")
                     .headers(headers -> headers.setBearerAuth(access.bearerToken()))
                     .body(Map.of())
                     .retrieve()

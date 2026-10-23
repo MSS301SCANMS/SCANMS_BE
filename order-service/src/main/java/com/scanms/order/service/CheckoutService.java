@@ -64,7 +64,7 @@ public class CheckoutService {
     }
     @SuppressWarnings("unchecked") public Map<String,Object> checkout(Input input,Jwt jwt) {
         if(!Set.of("PAYOS","WALLET","COD").contains(input.paymentMethod())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported payment method");
-        Map<String,Object> user=result(http.get().uri(userUrl+"/api/v1/users/me").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class));
+        Map<String,Object> user=result(http.get().uri(userUrl+"/api/v1/users").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class));
         if(!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject"))) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Active customer profile required");
         String customer=user.get("userId").toString(), serialized=tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(input);
         String token=serviceToken();
@@ -130,7 +130,7 @@ public class CheckoutService {
     }
     public record QuoteInput(@NotEmpty @Size(max=100) List<@Valid Line> items,@Size(max=100) String couponCode) {}
     @SuppressWarnings("unchecked") public Map<String,Object> quote(QuoteInput input,Jwt jwt) {
-        Map<String,Object> user=result(http.get().uri(userUrl+"/api/v1/users/me").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class));
+        Map<String,Object> user=result(http.get().uri(userUrl+"/api/v1/users").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class));
         if(!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject"))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         String token=serviceToken(); List<Map<String,Object>> lines=(List<Map<String,Object>>)post(productUrl+"/api/v1/inventory/reservations/quote",token,Map.of("items",input.items())).get("lines");
         long gross=0; for(var line:lines) gross=Math.addExact(gross,number(line,"grossAmountVnd"));

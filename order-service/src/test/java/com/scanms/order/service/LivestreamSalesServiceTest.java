@@ -46,7 +46,7 @@ class LivestreamSalesServiceTest {
     private void expectSources(String ownerId) {
         server.expect(once(), requestTo("http://product.test/api/v1/livestreams/live-1"))
                 .andRespond(withSuccess("{\"result\":{\"storeId\":\"store-1\"}}", MediaType.APPLICATION_JSON));
-        server.expect(once(), requestTo("http://user.test/api/v1/users/me"))
+        server.expect(once(), requestTo("http://user.test/api/v1/users"))
                 .andRespond(withSuccess("{\"result\":{\"status\":\"ACTIVE\",\"identitySubject\":\"subject-1\",\"userId\":\"owner-1\"}}", MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo("http://product.test/api/v1/stores/store-1"))
                 .andRespond(withSuccess("{\"result\":{\"storeId\":\"store-1\",\"ownerUserId\":\"" + ownerId + "\"}}", MediaType.APPLICATION_JSON));
@@ -84,7 +84,7 @@ class LivestreamSalesServiceTest {
     }
 
     @Test void tokenWithoutUserProfileCannotReadStoreRevenue() {
-        server.expect(once(), requestTo("http://user.test/api/v1/users/me"))
+        server.expect(once(), requestTo("http://user.test/api/v1/users"))
                 .andRespond(withBadRequest());
 
         var exception = assertThrows(ResponseStatusException.class,
@@ -96,7 +96,7 @@ class LivestreamSalesServiceTest {
     }
 
     @Test void storeSummaryCountsOrdersButOnlyPaidItemsAsRevenue() {
-        server.expect(once(), requestTo("http://user.test/api/v1/users/me"))
+        server.expect(once(), requestTo("http://user.test/api/v1/users"))
                 .andRespond(withSuccess("{\"result\":{\"status\":\"ACTIVE\",\"identitySubject\":\"subject-1\",\"userId\":\"owner-1\"}}", MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo("http://product.test/api/v1/stores/store-1"))
                 .andRespond(withSuccess("{\"result\":{\"storeId\":\"store-1\",\"ownerUserId\":\"owner-1\"}}", MediaType.APPLICATION_JSON));

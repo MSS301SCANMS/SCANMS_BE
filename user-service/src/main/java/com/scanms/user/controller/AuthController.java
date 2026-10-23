@@ -15,7 +15,6 @@ import com.scanms.user.service.AuthService;
 import com.scanms.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,33 +48,6 @@ public class AuthController {
         return withRefreshCookie(service.googleLogin(request));
     }
 
-    @DeleteMapping("/{userId}/roles")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<String> removeRole(
-            @PathVariable String userId,
-            @RequestParam String roleName) {
-
-        service.removeRoleFromUser(userId, roleName);
-        return ApiResponse.success("Đã thu hồi role của user!");
-    }
-    @PostMapping("/{userId}/roles/shop-owner")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ApiResponse<String> grantShopOwnerRole(@PathVariable String userId) {
-        service.grantShopOwnerRole(userId);
-        return ApiResponse.success("SHOP_OWNER role granted");
-    }
-    @PostMapping("/{userId}/roles/kol-ctv")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ApiResponse<String> grantKolRole(@PathVariable String userId) {
-        service.grantKolRole(userId);
-        return ApiResponse.success("KOL_CTV role granted");
-    }
-    @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<String> createRole(@RequestParam @NotBlank String roleName) {
-        service.createNewRole(roleName);
-        return ApiResponse.success("Tạo role mới thành công trên Keycloak!");
-    }
     @PostMapping("/change-password")
     public ApiResponse<String> changePassword(
             @RequestParam String oldPassword,

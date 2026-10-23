@@ -23,7 +23,7 @@ public class ShopRoleGranter {
             var factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
             factory.setReadTimeout(Duration.ofSeconds(10));
             RestClient.builder().requestFactory(factory).build().post()
-                    .uri(userUrl + "/api/v1/auth/" + userId + "/roles/shop-owner")
+                    .uri(userUrl + "/api/v1/roles/" + userId + "/shop-owner")
                     .headers(headers -> headers.setBearerAuth(access.bearerToken()))
                     .body(Map.of()).retrieve().toBodilessEntity();
         } catch (RestClientException ex) {

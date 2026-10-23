@@ -34,7 +34,7 @@ public class ProductAccess {
             var factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
             factory.setReadTimeout(Duration.ofSeconds(10));
             Map<?, ?> response = RestClient.builder().requestFactory(factory).build().get()
-                    .uri(userUrl + "/api/v1/users/me")
+                    .uri(userUrl + "/api/v1/users")
                     .headers(headers -> headers.setBearerAuth(jwt.getTokenValue()))
                     .retrieve().body(Map.class);
             if (response != null && response.get("result") instanceof Map<?, ?> user

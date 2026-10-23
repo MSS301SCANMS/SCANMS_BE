@@ -91,7 +91,7 @@ public class LivestreamSalesService {
     }
 
     private void requireStoreAccess(String storeId, Jwt jwt) {
-        Map<?, ?> user = read(userUrl + "/api/v1/users/me", null, jwt);
+        Map<?, ?> user = read(userUrl + "/api/v1/users", null, jwt);
         if (!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Active user profile required");
         Map<?, ?> store = read(productUrl + "/api/v1/stores/{id}", storeId, jwt);

@@ -60,7 +60,7 @@ class CheckoutIntegrationTest {
         try {
             var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
             server.createContext("/token",exchange -> { byte[] body="{\"access_token\":\"order-service-token\"}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
-            server.createContext("/user/api/v1/users/me",exchange -> { byte[] body="{\"result\":{\"userId\":\"customer\",\"identitySubject\":\"identity\",\"status\":\"ACTIVE\"}}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            server.createContext("/user/api/v1/users",exchange -> { byte[] body="{\"result\":{\"userId\":\"customer\",\"identitySubject\":\"identity\",\"status\":\"ACTIVE\"}}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             server.createContext("/product/api/v1/inventory/reservations",exchange -> {
                 reserves.incrementAndGet(); boolean fail=failNext.getAndSet(false);
                 int status=fail?503:"Bearer order-service-token".equals(exchange.getRequestHeaders().getFirst("Authorization"))?200:403;

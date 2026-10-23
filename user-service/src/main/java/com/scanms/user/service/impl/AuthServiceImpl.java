@@ -12,6 +12,7 @@ import com.scanms.user.exception.ErrorCode;
 import com.scanms.user.repository.RoleRepository;
 import com.scanms.user.repository.UserRepository;
 import com.scanms.user.service.AuthService;
+import com.scanms.user.service.KeycloakTokenService;
 import com.scanms.user.service.MailService;
 import com.scanms.user.service.OtpService;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +54,7 @@ public class AuthServiceImpl implements AuthService {
     private final RoleRepository roleRepository;
     private final OtpService otpService;
     private final MailService mailService;
+    private final KeycloakTokenService keycloakTokenService;
     @Value("${keycloak.auth-server-url}")
     private String serverUrl;
 
@@ -75,7 +77,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void register(RegisterRequest request) {
         // Bước A: Lấy Admin Token để có quyền gọi API tạo user
-        String adminToken = getAdminAccessToken();
+        String adminToken = keycloakTokenService.getAdminAccessToken();
 
         // Bước B: Chuẩn bị dữ liệu tạo user gửi sang Keycloak
         String createUserUrl = serverUrl + "/admin/realms/" + realm + "/users";
@@ -262,7 +264,7 @@ public class AuthServiceImpl implements AuthService {
 
         // 3. Tao user tren Keycloak (ap dung cho ca user hoan toan moi, lan user bi "mo coi" o buoc tren)
         try {
-            String adminToken = getAdminAccessToken();
+            String adminToken = keycloakTokenService.getAdminAccessToken();
             String tempPassword = UUID.randomUUID().toString();
 
             String createUserUrl = serverUrl + "/admin/realms/" + realm + "/users";
@@ -341,7 +343,7 @@ public class AuthServiceImpl implements AuthService {
      * Lấy token cho user thông qua Keycloak Token Exchange (impersonation)
      */
     private AuthResponse getTokenForUser(String userId) {
-        String adminToken = getAdminAccessToken();
+        String adminToken = keycloakTokenService.getAdminAccessToken();
         String tokenUrl = serverUrl + "/realms/" + realm + "/protocol/openid-connect/token";
 
         HttpHeaders headers = new HttpHeaders();
@@ -424,7 +426,7 @@ public class AuthServiceImpl implements AuthService {
         User user = repository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Email chưa đăng ký tài khoản nào"));
 
-        String adminToken = getAdminAccessToken();
+        String adminToken = keycloakTokenService.getAdminAccessToken();
         String resetPasswordUrl = serverUrl + "/admin/realms/" + realm + "/users/" + user.getIdentitySubject() + "/reset-password";
 
         HttpHeaders headers = new HttpHeaders();
@@ -455,22 +457,6 @@ public class AuthServiceImpl implements AuthService {
         if (raw == null) return null;
         String cleaned = raw.trim().replaceAll("[^\\p{L}\\p{M}\\s'\\-.]", "").trim();
         return cleaned.isEmpty() ? null : cleaned;
-    }
-
-    private String getAdminAccessToken() {
-        String tokenUrl = serverUrl + "/realms/" + realm + "/protocol/openid-connect/token";
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("client_id", clientId);
-        body.add("client_secret", clientSecret);
-        body.add("grant_type", "client_credentials");
-
-        HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(body, headers);
-        ResponseEntity<Map> response = restTemplate.postForEntity(tokenUrl, entity, Map.class);
-
-        return (String) response.getBody().get("access_token");
     }
 
     /**
@@ -509,110 +495,6 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             System.err.println("Không thể gán role [" + roleName + "] cho user trên Keycloak: " + e.getMessage());
         }
-    }
-    @Override
-    @Transactional
-    public void grantShopOwnerRole(String userId) {
-        User user = repository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "User not found"));
-        if (user.getStatus() != UserStatus.ACTIVE)
-            throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
-        Role role = roleRepository.findAllByNameIn(List.of(RoleName.SHOP_OWNER)).stream().findFirst()
-                .orElseThrow(() -> new AppException(ErrorCode.CONFLICT, "SHOP_OWNER role is not initialized"));
-        try {
-            String adminToken = getAdminAccessToken();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(adminToken);
-            String base = serverUrl + "/admin/realms/" + realm;
-            Map<?, ?> keycloakRole = restTemplate.exchange(base + "/roles/SHOP_OWNER", HttpMethod.GET,
-                    new HttpEntity<>(headers), Map.class).getBody();
-            if (keycloakRole == null || keycloakRole.get("id") == null)
-                throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "SHOP_OWNER role is missing in Keycloak");
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            restTemplate.postForEntity(base + "/users/" + user.getIdentitySubject() + "/role-mappings/realm",
-                    new HttpEntity<>(List.of(keycloakRole), headers), Void.class);
-            user.getRoles().add(role);
-            repository.save(user);
-        } catch (RestClientException ex) {
-            throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "Cannot grant SHOP_OWNER role in Keycloak");
-        }
-    }
-
-    @Transactional
-    @Override
-    public void grantKolRole(String userId) {
-        User user = repository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "User not found"));
-        if (user.getStatus() != UserStatus.ACTIVE)
-            throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
-        Role role = roleRepository.findAllByNameIn(List.of(RoleName.KOL_CTV)).stream().findFirst()
-                .orElseThrow(() -> new AppException(ErrorCode.CONFLICT, "KOL_CTV role is not initialized"));
-        try {
-            String adminToken = getAdminAccessToken();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(adminToken);
-            String base = serverUrl + "/admin/realms/" + realm;
-            Map<?, ?> keycloakRole = restTemplate.exchange(base + "/roles/KOL_CTV", HttpMethod.GET,
-                    new HttpEntity<>(headers), Map.class).getBody();
-            if (keycloakRole == null || keycloakRole.get("id") == null)
-                throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "KOL_CTV role is missing in Keycloak");
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            restTemplate.postForEntity(base + "/users/" + user.getIdentitySubject() + "/role-mappings/realm",
-                    new HttpEntity<>(List.of(keycloakRole), headers), Void.class);
-            user.getRoles().add(role);
-            repository.save(user);
-        } catch (RestClientException ex) {
-            throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "Cannot grant KOL_CTV role in Keycloak");
-        }
-    }
-    @Override
-    public void removeRoleFromUser(String userId, String roleName) {
-        String adminToken = getAdminAccessToken();
-
-        try {
-            // 1. Lấy thông tin role
-            String getRoleUrl = serverUrl + "/admin/realms/" + realm + "/roles/" + roleName;
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(adminToken);
-
-            ResponseEntity<Map> roleResponse = restTemplate.exchange(
-                    getRoleUrl, HttpMethod.GET, new HttpEntity<>(headers), Map.class
-            );
-
-            if (roleResponse.getBody() != null) {
-                Map<String, Object> roleData = roleResponse.getBody();
-
-                // 2. Đường dẫn DELETE mapping role của Keycloak
-                String removeRoleUrl = serverUrl + "/admin/realms/" + realm + "/users/" + userId + "/role-mappings/realm";
-                headers.setContentType(MediaType.APPLICATION_JSON);
-
-                List<Map<String, Object>> rolePayload = List.of(roleData);
-
-                // Dùng HttpEntity kết hợp HttpMethod.DELETE vì RestTemplate không hỗ trợ trực tiếp body trong delete()
-                HttpEntity<List<Map<String, Object>>> requestEntity = new HttpEntity<>(rolePayload, headers);
-                restTemplate.exchange(removeRoleUrl, HttpMethod.DELETE, requestEntity, Void.class);
-            }
-        } catch (Exception e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Xóa role thất bại: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public void createNewRole(String roleName) {
-        String adminToken = getAdminAccessToken();
-        String createRoleUrl = serverUrl + "/admin/realms/" + realm + "/roles";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
-
-        Map<String, Object> rolePayload = Map.of(
-                "name", roleName,
-                "description", "Created via Admin API"
-        );
-
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(rolePayload, headers);
-        restTemplate.postForEntity(createRoleUrl, entity, Void.class);
     }
     @Override
     public void changePassword(String oldPassword, String newPassword) {

@@ -46,7 +46,7 @@ public class PaymentAccess {
         return value;
     }
     public String userId() {
-        Map<String,Object> user=get(userUrl+"/api/v1/users/me");
+        Map<String,Object> user=get(userUrl+"/api/v1/users");
         String id=Objects.toString(user.get("userId"),"");
         if(id.isBlank() || !"ACTIVE".equals(user.get("status"))) throw new AppException(ErrorCode.FORBIDDEN,"User profile is not active");
         if(user.get("identitySubject")!=null && SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken auth

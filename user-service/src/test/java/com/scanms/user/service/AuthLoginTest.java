@@ -19,7 +19,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class AuthLoginTest {
     AuthServiceImpl service; MockRestServiceServer server;
     @BeforeEach void setup() {
-        service=new AuthServiceImpl(mock(UserRepository.class),mock(RoleRepository.class),mock(OtpService.class),mock(MailService.class));
+        service=new AuthServiceImpl(mock(UserRepository.class),mock(RoleRepository.class),mock(OtpService.class),mock(MailService.class),mock(KeycloakTokenService.class));
         ReflectionTestUtils.setField(service,"serverUrl","https://identity.example.test"); ReflectionTestUtils.setField(service,"realm","fixture");
         ReflectionTestUtils.setField(service,"clientId","fixture-client"); ReflectionTestUtils.setField(service,"clientSecret","fixture-secret");
         server=MockRestServiceServer.createServer((RestTemplate)ReflectionTestUtils.getField(service,"restTemplate"));

@@ -6,7 +6,7 @@ import com.scanms.user.entity.Role;
 import com.scanms.user.entity.User;
 import com.scanms.user.repository.RoleRepository;
 import com.scanms.user.repository.UserRepository;
-import com.scanms.user.service.impl.AuthServiceImpl;
+import com.scanms.user.service.impl.RoleServiceImpl;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -26,15 +26,13 @@ class KolRoleGrantTest {
     @Test void grantsRealmRoleUsingIdentitySubjectAndUpdatesLocalRoles() {
         var users = mock(UserRepository.class);
         var roles = mock(RoleRepository.class);
-        var service = new AuthServiceImpl(users, roles, mock(OtpService.class), mock(MailService.class));
+        var keycloakTokenService = mock(KeycloakTokenService.class);
+        when(keycloakTokenService.getAdminAccessToken()).thenReturn("admin-token");
+        var service = new RoleServiceImpl(users, roles, keycloakTokenService);
         ReflectionTestUtils.setField(service, "serverUrl", "http://keycloak.test");
         ReflectionTestUtils.setField(service, "realm", "scanms");
-        ReflectionTestUtils.setField(service, "clientId", "scanms-client");
-        ReflectionTestUtils.setField(service, "clientSecret", "test-secret");
         var rest = (RestTemplate) ReflectionTestUtils.getField(service, "restTemplate");
         var server = MockRestServiceServer.createServer(rest);
-        server.expect(requestTo("http://keycloak.test/realms/scanms/protocol/openid-connect/token"))
-                .andRespond(withSuccess("{\"access_token\":\"admin-token\"}", MediaType.APPLICATION_JSON));
         server.expect(requestTo("http://keycloak.test/admin/realms/scanms/roles/KOL_CTV"))
                 .andRespond(withSuccess("{\"id\":\"role-id\",\"name\":\"KOL_CTV\"}", MediaType.APPLICATION_JSON));
         server.expect(requestTo("http://keycloak.test/admin/realms/scanms/users/keycloak-sub/role-mappings/realm"))
