@@ -35,6 +35,8 @@ Ví FROZEN chặn khoản trừ mới/HOLD nhưng cho phép nhận credit, RELEA
 
 ## Ví khách hàng trên môi trường local
 
+Ngày 22/10/2026 đã bật nạp thử trong cấu hình riêng `payment-service/.env`: `PAYMENT_SANDBOX_ENABLED=true`, `spring.profiles.active=local`, `AUTOMATIC_PAYOUTS=false`. File này không commit. Người dùng mở `/customer/wallet`, chọn **Sandbox (Demo)**, chọn số tiền rồi bấm **Nạp tiền (Demo)**; tiền thử dùng được cho luồng mua hàng trên local. Đã kiểm tra qua UI/API thật với ví QA: 2.000.000 → 2.100.000 VND, ghi đúng một giao dịch TOPUP_DEMO, tải lại vẫn đúng số dư và retry không cộng thêm. Không nạp tiền vào tài khoản cá nhân trong bài kiểm tra. Production vẫn bị chặn bởi kiểm tra profile ở backend.
+
 Frontend dùng `VITE_COMMERCE_BACKEND=spring`, `VITE_FINANCE_API_URL=http://localhost:8080/api/v1/finance`, `VITE_CHECKOUT_API_URL=http://localhost:8080/api/v1` và để trống `VITE_SOCKET_URL`. Không trỏ các biến này tới backend cũ ở 3000/3302.
 
 Sandbox chỉ bật khi đồng thời có profile `local` và `PAYMENT_SANDBOX_ENABLED=true`; profile `prod`/`production` luôn chặn. Trong file `payment-service/.env`, dùng `spring.profiles.active=local` để chọn profile; khi export biến môi trường hệ thống, dùng `SPRING_PROFILES_ACTIVE=local`. Mặc định Sandbox tắt. Đặt `AUTOMATIC_PAYOUTS=false` khi thử local.
@@ -54,7 +56,7 @@ Contract nguồn ở Order/Affiliate gọi trực tiếp giữa service, không 
 
 ## Ranh giới và kiểm chứng
 
-Payment không tạo sản phẩm, trừ tồn kho, áp voucher hay tự tính chính sách hoa hồng. Skeleton Order hiện chưa có API checkout nghiệp vụ tương thích payload giỏ hàng FE; Affiliate chưa tự tạo/finalize commission từ shipment/partial return. Đây là phần Thắng/Nam/Thịnh phải nối. Module nhận Order UUID và dữ liệu đã xác nhận; checkout FE đã chuyển phần thanh toán sang finance API khi source trả Order UUID, báo rõ lỗi nếu chưa có UUID. Không dùng mã đơn hiển thị thay UUID, không lấy tổng tiền từ FE.
+Payment kh?ng t?o s?n ph?m ho?c t? t?nh t?n kho. Checkout nghi?p v? hi?n c? ? `POST /api/v1/checkout`: Order x?c minh ng??i mua, gi? t?n kho qua Product v? l?y ph?n b? voucher t? Affiliate, sau ?? l?u gi?, ph? ship v? ngu?n gi?i thi?u v?o ??n. Payment ??c s? ph?i tr? t? Order; v?/payOS th?nh c?ng ???c ??ng b? qua outbox. Hoa h?ng t? ngu?n gi?i thi?u ???c kh?i t?o PENDING; vi?c ch?t/ghi c? c?n ph? thu?c giao h?ng, c?a s? tr? h?ng v? ch?nh s?ch hoa h?ng ACTIVE. Kh?ng d?ng m? ??n hi?n th? thay UUID v? kh?ng l?y t?ng ti?n t? FE. H??ng d?n n?i payOS: [PAYOS-SETUP.md](PAYOS-SETUP.md).
 
 Kiểm thử dùng H2 PostgreSQL mode, bean giả lập contract/provider và MockMvc; kiểm tra khóa/retry/rollback, giữ/giải phóng, snapshot phí, chữ ký, mã hóa, lịch ngân hàng và quyền HTTP. Cần thử PostgreSQL thật và payOS được cấp quyền trước khi triển khai giao dịch thật. Bộ test toàn FE còn các test cũ phụ thuộc backend NestJS không có trong workspace và các assertion source đã cũ; xem báo cáo bàn giao ở thư mục workspace.
 

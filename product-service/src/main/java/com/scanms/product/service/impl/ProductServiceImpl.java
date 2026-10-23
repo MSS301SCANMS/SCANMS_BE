@@ -58,6 +58,7 @@ public class ProductServiceImpl implements ProductService {
         }
         if (request.description() != null) product.setDescription(request.description());
         if (request.material() != null) product.setMaterial(request.material());
+        if (request.category() != null) product.setCategory(request.category());
         if (request.attributes() != null) product.setAttributes(request.attributes());
         if (request.categoryId() != null) {
             if (!categories.findById(request.categoryId()).map(com.scanms.product.entity.ProductCategory::isActive).orElse(false))

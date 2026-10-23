@@ -5,6 +5,7 @@ import com.scanms.product.dto.response.FeedbackResponse;
 import java.util.*;
 
 public interface FeedbackService {
+    java.util.List<com.scanms.product.dto.response.FeedbackResponse> findMine(java.util.List<String> orderItemIds);
     FeedbackResponse create(CreateFeedbackRequest request);
     FeedbackResponse getById(String id);
     List<FeedbackResponse> findAll();

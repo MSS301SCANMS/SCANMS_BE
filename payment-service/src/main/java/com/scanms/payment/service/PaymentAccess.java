@@ -28,7 +28,19 @@ public class PaymentAccess {
         throw new AppException(ErrorCode.UNAUTHORIZED);
     }
     public Map<String, Object> get(String url) {
-        Map<?, ?> response = client.get().uri(url).headers(h -> h.setBearerAuth(token())).retrieve().body(Map.class);
+        Map<?, ?> response;
+        try {
+            response = client.get().uri(url).headers(h -> h.setBearerAuth(token())).retrieve().body(Map.class);
+        } catch (org.springframework.web.client.RestClientResponseException ex) {
+            // A rejected business command is a conflict, not a successful refund or a generic 500.
+            if (ex.getStatusCode().value()==409 || ex.getStatusCode().value()==422)
+                throw new AppException(ErrorCode.CONFLICT,"Order/return is not eligible for this financial operation");
+            if (ex.getStatusCode().value()==404) throw new AppException(ErrorCode.RESOURCE_NOT_FOUND);
+            if (ex.getStatusCode().value()==401 || ex.getStatusCode().value()==403) throw new AppException(ErrorCode.FORBIDDEN);
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,"Business source service unavailable");
+        } catch (org.springframework.web.client.RestClientException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,"Business source service unavailable");
+        }
         if (response == null || !(response.get("result") instanceof Map<?, ?> result)) throw new AppException(ErrorCode.CONFLICT, "Business contract unavailable");
         @SuppressWarnings("unchecked") Map<String,Object> value = (Map<String,Object>) result;
         return value;

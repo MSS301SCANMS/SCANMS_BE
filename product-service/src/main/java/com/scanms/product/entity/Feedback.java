@@ -22,6 +22,7 @@ public class Feedback {
     private String customerId;
     @Column(nullable = false)
     private Integer rating;
+    @Column(columnDefinition = "text")
     private String comment;
     @JdbcTypeCode(SqlTypes.JSON) @Column(columnDefinition = "jsonb")
     private List<String> imageRefs;

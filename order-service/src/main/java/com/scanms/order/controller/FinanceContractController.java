@@ -41,7 +41,7 @@ public class FinanceContractController {
         if(realm instanceof Map<?,?> map && map.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString()));
         Object resources=jwt.getClaim("resource_access");
         if(resources instanceof Map<?,?> map) map.values().forEach(v -> { if(v instanceof Map<?,?> m && m.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString())); });
-        if(!roles.contains("PAYMENT_INTERNAL") && !(operatorAllowed && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if(!roles.contains("PAYMENT_INTERNAL") && !(operatorAllowed && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER","ORDER_INTERNAL","AFFILIATE_INTERNAL")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
     private <T> T find(Class<T> type,String id,boolean lock) {
         T result=lock?em.find(type,id,LockModeType.PESSIMISTIC_WRITE):em.find(type,id);
@@ -76,11 +76,14 @@ public class FinanceContractController {
         return ApiResponse.success(Map.of("orderId", id, "status", order.getStatus(), "commissionsInitialized", initialized));
     }
     @GetMapping("/refund-basis/{id}") ApiResponse<Map<String,Object>> refundBasis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
-        trusted(jwt,true); ReturnRequest request=find(ReturnRequest.class,id,false);
+        Object realm=jwt.getClaim("realm_access");
+        boolean orderInternal=realm instanceof Map<?,?> roles && roles.get("roles") instanceof Collection<?> list && list.contains("ORDER_INTERNAL");
+        if(!orderInternal) trusted(jwt,true);
+        ReturnRequest request=find(ReturnRequest.class,id,false);
         OrderItem item=find(OrderItem.class,request.getOrderItemId(),true);
         em.refresh(request,LockModeType.PESSIMISTIC_WRITE);
         SellerOrder seller=find(SellerOrder.class,item.getSellerOrderId(),false); Order order=find(Order.class,seller.getOrderId(),false);
-        if(!Set.of(ReturnRequestStatus.APPROVED,ReturnRequestStatus.RECEIVED,ReturnRequestStatus.REFUND_PENDING,ReturnRequestStatus.REFUNDED).contains(request.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Return is not approved");
+        if(!Set.of(ReturnRequestStatus.RECEIVED,ReturnRequestStatus.REFUND_PENDING,ReturnRequestStatus.REFUNDED).contains(request.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Returned goods must be received before refund");
         if(order.getStatus()!=OrderStatus.PAID && order.getStatus()!=OrderStatus.PROCESSING && order.getStatus()!=OrderStatus.COMPLETED) throw new ResponseStatusException(HttpStatus.CONFLICT,"Order has not been paid");
         if(request.getRequestedAt()==null || seller.getReturnDeadline()==null || request.getRequestedAt().isAfter(seller.getReturnDeadline())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Return is outside the delivery return window");
         if(!"VND".equals(order.getCurrency())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Only VND refunds are supported");

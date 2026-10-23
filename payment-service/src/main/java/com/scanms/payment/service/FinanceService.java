@@ -224,7 +224,9 @@ public class FinanceService {
         return new PageView<>(result.stream().map(this::withdrawalView).toList(),result.getTotalElements(),page,size);
     }
     public WalletTransactionResponse refund(String id) {
-        access.trustedOnly();
+        // Order dispatcher may refund only this persisted, server-validated return.
+        // It does not gain access to arbitrary wallet adjustments or other commands.
+        if (!access.role("ORDER_INTERNAL")) access.trustedOnly();
         var previous=entries.findByIdempotencyKey("refund:"+id);
         if(previous.isPresent()) {
             var old=previous.get();
@@ -245,7 +247,8 @@ public class FinanceService {
         ownedWallet(entry.getWalletId()); return ledger.getById(entry.getTransactionId());
     }
     public WalletTransactionResponse commission(String id) {
-        access.trustedOnly(); Map<String,Object> source=access.get(promotionUrl+"/api/v1/finance/commission-basis/"+id);
+        if(!access.role("AFFILIATE_INTERNAL")) access.trustedOnly();
+        Map<String,Object> source=access.get(promotionUrl+"/api/v1/finance/commission-basis/"+id);
         long amount=number(source,"amountVnd"); Wallet wallet=ensureWallet(WalletOwnerType.COLLABORATOR,source.get("collaboratorId").toString());
         var result=post(wallet.getWalletId(),WalletTransactionType.KOL_COMMISSION,WalletTransactionDirection.CREDIT,amount,"COMMISSION",id,"commission:"+id);
         outbox.enqueue("commission:"+id,promotionUrl+"/api/v1/finance/commissions/"+id+"/credited",Map.of("transactionId",result.transactionId(),"amountVnd",amount));
@@ -255,7 +258,8 @@ public class FinanceService {
         return computeSettlement(sellerOrderId,false);
     }
     private SettlementView computeSettlement(String sellerOrderId,boolean reconcile) {
-        access.trustedOnly(); var old=settlements.lockBySellerOrderId(sellerOrderId);
+        if(!access.role("ORDER_INTERNAL")) access.trustedOnly();
+        var old=settlements.lockBySellerOrderId(sellerOrderId);
         if(!reconcile && old.isPresent() && old.get().getStatus()==SettlementStatus.PAID) return settlementView(old.get());
         Map<String,Object> source=access.get(orderUrl+"/api/v1/finance/settlement-basis/"+sellerOrderId);
         String storeId=source.get("storeId").toString();

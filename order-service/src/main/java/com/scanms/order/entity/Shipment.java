@@ -16,6 +16,8 @@ public class Shipment {
     private String sellerOrderId;
     private String carrier;
     private String trackingCode;
+    /** Server assigned. Legacy shipments are LIVE; only TEST may be simulated. */
+    private String environment;
     @Enumerated(EnumType.STRING) @Column(nullable = false)
     private ShipmentStatus status;
     private Instant shippedAt;

@@ -67,7 +67,7 @@ public class LivestreamController {
     ApiResponse<LivestreamResponse> respond(
             @PathVariable String id,
             @RequestBody RespondRequest request,
-                    org.springframework.security.oauth2.jwt.Jwt jwt) {
+                    @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.oauth2.jwt.Jwt jwt) {
         return ApiResponse.success(service.respondInvite(id, request.accepted(), jwt));
     }
 }

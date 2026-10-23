@@ -11,6 +11,10 @@ import org.springframework.security.access.AccessDeniedException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    ResponseEntity<ApiResponse<Void>> handleUnreadableRequest(org.springframework.http.converter.HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(400,"Dữ liệu gửi lên không đúng định dạng. Vui lòng kiểm tra và thử lại."));
+    }
 
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
     ResponseEntity<ApiResponse<Void>> handleMissingEndpoint(org.springframework.web.servlet.resource.NoResourceFoundException exception) {

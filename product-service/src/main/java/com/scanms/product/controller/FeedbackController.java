@@ -26,6 +26,11 @@ public class FeedbackController {
         return ApiResponse.success(service.getById(id));
     }
 
+    @GetMapping("/mine")
+    ApiResponse<List<FeedbackResponse>> mine(@RequestParam List<String> orderItemIds) {
+        return ApiResponse.success(service.findMine(orderItemIds));
+    }
+
     @GetMapping
     ApiResponse<List<FeedbackResponse>> findAll() {
         return ApiResponse.success(service.findAll());

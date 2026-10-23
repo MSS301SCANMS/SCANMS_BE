@@ -346,7 +346,8 @@ public class AuthServiceImpl implements AuthService {
         body.add("client_secret", clientSecret);
         body.add("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
         body.add("subject_token", adminToken);
-        body.add("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+        // Request both tokens so Google sessions can renew after the access token expires.
+        body.add("requested_token_type", "urn:ietf:params:oauth:token-type:refresh_token");
         body.add("requested_subject", userId);
 
         HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(body, headers);
