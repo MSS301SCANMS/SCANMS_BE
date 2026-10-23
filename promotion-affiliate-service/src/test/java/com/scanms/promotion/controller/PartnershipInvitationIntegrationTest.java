@@ -28,9 +28,11 @@ class PartnershipInvitationIntegrationTest {
     @Autowired PartnershipInvitationRepository invitations;
     @Autowired CollaboratorProfileRepository profiles;
     @Autowired ReferralLinkRepository links;
+    @Autowired FinanceContractController financeContracts;
     @MockitoBean VoucherAccess access;
     @MockitoBean CollaborationAccess catalog;
     @MockitoBean ReferralProductAccess products;
+    @MockitoBean LivestreamAttributionSource livestreams;
     @MockitoBean JwtDecoder decoder;
     MockMvc mvc;String kolId;
     @BeforeEach void setup() {
@@ -47,6 +49,55 @@ class PartnershipInvitationIntegrationTest {
         mvc.perform(post("/api/v1/referrals/invitations").with(jwt()).contentType(MediaType.APPLICATION_JSON).content(body()))
             .andExpect(status().isOk()).andExpect(jsonPath("$.result.status").value("PENDING"));
         return invitations.findAll().getFirst().getId();
+    }
+    @Test void sourceDispatchersCanCalculateButCannotAcknowledgeWalletCredits() {
+        for(String role:List.of("ORDER_INTERNAL","AFFILIATE_INTERNAL")) {
+            var token=Jwt.withTokenValue("source-token").header("alg","RS256").subject("source").claim("realm_access",Map.of("roles",List.of(role))).build();
+            assertDoesNotThrow(()->org.springframework.test.util.ReflectionTestUtils.invokeMethod(financeContracts,"trusted",token,true));
+            assertThrows(ResponseStatusException.class,()->org.springframework.test.util.ReflectionTestUtils.invokeMethod(financeContracts,"trusted",token,false));
+        }
+    }
+    @Test void livePurchasesAttributeOnlyTheAcceptedSingleHostAndReuseTheSameLink() throws Exception {
+        String id=create();when(access.userId()).thenReturn("kol-user");
+        mvc.perform(post("/api/v1/referrals/invitations/"+id+"/respond").with(jwt()).contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"ACCEPTED\"}")).andExpect(status().isOk());
+        var live=new HashMap<String,Object>(Map.of("storeId","store-1","status","LIVE","productRefs",Map.of("productIds",List.of("product-1")),
+            "collaboratorRefs",Map.of("collaboratorIds",List.of(kolId)),"participantRefs",Map.of("collaboratorResponses",Map.of(kolId,"ACCEPTED"))));
+        when(livestreams.session(eq("live-1"),anyString())).thenAnswer(call->live);
+        var internal=jwt().jwt(token->token.claim("realm_access",Map.of("roles",List.of("ORDER_INTERNAL"))));
+        String path="/api/v1/referrals/livestream-attribution/live-1";
+        mvc.perform(get(path).with(jwt()).param("productId","product-1")).andExpect(status().isForbidden());
+        for(int i=0;i<2;i++)mvc.perform(get(path).with(internal).param("productId","product-1")).andExpect(status().isOk()).andExpect(jsonPath("$.result.collaboratorId").value(kolId));
+        assertEquals(1,links.findAll().stream().filter(link->"live-1".equals(link.getLivestreamId())).count());
+        mvc.perform(get(path).with(internal).param("productId","wrong-product")).andExpect(status().isConflict());
+        live.put("participantRefs",Map.of("collaboratorResponses",Map.of(kolId,"PENDING")));
+        mvc.perform(get(path).with(internal).param("productId","product-1")).andExpect(status().isConflict());
+        live.put("status","ENDED");
+        mvc.perform(get(path).with(internal).param("productId","product-1")).andExpect(status().isConflict());
+    }
+    @Test void livestreamAccessRequiresAcceptedPartnershipAndExposesNoPrivateDocuments() throws Exception {
+        String id=create();
+        mvc.perform(get("/api/v1/referrals/livestream-access").with(jwt()).param("storeId","store-1").param("collaboratorId",kolId)).andExpect(status().isConflict());
+        when(access.userId()).thenReturn("kol-user");
+        mvc.perform(post("/api/v1/referrals/invitations/"+id+"/respond").with(jwt()).contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"ACCEPTED\"}")).andExpect(status().isOk());
+        when(access.userId()).thenReturn("shop-user");
+        mvc.perform(get("/api/v1/referrals/livestream-access").with(jwt()).param("storeId","store-1").param("collaboratorId",kolId))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.result.userId").value("kol-user"))
+            .andExpect(jsonPath("$.result.frontCardUrl").doesNotExist()).andExpect(jsonPath("$.result.bankAccountNumber").doesNotExist());
+        doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN)).when(access).requireStoreOwner("store-1");
+        when(access.userId()).thenReturn("stranger");
+        mvc.perform(get("/api/v1/referrals/livestream-access").with(jwt()).param("storeId","store-1").param("collaboratorId",kolId)).andExpect(status().isForbidden());
+    }
+    @Test void checkoutAttributionIsInternalAndBoundToAnActiveLinkAndItsProduct() throws Exception {
+        String id=create();when(access.userId()).thenReturn("kol-user");
+        mvc.perform(post("/api/v1/referrals/invitations/"+id+"/respond").with(jwt()).contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"ACCEPTED\"}")).andExpect(status().isOk());
+        String linkId=links.findAll().getFirst().getReferralLinkId();
+        mvc.perform(get("/api/v1/referrals/attribution/"+linkId).with(jwt()).param("productId","product-1")).andExpect(status().isForbidden());
+        var internal=jwt().jwt(token->token.claim("realm_access",Map.of("roles",List.of("ORDER_INTERNAL"))));
+        mvc.perform(get("/api/v1/referrals/attribution/"+linkId).with(internal).param("productId","product-1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.collaboratorId").value(kolId));
+        mvc.perform(get("/api/v1/referrals/attribution/"+linkId).with(internal).param("productId","wrong-product")).andExpect(status().isConflict());
+        var profile=profiles.findById(kolId).orElseThrow();profile.setApprovalStatus(CollaboratorStatus.SUSPENDED);profiles.saveAndFlush(profile);
+        mvc.perform(get("/api/v1/referrals/attribution/"+linkId).with(internal).param("productId","product-1")).andExpect(status().isConflict());
     }
     @Test void persistsAndReadsForBothOwnersWithoutLeakingKyc() throws Exception {
         String id=create();assertEquals(1,invitations.count());

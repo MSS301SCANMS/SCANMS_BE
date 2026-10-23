@@ -45,7 +45,7 @@ public class FinanceContractController {
         if(realm instanceof Map<?,?> map && map.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString()));
         Object resources=jwt.getClaim("resource_access");
         if(resources instanceof Map<?,?> map) map.values().forEach(v -> { if(v instanceof Map<?,?> m && m.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString())); });
-        if(!roles.contains("PAYMENT_INTERNAL") && !(operator && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if(!roles.contains("PAYMENT_INTERNAL") && !(operator && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER","ORDER_INTERNAL","AFFILIATE_INTERNAL")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
     private Commission find(String id) {
         Commission c=em.find(Commission.class,id,LockModeType.PESSIMISTIC_WRITE); if(c==null) throw new ResponseStatusException(HttpStatus.NOT_FOUND); return c;

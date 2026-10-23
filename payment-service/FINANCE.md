@@ -56,7 +56,7 @@ Contract nguồn ở Order/Affiliate gọi trực tiếp giữa service, không 
 
 ## Ranh giới và kiểm chứng
 
-Payment không tạo sản phẩm, trừ tồn kho, áp voucher hay tự tính chính sách hoa hồng. Skeleton Order hiện chưa có API checkout nghiệp vụ tương thích payload giỏ hàng FE; Affiliate chưa tự tạo/finalize commission từ shipment/partial return. Đây là phần Thắng/Nam/Thịnh phải nối. Module nhận Order UUID và dữ liệu đã xác nhận; checkout FE đã chuyển phần thanh toán sang finance API khi source trả Order UUID, báo rõ lỗi nếu chưa có UUID. Không dùng mã đơn hiển thị thay UUID, không lấy tổng tiền từ FE.
+Payment kh?ng t?o s?n ph?m ho?c t? t?nh t?n kho. Checkout nghi?p v? hi?n c? ? `POST /api/v1/checkout`: Order x?c minh ng??i mua, gi? t?n kho qua Product v? l?y ph?n b? voucher t? Affiliate, sau ?? l?u gi?, ph? ship v? ngu?n gi?i thi?u v?o ??n. Payment ??c s? ph?i tr? t? Order; v?/payOS th?nh c?ng ???c ??ng b? qua outbox. Hoa h?ng t? ngu?n gi?i thi?u ???c kh?i t?o PENDING; vi?c ch?t/ghi c? c?n ph? thu?c giao h?ng, c?a s? tr? h?ng v? ch?nh s?ch hoa h?ng ACTIVE. Kh?ng d?ng m? ??n hi?n th? thay UUID v? kh?ng l?y t?ng ti?n t? FE. H??ng d?n n?i payOS: [PAYOS-SETUP.md](PAYOS-SETUP.md).
 
 Kiểm thử dùng H2 PostgreSQL mode, bean giả lập contract/provider và MockMvc; kiểm tra khóa/retry/rollback, giữ/giải phóng, snapshot phí, chữ ký, mã hóa, lịch ngân hàng và quyền HTTP. Cần thử PostgreSQL thật và payOS được cấp quyền trước khi triển khai giao dịch thật. Bộ test toàn FE còn các test cũ phụ thuộc backend NestJS không có trong workspace và các assertion source đã cũ; xem báo cáo bàn giao ở thư mục workspace.
 
