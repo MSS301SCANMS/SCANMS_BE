@@ -8,6 +8,7 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -28,51 +29,117 @@ public class CommerceLifecycle {
     private final ReturnRequestRepository returns;
     private final CommerceAccess access;
     private final org.springframework.core.env.Environment environment;
-    @Value("${scanms.shipping.simulation-enabled:false}") private boolean simulationEnabled;
-    public record Dispatch(@NotBlank String environment,@Size(max=100) String carrier,@Size(max=100) String trackingCode) {}
-    public record ReturnInput(@NotBlank String orderItemId,@Min(1) int quantity,@NotBlank @Size(max=128) String idempotencyKey,
-        @NotBlank @Size(max=100) String reason,Map<String,Object> evidenceRefs) {}
-    private static void require(boolean ok,String message) { if(!ok) throw new ResponseStatusException(HttpStatus.CONFLICT,message); }
+    @Value("${scanms.shipping.simulation-enabled:false}")
+    private boolean simulationEnabled;
+
+    public record Dispatch(
+            @NotBlank
+            String environment,
+            @Size(max=100)
+            String carrier,
+            @Size(max=100)
+            String trackingCode
+    ) {}
+
+    public record ReturnInput(
+            @NotBlank
+            String orderItemId,
+            @Min(1)
+            int quantity,
+            @NotBlank
+            @Size(max=128)
+            String idempotencyKey,
+            @NotBlank
+            @Size(max=100)
+            String reason,
+            Map<String,Object> evidenceRefs
+    ) {}
+
+    private static void require(boolean ok,String message) {
+        if(!ok) throw new ResponseStatusException(HttpStatus.CONFLICT,message);
+    }
+
     private <T> T find(Class<T> type,String id,boolean lock) {
         T row=em.find(type,id,lock?LockModeType.PESSIMISTIC_WRITE:LockModeType.NONE);
-        if(row==null) throw new ResponseStatusException(HttpStatus.NOT_FOUND); return row;
+        if(row==null) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        return row;
     }
-    private Order parent(SellerOrder seller) { return find(Order.class,seller.getOrderId(),false); }
-    private void owner(Order order,Jwt jwt) { if(!Objects.equals(order.getCustomerId(),access.customer(jwt))) throw new ResponseStatusException(HttpStatus.NOT_FOUND); }
+
+    private Order parent(SellerOrder seller) {
+        return find(Order.class,seller.getOrderId(),false);
+    }
+
+    private void owner(Order order,Jwt jwt) {
+        if(!Objects.equals(order.getCustomerId(),access.customer(jwt)))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+    }
+
     private void read(SellerOrder seller,Jwt jwt) {
-        if(access.manager(jwt) || access.stores(jwt).contains(seller.getStoreId())) return;
+        if(access.manager(jwt) || access.stores(jwt).contains(seller.getStoreId()))
+            return;
         owner(parent(seller),jwt);
     }
-    private void paid(Order order) { require(Set.of(OrderStatus.PAID,OrderStatus.PROCESSING,OrderStatus.COMPLETED).contains(order.getStatus()),"Order must be paid before fulfillment"); }
+
+    private void paid(Order order) {
+        require(Set.of(OrderStatus.PAID,
+                OrderStatus.PROCESSING,
+                OrderStatus.COMPLETED)
+                        .contains(order.getStatus()),
+                "Order must be paid before fulfillment");
+    }
     private SellerOrder lockedSeller(String id) {
         SellerOrder row=find(SellerOrder.class,id,false);
         find(Order.class,row.getOrderId(),true);
-        em.refresh(row,LockModeType.PESSIMISTIC_WRITE); return row;
+        em.refresh(row,LockModeType.PESSIMISTIC_WRITE);
+        return row;
     }
+
     private void testMode(String environment) {
-        if(!simulationAvailable() || !"TEST".equals(environment)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Local shipping simulation is disabled for this shipment");
+        if(!simulationAvailable() || !"TEST".equals(environment))
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Local shipping simulation is disabled for this shipment"
+            );
     }
+
     private boolean simulationAvailable() {
-        return simulationEnabled && environment.acceptsProfiles(org.springframework.core.env.Profiles.of("local"))
-            && !environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod","production"));
+        return simulationEnabled && environment.acceptsProfiles(Profiles.of("local"))
+            && !environment.acceptsProfiles(Profiles.of("prod","production"));
     }
+
     public SellerOrder confirm(String id,Jwt jwt) {
         SellerOrder row=lockedSeller(id); access.shop(jwt,row.getStoreId()); paid(parent(row));
         if(Set.of(SellerOrderStatus.CONFIRMED,SellerOrderStatus.PROCESSING,SellerOrderStatus.SHIPPED,SellerOrderStatus.DELIVERED,SellerOrderStatus.COMPLETED).contains(row.getStatus())) return row;
         require(row.getStatus()==SellerOrderStatus.PENDING,"Order cannot be confirmed in its current status");
-        row.setStatus(SellerOrderStatus.CONFIRMED); return sellers.save(row);
+        row.setStatus(SellerOrderStatus.CONFIRMED);
+        return sellers.save(row);
     }
+
     public Map<String,Object> dispatch(String id,Dispatch input,Jwt jwt) {
         SellerOrder row=lockedSeller(id); access.shop(jwt,row.getStoreId()); Order order=parent(row); paid(order);
-        if(!Set.of("TEST","MANUAL").contains(input.environment())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Live carrier booking is not configured; use TEST or an existing MANUAL waybill");
-        if("TEST".equals(input.environment())) testMode("TEST");
+        if(!Set.of("TEST","MANUAL").contains(input.environment()))
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Live carrier booking is not configured; use TEST or an existing MANUAL waybill"
+            );
+        if("TEST".equals(input.environment()))
+            testMode("TEST");
+
         var previous=shipments.findBySellerOrderId(id);
         if(previous.isPresent()) {
             Shipment old=previous.get();
-            require(input.environment().equals(old.getEnvironment()) && ("TEST".equals(input.environment()) || Objects.equals(old.getTrackingCode(),input.trackingCode())),"This order already has a different shipment");
+            require(input.environment().equals(old.getEnvironment())
+                    && ("TEST".equals(input.environment())
+                    || Objects.equals(old.getTrackingCode(),input.trackingCode())),
+                    "This order already has a different shipment");
             return tracking(old);
         }
-        require(Set.of(SellerOrderStatus.PENDING,SellerOrderStatus.CONFIRMED,SellerOrderStatus.PROCESSING).contains(row.getStatus()),"Order cannot be dispatched in its current status");
+
+        require(Set.of(SellerOrderStatus.PENDING,
+                SellerOrderStatus.CONFIRMED,
+                SellerOrderStatus.PROCESSING).contains(row.getStatus()),
+                "Order cannot be dispatched in its current status");
+
         // Dispatch is an atomic shop confirmation plus handover; an unpaid order never gets a waybill.
         if("MANUAL".equals(input.environment()) && (input.carrier()==null || input.carrier().isBlank() || input.trackingCode()==null || input.trackingCode().isBlank()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Carrier and existing tracking code are required");
@@ -93,11 +160,13 @@ public class CommerceLifecycle {
         SellerOrder row=lockedSeller(id); read(row,jwt);
         Shipment shipment=shipments.findBySellerOrderId(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         testMode(shipment.getEnvironment()); paid(parent(row));
-        if(shipment.getStatus()==ShipmentStatus.DELIVERED) return tracking(shipment);
+        if(shipment.getStatus()==ShipmentStatus.DELIVERED)
+            return tracking(shipment);
         require(row.getStatus()==SellerOrderStatus.SHIPPED && Set.of(ShipmentStatus.SHIPPED,ShipmentStatus.IN_TRANSIT).contains(shipment.getStatus()),"Shipment cannot be simulated in its current status");
         shipment.setStatus(complete?ShipmentStatus.DELIVERED:ShipmentStatus.IN_TRANSIT);
         if(complete) deliver(row,shipment);
-        shipments.save(shipment); return tracking(shipment);
+        shipments.save(shipment);
+        return tracking(shipment);
     }
     public Map<String,Object> delivered(String id,Jwt jwt) {
         SellerOrder row=lockedSeller(id); access.shop(jwt,row.getStoreId()); paid(parent(row));

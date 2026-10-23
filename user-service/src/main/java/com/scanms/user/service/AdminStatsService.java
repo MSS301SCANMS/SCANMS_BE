@@ -20,12 +20,36 @@ public class AdminStatsService {
     @Transactional(readOnly = true)
     public AdminStatsResponse userStats() {
         return AdminStatsBuilder.build(new AdminStatsBuilder.Source() {
-            @Override public long total() { return users.count(); }
-            @Override public long countSince(LocalDateTime from) { return users.countByCreatedAtGreaterThanEqual(from); }
-            @Override public List<Object[]> countByStatus() { return users.countGroupByStatus(); }
-            @Override public List<Object[]> countPerHourSince(LocalDateTime from) { return users.countPerHourSince(from); }
-            @Override public List<Object[]> countPerDaySince(LocalDateTime from) { return users.countPerDaySince(from); }
-            @Override public List<Object[]> countPerMonthSince(LocalDateTime from) { return users.countPerMonthSince(from); }
+            @Override
+            public long total() {
+                return users.count();
+            }
+
+            @Override
+            public long countSince(LocalDateTime from) {
+                return users.countByCreatedAtGreaterThanEqual(from);
+            }
+
+            @Override
+            public List<Object[]> countByStatus() {
+                return users.countGroupByStatus();
+            }
+
+            @Override
+            public List<Object[]> countPerHourSince(LocalDateTime from) {
+                return users.countPerHourSince(from);
+            }
+
+            @Override
+            public List<Object[]> countPerDaySince(LocalDateTime from) {
+                return users.countPerDaySince(from);
+            }
+
+            @Override
+            public List<Object[]> countPerMonthSince(LocalDateTime from) {
+                return users.countPerMonthSince(from);
+            }
+
         });
     }
 }

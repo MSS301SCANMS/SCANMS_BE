@@ -20,7 +20,8 @@ public class UploadController {
     @PostMapping("/image")
     public ApiResponse<Map<String, Object>> uploadImage(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "folder", defaultValue = "scanms/images") String folder) throws IOException {
+            @RequestParam(value = "folder", defaultValue = "scanms/images") String folder)
+            throws IOException {
 
         if (file.isEmpty()) {
             throw new IllegalArgumentException("File khong duoc de trong");
@@ -55,7 +56,8 @@ public class UploadController {
     @PostMapping("/video")
     public ApiResponse<Map<String, Object>> uploadVideo(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "folder", defaultValue = "scanms/videos") String folder) throws IOException {
+            @RequestParam(value = "folder", defaultValue = "scanms/videos") String folder)
+            throws IOException {
 
         if (file.isEmpty()) {
             throw new IllegalArgumentException("File khong duoc de trong");

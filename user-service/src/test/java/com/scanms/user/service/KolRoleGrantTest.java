@@ -6,7 +6,7 @@ import com.scanms.user.entity.Role;
 import com.scanms.user.entity.User;
 import com.scanms.user.repository.RoleRepository;
 import com.scanms.user.repository.UserRepository;
-import com.scanms.user.service.impl.AuthServiceImpl;
+import com.scanms.user.service.impl.RoleServiceImpl;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -26,7 +26,7 @@ class KolRoleGrantTest {
     @Test void grantsRealmRoleUsingIdentitySubjectAndUpdatesLocalRoles() {
         var users = mock(UserRepository.class);
         var roles = mock(RoleRepository.class);
-        var service = new AuthServiceImpl(users, roles, mock(OtpService.class), mock(MailService.class));
+        var service = new RoleServiceImpl(users, roles);
         ReflectionTestUtils.setField(service, "serverUrl", "http://keycloak.test");
         ReflectionTestUtils.setField(service, "realm", "scanms");
         ReflectionTestUtils.setField(service, "clientId", "scanms-client");

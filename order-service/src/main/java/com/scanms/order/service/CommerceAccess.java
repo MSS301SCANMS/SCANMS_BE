@@ -12,7 +12,8 @@ import java.util.*;
 @Service @RequiredArgsConstructor
 public class CommerceAccess {
     private final ShopReturnAccess shops;
-    @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
+    @Value("${clients.user.url:http://localhost:8081}")
+    private String userUrl;
     public boolean role(Jwt jwt,String role) {
         if(jwt==null) return false;
         Object realm=jwt.getClaim("realm_access");
@@ -20,7 +21,10 @@ public class CommerceAccess {
         Object resources=jwt.getClaim("resource_access");
         return resources instanceof Map<?,?> m && m.values().stream().anyMatch(v -> v instanceof Map<?,?> r && r.get("roles") instanceof Collection<?> roles && roles.contains(role));
     }
-    public boolean manager(Jwt jwt) { return role(jwt,"MANAGER") || role(jwt,"ADMIN") || role(jwt,"SYSTEM_ADMIN") || role(jwt,"SYSTEM_MANAGER"); }
+    public boolean manager(Jwt jwt) {
+        return role(jwt,"MANAGER") || role(jwt,"ADMIN") || role(jwt,"SYSTEM_ADMIN") || role(jwt,"SYSTEM_MANAGER");
+    }
+
     public String customer(Jwt jwt) {
         if(jwt==null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         try {
@@ -33,10 +37,14 @@ public class CommerceAccess {
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Active customer profile required");
     }
+
     public Set<String> stores(Jwt jwt) {
-        return role(jwt,"SHOP_OWNER") || role(jwt,"SHOP_MANAGER") ? shops.stores(jwt).keySet() : Set.of();
+        return role(jwt,"SHOP_OWNER") ||
+                role(jwt,"SHOP_MANAGER") ? shops.stores(jwt).keySet() : Set.of();
     }
+
     public void shop(Jwt jwt,String storeId) {
-        if(!stores(jwt).contains(storeId)) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Seller order not found for this shop");
+        if(!stores(jwt).contains(storeId))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Seller order not found for this shop");
     }
 }
