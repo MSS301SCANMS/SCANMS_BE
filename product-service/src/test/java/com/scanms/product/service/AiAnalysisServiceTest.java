@@ -1,6 +1,7 @@
 package com.scanms.product.service;
 
 import com.scanms.product.client.AiServiceClient;
+import com.scanms.product.service.impl.AiAnalysisServiceImpl;
 import com.scanms.product.dto.ai.*;
 import com.scanms.product.exception.AppException;
 import com.scanms.product.exception.ErrorCode;
@@ -22,7 +23,7 @@ import static org.mockito.Mockito.*;
 class AiAnalysisServiceTest {
 
     private final AiServiceClient client = mock(AiServiceClient.class);
-    private final AiAnalysisService service = new AiAnalysisService(client);
+    private final AiAnalysisService service = new AiAnalysisServiceImpl(client);
 
     @Test
     void analyzeReturnsDetectionPayload() {

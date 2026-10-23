@@ -1,5 +1,6 @@
 package com.scanms.payment.service;
 
+import com.scanms.payment.service.impl.PayosProviderImpl;
 import com.scanms.payment.exception.AppException;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class PayosHttpContractTest {
         });
         server.start();
         try {
-            var provider=new PayosProvider(); ReflectionTestUtils.setField(provider,"baseUrl","http://127.0.0.1:"+server.getAddress().getPort());
+            var provider=new PayosProviderImpl(); ReflectionTestUtils.setField(provider,"baseUrl","http://127.0.0.1:"+server.getAddress().getPort());
             ReflectionTestUtils.setField(provider,"payoutClient","client"); ReflectionTestUtils.setField(provider,"payoutApiKey","api"); ReflectionTestUtils.setField(provider,"payoutChecksum","checksum");
             assertEquals("payout-id",provider.findPayout("withdrawal-id").get("id"));
             response.set("{\"code\":\"00\",\"data\":{\"payouts\":{}}}"); assertEquals(Map.of(),provider.findPayout("withdrawal-id"));

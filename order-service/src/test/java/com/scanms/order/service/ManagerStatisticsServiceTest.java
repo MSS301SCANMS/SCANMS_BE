@@ -3,6 +3,7 @@ package com.scanms.order.service;
 import com.scanms.order.constant.*;
 import com.scanms.order.entity.*;
 import com.scanms.order.repository.*;
+import com.scanms.order.service.impl.ManagerStatisticsServiceImpl;
 import java.time.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -14,7 +15,7 @@ class ManagerStatisticsServiceTest {
     OrderRepository orders = mock(OrderRepository.class);
     SellerOrderRepository sellers = mock(SellerOrderRepository.class);
     OrderItemRepository items = mock(OrderItemRepository.class);
-    ManagerStatisticsService service = new ManagerStatisticsService(orders, sellers, items);
+    ManagerStatisticsService service = new ManagerStatisticsServiceImpl(orders, sellers, items);
     LocalDateTime time(String day) { return LocalDate.parse(day).atTime(12, 0).atZone(ZoneId.of("Asia/Ho_Chi_Minh")).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime(); }
     Order order(String id, OrderStatus status) { return Order.builder().orderId(id).status(status).createdAt(time("2026-10-21")).build(); }
     SellerOrder seller(String id, String order, String store, SellerOrderStatus status) { return SellerOrder.builder().sellerOrderId(id).orderId(order).storeId(store).status(status).totalsSnapshot(Map.of("storeName", store)).build(); }

@@ -4,6 +4,7 @@ import com.scanms.product.constant.*;
 import com.scanms.product.entity.*;
 import com.scanms.product.repository.*;
 import com.scanms.product.service.PublicCatalogService;
+import com.scanms.product.service.impl.PublicCatalogServiceImpl;
 import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,7 @@ class PublicFashionCatalogTest {
     private final StoreRepository stores = mock(StoreRepository.class);
     private final ProductVariantRepository variants = mock(ProductVariantRepository.class);
     private final ProductImageRepository images = mock(ProductImageRepository.class);
-    private final PublicCatalogService catalog = new PublicCatalogService(products, stores, variants, images);
+    private final PublicCatalogService catalog = new PublicCatalogServiceImpl(products, stores, variants, images);
     private final PublicProductController controller = new PublicProductController(products, stores, catalog);
     private final Store shop = Store.builder().storeId("shop").name("Mộc Basics").approvalStatus(StoreStatus.APPROVED).build();
     private final Product product = Product.builder().productId("product").storeId("shop").name("Sơ mi")
