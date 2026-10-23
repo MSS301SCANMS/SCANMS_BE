@@ -11,8 +11,11 @@ import java.util.Map;
 
 public interface ShopReturnService {
     record ResponseInput(
-            @NotBlank @Size(max = 5000) String response,
-            @Size(max = 10) List<@NotBlank @Size(max = 2048) String> imageUrls
+            @NotBlank
+            @Size(max = 5000)
+            String response,
+            @Size(max = 10)
+            List<@NotBlank @Size(max = 2048) String> imageUrls
     ) {
     }
 

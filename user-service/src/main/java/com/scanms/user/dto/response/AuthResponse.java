@@ -16,4 +16,5 @@ public record AuthResponse(
 
         @JsonProperty("token_type")
         String tokenType
-) {}
+) {
+}

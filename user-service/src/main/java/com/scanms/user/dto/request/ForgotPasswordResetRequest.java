@@ -14,4 +14,5 @@ public record ForgotPasswordResetRequest(
         @NotBlank
         @Size(min = 6)
         String newPassword
-) {}
+) {
+}

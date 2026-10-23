@@ -1,7 +1,9 @@
 package com.scanms.user.dto.request;
 
 import com.scanms.user.constant.Gender;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 import java.time.LocalDate;
 
 public record UpdateUserProfileRequest(
@@ -17,4 +19,5 @@ public record UpdateUserProfileRequest(
         String avatarUrl,
         @Size(max = 500)
         String bio
-) {}
+) {
+}

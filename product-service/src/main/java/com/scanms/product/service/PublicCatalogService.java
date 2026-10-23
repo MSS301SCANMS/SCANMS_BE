@@ -1,24 +1,33 @@
 package com.scanms.product.service;
 
+import com.scanms.product.constant.StoreStatus;
 import com.scanms.product.entity.Product;
 import com.scanms.product.entity.Store;
-import java.util.List;
+
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import com.scanms.product.constant.StoreStatus;
 
 public interface PublicCatalogService {
-    /** Sản phẩm được hiển thị công khai (ACTIVE / OUT_OF_STOCK / chưa đặt trạng thái), mới nhất trước. */
+    /**
+     * Sản phẩm được hiển thị công khai (ACTIVE / OUT_OF_STOCK / chưa đặt trạng thái), mới nhất trước.
+     */
     List<Map<String, Object>> visibleProducts();
 
-    /** Read current variant stock directly; detail/stock endpoints must not serve cached inventory. */
+    /**
+     * Read current variant stock directly; detail/stock endpoints must not serve cached inventory.
+     */
     Map<String, Object> productDetails(Product product, Store store);
 
-    /** Gian hàng đã duyệt (marketplace), kèm rating. */
+    /**
+     * Gian hàng đã duyệt (marketplace), kèm rating.
+     */
     List<Map<String, Object>> approvedStores();
 
-    /** Danh mục (tên category) suy ra từ toàn bộ sản phẩm. */
+    /**
+     * Danh mục (tên category) suy ra từ toàn bộ sản phẩm.
+     */
     List<Map<String, Object>> categories();
 
     static Map<String, Object> toPublicProduct(Product p, Store store) {

@@ -1,7 +1,12 @@
 package com.scanms.user.service.impl;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
 import com.scanms.user.constant.RoleName;
 import com.scanms.user.constant.UserStatus;
+import com.scanms.user.dto.request.GoogleLoginRequest;
 import com.scanms.user.dto.request.LoginRequest;
 import com.scanms.user.dto.request.RegisterRequest;
 import com.scanms.user.dto.response.AuthResponse;
@@ -17,6 +22,7 @@ import com.scanms.user.service.OtpService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,24 +31,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.RestTemplate;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
-import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.client.json.gson.GsonFactory;
-import com.scanms.user.dto.request.GoogleLoginRequest;
-import java.util.Collections;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
-import java.util.Arrays;
-import java.util.UUID;
+
+import java.util.*;
 
 @Slf4j
 @Service
@@ -90,7 +84,7 @@ public class AuthServiceImpl implements AuthService {
                 "enabled", true,
                 "emailVerified", !emailVerificationEnabled,
                 "firstName", request.firstName(),
-                "lastName",request.lastName(),
+                "lastName", request.lastName(),
                 "requiredActions", emailVerificationEnabled ? List.of("VERIFY_EMAIL") : List.of(),
                 "credentials", List.of(Map.of(
                         "type", "password",
@@ -114,7 +108,8 @@ public class AuthServiceImpl implements AuthService {
                         getUserIdUrl,
                         HttpMethod.GET,
                         new HttpEntity<>(headers),
-                        new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+                        new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                        }
                 );
 
                 if (userSearchResponse.getBody() != null && !userSearchResponse.getBody().isEmpty()) {
@@ -135,7 +130,7 @@ public class AuthServiceImpl implements AuthService {
                             .identitySubject(identitySubject)
                             .username(request.username())
                             .email(request.email())
-                            .fullName(request.lastName()+" "+request.firstName())
+                            .fullName(request.lastName() + " " + request.firstName())
                             .status(UserStatus.ACTIVE)
                             .roles(roles)
                             .build();
@@ -146,6 +141,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đăng ký thất bại: " + e.getMessage());
         }
     }
+
     @Override
     public AuthResponse login(LoginRequest request) {
         String tokenUrl = serverUrl + "/realms/" + realm + "/protocol/openid-connect/token";
@@ -293,7 +289,8 @@ public class AuthServiceImpl implements AuthService {
             String getUserIdUrl = serverUrl + "/admin/realms/" + realm + "/users?email=" + email;
             ResponseEntity<List<Map<String, Object>>> userSearchResponse = restTemplate.exchange(
                     getUserIdUrl, HttpMethod.GET, new HttpEntity<>(headers),
-                    new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                    });
 
             if (userSearchResponse.getBody() == null || userSearchResponse.getBody().isEmpty()) {
                 throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không tìm thấy user vừa tạo trên Keycloak");
@@ -510,6 +507,7 @@ public class AuthServiceImpl implements AuthService {
             System.err.println("Không thể gán role [" + roleName + "] cho user trên Keycloak: " + e.getMessage());
         }
     }
+
     @Override
     public void changePassword(String oldPassword, String newPassword) {
         // 1. Lấy thông tin Authentication hiện tại từ SecurityContext
@@ -546,6 +544,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đổi mật khẩu thất bại: " + e.getMessage());
         }
     }
+
     @Override
     public void logout(String refreshToken) {
         String logoutUrl = serverUrl + "/realms/" + realm + "/protocol/openid-connect/logout";
@@ -566,6 +565,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đăng xuất thất bại: " + e.getMessage());
         }
     }
+
     @Override
     public AuthResponse refreshToken(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank())

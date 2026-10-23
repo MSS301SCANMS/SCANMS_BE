@@ -2,12 +2,7 @@ package com.scanms.user.controller;
 
 import com.scanms.user.config.RefreshTokenCookie;
 import com.scanms.user.dto.ApiResponse;
-import com.scanms.user.dto.request.LoginRequest;
-import com.scanms.user.dto.request.RegisterRequest;
-import com.scanms.user.dto.request.GoogleLoginRequest;
-import com.scanms.user.dto.request.ForgotPasswordSendOtpRequest;
-import com.scanms.user.dto.request.ForgotPasswordVerifyOtpRequest;
-import com.scanms.user.dto.request.ForgotPasswordResetRequest;
+import com.scanms.user.dto.request.*;
 import com.scanms.user.dto.response.AuthResponse;
 import com.scanms.user.exception.AppException;
 import com.scanms.user.exception.ErrorCode;
@@ -30,6 +25,7 @@ public class AuthController {
 
     private final AuthService service;
     private final RefreshTokenCookie refreshCookie;
+
     @PostMapping("/register")
     public ApiResponse<String> register(@Valid @RequestBody RegisterRequest request) {
         service.register(request);
@@ -54,6 +50,7 @@ public class AuthController {
         service.changePassword(oldPassword, newPassword);
         return ApiResponse.success("Đổi mật khẩu thành công!");
     }
+
     /**
      * Huỷ phiên trên Keycloak bằng refresh token trong cookie, rồi luôn xoá cookie.
      * Không cần JWT: access token có thể đã hết hạn, và chỉ server mới xoá được cookie HttpOnly.
@@ -75,7 +72,9 @@ public class AuthController {
                 .body(ApiResponse.success("Đăng xuất thành công!"));
     }
 
-    /** Đổi refresh token (đọc từ cookie HttpOnly) lấy access token mới; cookie được thay bằng refresh token mới. */
+    /**
+     * Đổi refresh token (đọc từ cookie HttpOnly) lấy access token mới; cookie được thay bằng refresh token mới.
+     */
     @PostMapping("/refresh-token")
     public ResponseEntity<ApiResponse<AuthResponse>> refreshToken(HttpServletRequest request) {
         if (!refreshCookie.hasCsrfHeader(request)) return csrfRejected();
@@ -89,7 +88,9 @@ public class AuthController {
         }
     }
 
-    /** Đặt refresh token vào cookie HttpOnly và bỏ nó khỏi body — FE chỉ nhận access token. */
+    /**
+     * Đặt refresh token vào cookie HttpOnly và bỏ nó khỏi body — FE chỉ nhận access token.
+     */
     private ResponseEntity<ApiResponse<AuthResponse>> withRefreshCookie(AuthResponse auth) {
         ResponseEntity.BodyBuilder response = ResponseEntity.ok();
         if (auth.refreshToken() != null && !auth.refreshToken().isBlank()) {
@@ -99,7 +100,9 @@ public class AuthController {
         return response.body(ApiResponse.success(body));
     }
 
-    /** 401 + xoá cookie: refresh token không còn hợp lệ, FE phải đăng nhập lại. */
+    /**
+     * 401 + xoá cookie: refresh token không còn hợp lệ, FE phải đăng nhập lại.
+     */
     private <T> ResponseEntity<ApiResponse<T>> sessionExpired(String message) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .header(HttpHeaders.SET_COOKIE, refreshCookie.clear())

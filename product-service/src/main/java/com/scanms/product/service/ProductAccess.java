@@ -5,12 +5,6 @@ import com.scanms.product.entity.Store;
 import com.scanms.product.exception.AppException;
 import com.scanms.product.exception.ErrorCode;
 import com.scanms.product.repository.StoreRepository;
-import java.net.http.HttpClient;
-import java.time.Duration;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -20,13 +14,17 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
-import java.util.Objects;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.*;
 
 @Component
 @RequiredArgsConstructor
 public class ProductAccess {
     private final StoreRepository stores;
-    @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
+    @Value("${clients.user.url:http://localhost:8081}")
+    private String userUrl;
 
     public String userId() {
         Jwt jwt = jwt();
@@ -47,7 +45,9 @@ public class ProductAccess {
         throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
     }
 
-    public String bearerToken() { return jwt().getTokenValue(); }
+    public String bearerToken() {
+        return jwt().getTokenValue();
+    }
 
     public void requireManager() {
         if (!isManager())
@@ -55,7 +55,9 @@ public class ProductAccess {
         userId();
     }
 
-    public boolean isManager() { return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER")::contains); }
+    public boolean isManager() {
+        return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER")::contains);
+    }
 
     public Store requireApprovedStore(String storeId) {
         Store store = requireOwnedStore(storeId);

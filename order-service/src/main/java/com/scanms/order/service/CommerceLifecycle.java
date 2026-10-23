@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.oauth2.jwt.Jwt;
+
 import java.util.List;
 import java.util.Map;
 
@@ -16,7 +17,8 @@ public interface CommerceLifecycle {
             String carrier,
             @Size(max = 100)
             String trackingCode
-    ) {}
+    ) {
+    }
 
     record ReturnInput(
             @NotBlank
@@ -30,7 +32,8 @@ public interface CommerceLifecycle {
             @Size(max = 100)
             String reason,
             Map<String, Object> evidenceRefs
-    ) {}
+    ) {
+    }
 
     SellerOrder confirm(
             String id,

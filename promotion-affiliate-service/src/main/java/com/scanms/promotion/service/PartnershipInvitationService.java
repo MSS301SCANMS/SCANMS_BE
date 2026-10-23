@@ -1,8 +1,9 @@
 package com.scanms.promotion.service;
 
+import org.springframework.security.oauth2.jwt.Jwt;
+
 import java.time.LocalDateTime;
 import java.util.List;
-import org.springframework.security.oauth2.jwt.Jwt;
 
 public interface PartnershipInvitationService {
     record Creator(String id,
@@ -10,24 +11,29 @@ public interface PartnershipInvitationService {
                    String platform,
                    long followers,
                    String channelUrl
-    ) {}
+    ) {
+    }
 
     record Product(String id,
                    String name
-    ) {}
+    ) {
+    }
 
     record Catalog(String storeId,
                    String storeName,
                    List<Product> products,
                    List<Creator> creators
-    ) {}
-    record View(String id,String storeId,String storeName,
-                String collaboratorId,String collaboratorName,
-                String productId,String productName,String message,
-                String status,String referralLinkId,
-                String referralToken,LocalDateTime createdAt,
+    ) {
+    }
+
+    record View(String id, String storeId, String storeName,
+                String collaboratorId, String collaboratorName,
+                String productId, String productName, String message,
+                String status, String referralLinkId,
+                String referralToken, LocalDateTime createdAt,
                 LocalDateTime respondedAt
-    ) {}
+    ) {
+    }
 
     Catalog catalog(Jwt jwt);
 
@@ -35,9 +41,9 @@ public interface PartnershipInvitationService {
 
     List<View> mine();
 
-    View create(Jwt jwt,String storeId,String collaboratorId,String productId,String message);
+    View create(Jwt jwt, String storeId, String collaboratorId, String productId, String message);
 
-    View respond(String id,String decision);
+    View respond(String id, String decision);
 
     View cancel(String id);
 }

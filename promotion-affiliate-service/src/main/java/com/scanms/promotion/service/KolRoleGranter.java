@@ -2,20 +2,22 @@ package com.scanms.promotion.service;
 
 import com.scanms.promotion.exception.AppException;
 import com.scanms.promotion.exception.ErrorCode;
-import java.net.http.HttpClient;
-import java.time.Duration;
-import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.Map;
+
 @Component
 public class KolRoleGranter {
     private final VoucherAccess access;
     private final RestClient http;
-    @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
+    @Value("${clients.user.url:http://localhost:8081}")
+    private String userUrl;
 
     public KolRoleGranter(VoucherAccess access) {
         this.access = access;

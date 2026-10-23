@@ -2,21 +2,23 @@ package com.scanms.product.service;
 
 import com.scanms.product.exception.AppException;
 import com.scanms.product.exception.ErrorCode;
-import java.net.http.HttpClient;
-import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
 public class ShopRoleGranter {
     private final ProductAccess access;
-    @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
+    @Value("${clients.user.url:http://localhost:8081}")
+    private String userUrl;
 
     public void grant(String userId) {
         try {

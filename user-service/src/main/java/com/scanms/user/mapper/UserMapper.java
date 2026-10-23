@@ -4,10 +4,11 @@ import com.scanms.user.constant.RoleName;
 import com.scanms.user.dto.response.UserResponse;
 import com.scanms.user.entity.Role;
 import com.scanms.user.entity.User;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Mapper(componentModel = "spring")
 public interface UserMapper {

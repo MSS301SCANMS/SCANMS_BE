@@ -5,14 +5,17 @@ import com.scanms.user.dto.response.AdminStatsResponse;
 import com.scanms.user.repository.UserRepository;
 import com.scanms.user.service.AdminStatsBuilder;
 import com.scanms.user.service.AdminStatsService;
-import java.time.LocalDateTime;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Thống kê người dùng — cache Redis 15 giây ({@link CacheNames#ADMIN_STATS_USERS}). */
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * Thống kê người dùng — cache Redis 15 giây ({@link CacheNames#ADMIN_STATS_USERS}).
+ */
 @Service
 @RequiredArgsConstructor
 public class AdminStatsServiceImpl implements AdminStatsService {

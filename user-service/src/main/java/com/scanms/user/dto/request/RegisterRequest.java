@@ -18,4 +18,5 @@ public record RegisterRequest(
         String firstName,
         @NotBlank
         String lastName
-) {}
+) {
+}

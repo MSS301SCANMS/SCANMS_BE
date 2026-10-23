@@ -1,12 +1,21 @@
 package com.scanms.order.service.impl;
 
 import com.scanms.order.client.ProductClient;
-import com.scanms.order.constant.*;
+import com.scanms.order.constant.DiscountFundingType;
+import com.scanms.order.constant.OrderStatus;
+import com.scanms.order.constant.SellerOrderStatus;
+import com.scanms.order.constant.ShipmentStatus;
 import com.scanms.order.dto.request.CheckoutItemRequest;
 import com.scanms.order.dto.request.CheckoutRequest;
 import com.scanms.order.dto.request.CreateOrderRequest;
-import com.scanms.order.dto.response.*;
-import com.scanms.order.entity.*;
+import com.scanms.order.dto.response.CheckoutResponse;
+import com.scanms.order.dto.response.OrderItemResponse;
+import com.scanms.order.dto.response.OrderResponse;
+import com.scanms.order.dto.response.SellerOrderSummaryResponse;
+import com.scanms.order.entity.Order;
+import com.scanms.order.entity.OrderItem;
+import com.scanms.order.entity.SellerOrder;
+import com.scanms.order.entity.Shipment;
 import com.scanms.order.exception.AppException;
 import com.scanms.order.exception.ErrorCode;
 import com.scanms.order.mapper.OrderItemMapper;

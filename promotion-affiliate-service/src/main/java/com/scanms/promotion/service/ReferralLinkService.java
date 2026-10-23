@@ -2,11 +2,16 @@ package com.scanms.promotion.service;
 
 import com.scanms.promotion.dto.request.CreateReferralLinkRequest;
 import com.scanms.promotion.dto.response.ReferralLinkResponse;
-import java.util.*;
+
+import java.util.List;
+import java.util.Map;
 
 public interface ReferralLinkService {
     ReferralLinkResponse create(CreateReferralLinkRequest request);
+
     ReferralLinkResponse getById(String id);
+
     List<ReferralLinkResponse> findAll();
+
     List<Map<String, Object>> findStoreLinks(String storeId);
 }

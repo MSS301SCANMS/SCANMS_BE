@@ -22,8 +22,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.*;
 import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -107,7 +110,8 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Choose APPROVED or REJECTED with at least 20 characters of reasoning");
         }
         if (rr.getStatus() != ReturnRequestStatus.REQUESTED || rr.getRefundReference() != null) {
-            if (rr.getStatus() == decision.status() && Objects.equals(rr.getDecisionReason(), decision.decisionReason().trim())) return mapper.toResponse(rr);
+            if (rr.getStatus() == decision.status() && Objects.equals(rr.getDecisionReason(), decision.decisionReason().trim()))
+                return mapper.toResponse(rr);
             throw new AppException(ErrorCode.INVALID_REQUEST, "Return already decided; reload the record");
         }
         rr.setStatus(decision.status());
