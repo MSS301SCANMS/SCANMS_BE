@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 import java.util.Map;
+import jakarta.validation.constraints.PositiveOrZero;
 
 public record CreateLivestreamRequest(
         @NotNull String storeId,
@@ -16,9 +17,9 @@ public record CreateLivestreamRequest(
         Map<String, Object> productRefs,
         Map<String, Object> participantRefs,
         Map<String, Object> collaboratorRefs,
-        @jakarta.validation.constraints.PositiveOrZero Long viewerCount,
-        @jakarta.validation.constraints.PositiveOrZero Long uniqueViewerCount,
-        @jakarta.validation.constraints.PositiveOrZero Long peakConcurrentViewerCount,
+        @PositiveOrZero Long viewerCount,
+        @PositiveOrZero Long uniqueViewerCount,
+        @PositiveOrZero Long peakConcurrentViewerCount,
         LocalDateTime scheduledAt,
         LocalDateTime startedAt,
         LocalDateTime endedAt

@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PatchMapping;
+import com.scanms.product.constant.LivestreamStatus;
+import com.scanms.product.dto.request.UpdateLivestreamRequest;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 @RestController
 @RequestMapping("/api/v1/livestreams")
@@ -24,39 +27,39 @@ public class LivestreamController {
     private final LivestreamService service;
 
     @PostMapping
-    ResponseEntity<ApiResponse<LivestreamResponse>> create(@Valid @RequestBody CreateLivestreamRequest request) {
+    public ResponseEntity<ApiResponse<LivestreamResponse>> create(@Valid @RequestBody CreateLivestreamRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<LivestreamResponse> getById(@PathVariable String id) {
+    public ApiResponse<LivestreamResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<LivestreamResponse>> findAll() {
+    public ApiResponse<List<LivestreamResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 
     @PatchMapping("/{id}")
-    ApiResponse<LivestreamResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateLivestreamRequest request) {
+    public ApiResponse<LivestreamResponse> update(@PathVariable String id, @Valid @RequestBody UpdateLivestreamRequest request) {
         return ApiResponse.success(service.update(id, request));
     }
 
     @PostMapping("/{id}/start")
-    ApiResponse<LivestreamResponse> start(@PathVariable String id) {
-        return ApiResponse.success(service.transition(id, com.scanms.product.constant.LivestreamStatus.LIVE));
+    public ApiResponse<LivestreamResponse> start(@PathVariable String id) {
+        return ApiResponse.success(service.transition(id, LivestreamStatus.LIVE));
     }
 
     @PostMapping("/{id}/end")
-    ApiResponse<LivestreamResponse> end(@PathVariable String id) {
-        return ApiResponse.success(service.transition(id, com.scanms.product.constant.LivestreamStatus.ENDED));
+    public ApiResponse<LivestreamResponse> end(@PathVariable String id) {
+        return ApiResponse.success(service.transition(id, LivestreamStatus.ENDED));
     }
 
     record StatsRequest(long viewerCount, long uniqueViewerCount, long concurrentViewerCount) {}
 
     @PatchMapping("/{id}/stats")
-    ApiResponse<LivestreamResponse> stats(@PathVariable String id, @RequestBody StatsRequest request) {
+    public ApiResponse<LivestreamResponse> stats(@PathVariable String id, @RequestBody StatsRequest request) {
         return ApiResponse.success(service.updateStats(id, request.viewerCount(), request.uniqueViewerCount(), request.concurrentViewerCount()));
     }
 
@@ -64,10 +67,10 @@ public class LivestreamController {
 
     /** KOL chấp nhận / từ chối lời mời live (lưu trong participantRefs.inviteStatus). */
     @PatchMapping("/{id}/respond")
-    ApiResponse<LivestreamResponse> respond(
+    public ApiResponse<LivestreamResponse> respond(
             @PathVariable String id,
             @RequestBody RespondRequest request,
-                    @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.oauth2.jwt.Jwt jwt) {
+                    Jwt jwt) {
         return ApiResponse.success(service.respondInvite(id, request.accepted(), jwt));
     }
 }

@@ -19,6 +19,10 @@ import org.springframework.web.bind.annotation.*;
 import java.time.*;
 import java.math.BigInteger;
 import java.util.*;
+import com.scanms.order.service.RefundAllocation;
+import java.net.http.HttpClient;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import java.math.BigDecimal;
 
 /** Boundary owned by Order: Payment reads validated amounts, never client-supplied totals. */
 @Slf4j
@@ -32,8 +36,8 @@ public class FinanceContractController {
     private final DiscountAllocationRepository allocations;
     @Value("${clients.promotion.url:http://localhost:8085}") private String promotionUrl;
     private final RestClient http = RestClient.builder()
-            .requestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory(
-                    java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()))
+            .requestFactory(new JdkClientHttpRequestFactory(
+                    HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()))
             .build();
     private void trusted(Jwt jwt,boolean operatorAllowed) {
         Set<String> roles=new HashSet<>();
@@ -41,14 +45,14 @@ public class FinanceContractController {
         if(realm instanceof Map<?,?> map && map.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString()));
         Object resources=jwt.getClaim("resource_access");
         if(resources instanceof Map<?,?> map) map.values().forEach(v -> { if(v instanceof Map<?,?> m && m.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString())); });
-        if(!roles.contains("PAYMENT_INTERNAL") && !(operatorAllowed && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER","ORDER_INTERNAL","AFFILIATE_INTERNAL")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if(!roles.contains("PAYMENT_INTERNAL") && !(operatorAllowed && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
     private <T> T find(Class<T> type,String id,boolean lock) {
         T result=lock?em.find(type,id,LockModeType.PESSIMISTIC_WRITE):em.find(type,id);
         if(result==null) throw new ResponseStatusException(HttpStatus.NOT_FOUND); return result;
     }
     public record PaidInput(String paymentId,Long amountVnd,String currency,String verifiedAt) {}
-    @PostMapping("/orders/{id}/paid") ApiResponse<Map<String,Object>> paid(@PathVariable String id,@RequestBody PaidInput input,@AuthenticationPrincipal Jwt jwt) {
+    @PostMapping("/orders/{id}/paid") public ApiResponse<Map<String,Object>> paid(@PathVariable String id,@RequestBody PaidInput input,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,false); Order order=find(Order.class,id,true);
         if(input.paymentId()==null || !Objects.equals(input.amountVnd(),order.getPayableVnd()) || !Objects.equals(input.currency(),order.getCurrency())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Payment total mismatch");
         Map<String,Object> saga=new LinkedHashMap<>(order.getSagaState()==null?Map.of():order.getSagaState());
@@ -75,7 +79,7 @@ public class FinanceContractController {
         }
         return ApiResponse.success(Map.of("orderId", id, "status", order.getStatus(), "commissionsInitialized", initialized));
     }
-    @GetMapping("/refund-basis/{id}") ApiResponse<Map<String,Object>> refundBasis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
+    @GetMapping("/refund-basis/{id}") public ApiResponse<Map<String,Object>> refundBasis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
         Object realm=jwt.getClaim("realm_access");
         boolean orderInternal=realm instanceof Map<?,?> roles && roles.get("roles") instanceof Collection<?> list && list.contains("ORDER_INTERNAL");
         if(!orderInternal) trusted(jwt,true);
@@ -99,20 +103,20 @@ public class FinanceContractController {
                     reservedQuantity=Math.addExact(reservedQuantity,r.getQuantity()); reservedAmount=Math.addExact(reservedAmount,r.getRefundAmountVnd());
                 }
             }
-            try { amount=com.scanms.order.service.RefundAllocation.allocate(item.getNetPaidAmountVnd(),item.getQuantity(),request.getQuantity(),reservedQuantity,reservedAmount); }
+            try { amount=RefundAllocation.allocate(item.getNetPaidAmountVnd(),item.getQuantity(),request.getQuantity(),reservedQuantity,reservedAmount); }
             catch(IllegalArgumentException | NullPointerException ex) { throw new ResponseStatusException(HttpStatus.CONFLICT,"Refund exceeds remaining paid quantity/value"); }
             request.setRefundAmountVnd(amount); request.setStatus(ReturnRequestStatus.REFUND_PENDING); returns.save(request);
         }
         return ApiResponse.success(Map.of("returnRequestId",id,"orderItemId",item.getOrderItemId(),"customerId",order.getCustomerId(),"amountVnd",amount,"currency",order.getCurrency()));
     }
     public record RefundInput(String transactionId,Long amountVnd) {}
-    @GetMapping("/orders/{id}/unapplied-payment") ApiResponse<Map<String,Object>> unapplied(@PathVariable String id,@RequestParam String paymentId,@AuthenticationPrincipal Jwt jwt) {
+    @GetMapping("/orders/{id}/unapplied-payment") public ApiResponse<Map<String,Object>> unapplied(@PathVariable String id,@RequestParam String paymentId,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true); Order order=find(Order.class,id,true);
         Object applied=(order.getSagaState()==null?Map.of():order.getSagaState()).get("paymentId");
         boolean refundable=(order.getStatus()==OrderStatus.CANCELLED || order.getStatus()==OrderStatus.EXPIRED || (applied!=null && !paymentId.equals(applied))) && !paymentId.equals(applied);
         return ApiResponse.success(Map.of("refundable",refundable,"customerId",order.getCustomerId(),"amountVnd",order.getPayableVnd(),"currency",order.getCurrency()));
     }
-    @PostMapping("/returns/{id}/refunded") ApiResponse<Map<String,Object>> refunded(@PathVariable String id,@RequestBody RefundInput input,@AuthenticationPrincipal Jwt jwt) {
+    @PostMapping("/returns/{id}/refunded") public ApiResponse<Map<String,Object>> refunded(@PathVariable String id,@RequestBody RefundInput input,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,false); ReturnRequest request=find(ReturnRequest.class,id,true);
         if(input.transactionId()==null || !Objects.equals(input.amountVnd(),request.getRefundAmountVnd())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Refund reference mismatch");
         if(request.getRefundReference()!=null && !request.getRefundReference().equals(input.transactionId())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Return already has another refund");
@@ -120,7 +124,7 @@ public class FinanceContractController {
         request.setRefundReference(input.transactionId()); request.setStatus(ReturnRequestStatus.REFUNDED); request.setResolvedAt(LocalDateTime.now(ZoneOffset.UTC)); returns.save(request);
         return ApiResponse.success(Map.of("returnRequestId",id,"status","REFUNDED"));
     }
-    @GetMapping("/settlement-basis/{id}") ApiResponse<Map<String,Object>> settlementBasis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
+    @GetMapping("/settlement-basis/{id}") public ApiResponse<Map<String,Object>> settlementBasis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true); SellerOrder seller=find(SellerOrder.class,id,true); Order order=find(Order.class,seller.getOrderId(),false);
         if(seller.getStatus()!=SellerOrderStatus.COMPLETED || seller.getDeliveredAt()==null || seller.getReturnDeadline()==null
                 || seller.getReturnDeadline().isBefore(seller.getDeliveredAt().plusDays(14)) || !seller.getReturnDeadline().isBefore(LocalDateTime.now(ZoneOffset.UTC))
@@ -144,7 +148,7 @@ public class FinanceContractController {
                 if(a.getFundedBy()==DiscountFundingType.SHARED) {
                     Map<?,?> rule=tools.jackson.databind.json.JsonMapper.builder().build().readValue(a.getRuleSnapshotJson(),Map.class);
                     if(!(rule.get("platformFundedVnd") instanceof Number)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Shared funding snapshot missing");
-                    platformShare=new java.math.BigDecimal(rule.get("platformFundedVnd").toString()).longValueExact();
+                    platformShare=new BigDecimal(rule.get("platformFundedVnd").toString()).longValueExact();
                     if(platformShare<0 || platformShare>a.getAllocatedAmountVnd()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid shared funding");
                 }
                 platformDiscount=Math.addExact(platformDiscount,platformShare);
@@ -162,7 +166,7 @@ public class FinanceContractController {
         if(total==null || total<0 || purchased<=0 || quantity<0 || quantity>purchased) throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid item value/quantity");
         return BigInteger.valueOf(total).multiply(BigInteger.valueOf(quantity)).divide(BigInteger.valueOf(purchased)).longValueExact();
     }
-    @GetMapping("/commission-order-item/{id}") ApiResponse<Map<String,Object>> commissionItem(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
+    @GetMapping("/commission-order-item/{id}") public ApiResponse<Map<String,Object>> commissionItem(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true); OrderItem item=find(OrderItem.class,id,true);
         settlementBasis(item.getSellerOrderId(),jwt);
         long refund=0;

@@ -110,7 +110,7 @@ public class UserServiceImpl implements UserService {
 
     @Transactional(readOnly = true)
     @Override
-    public PageResponse<UserResponse> getAllUsersForAdmin(int page, int size, String search, RoleName role, UserStatus status) {
+    public PageResponse<UserResponse> getAllUsers(int page, int size, String search, RoleName role, UserStatus status) {
         int safePage = Math.max(page, 0);
         int safeSize = size <= 0 ? 20 : Math.min(size, 100);
 
@@ -122,12 +122,12 @@ public class UserServiceImpl implements UserService {
 
     @Transactional(readOnly = true)
     @Override
-    public UserResponse getUserByIdForAdmin(String userId) {
+    public UserResponse getUserById(String userId) {
         return mapper.toResponse(findById(userId));
     }
 
     @Override
-    public UserResponse updateUserStatusForAdmin(String userId, UpdateUserStatusRequest request) {
+    public UserResponse updateUserStatus(String userId, UpdateUserStatusRequest request) {
         User user = findById(userId);
 
         boolean isAdminAccount = user.getRoles() != null && user.getRoles().stream()

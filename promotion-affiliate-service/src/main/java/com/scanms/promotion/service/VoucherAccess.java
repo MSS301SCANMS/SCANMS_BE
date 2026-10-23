@@ -16,6 +16,9 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.List;
 
 @Component
 public class VoucherAccess {
@@ -59,24 +62,24 @@ public class VoucherAccess {
 
     public void requireApprovedStore(String storeId) { approvedStore(storeId); }
 
-    public java.util.List<Map<?, ?>> storeProducts(String storeId) {
+    public List<Map<?, ?>> storeProducts(String storeId) {
         if (storeId == null || !storeId.matches("[A-Za-z0-9_-]{1,100}"))
             throw new AppException(ErrorCode.INVALID_REQUEST, "Mã gian hàng không hợp lệ.");
         requireStoreOwner(storeId);
         try {
             Map<?, ?> response = http.get().uri(productUrl + "/api/v1/products")
                     .headers(h -> h.setBearerAuth(jwt().getTokenValue())).retrieve().body(Map.class);
-            if (response != null && response.get("result") instanceof java.util.List<?> rows) {
+            if (response != null && response.get("result") instanceof List<?> rows) {
                 if (rows.stream().anyMatch(row -> !(row instanceof Map<?, ?> product)
                         || product.get("productId") == null || product.get("storeId") == null))
-                    throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Dữ liệu sản phẩm chưa hợp lệ.");
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dữ liệu sản phẩm chưa hợp lệ.");
                 return rows.stream().<Map<?, ?>>map(row -> (Map<?, ?>) row)
                         .filter(product -> storeId.equals(product.get("storeId"))).toList();
             }
         } catch (RestClientException ex) {
-            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Chưa tải được sản phẩm của gian hàng.");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa tải được sản phẩm của gian hàng.");
         }
-        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Chưa tải được sản phẩm của gian hàng.");
+        throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa tải được sản phẩm của gian hàng.");
     }
 
     private Map<?, ?> approvedStore(String storeId) {

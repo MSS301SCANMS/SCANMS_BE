@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Date;
 
 /** Dựng {@link AdminStatsResponse} từ các truy vấn đếm/gom nhóm của một bảng. */
 public final class AdminStatsBuilder {
@@ -76,7 +77,7 @@ public final class AdminStatsBuilder {
         if (value instanceof Timestamp ts) return ts.toLocalDateTime();
         if (value instanceof OffsetDateTime odt) return odt.atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
         if (value instanceof Instant instant) return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
-        if (value instanceof java.util.Date date) return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
+        if (value instanceof Date date) return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
         return null;
     }
 }

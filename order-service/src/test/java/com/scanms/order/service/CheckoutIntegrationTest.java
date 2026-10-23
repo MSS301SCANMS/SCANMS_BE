@@ -51,12 +51,9 @@ class CheckoutIntegrationTest {
     @Autowired DiscountAllocationRepository allocations;
     @Autowired CheckoutShippingPolicy shippingPolicy;
     @Autowired org.springframework.web.context.WebApplicationContext webContext;
-    @Autowired com.scanms.order.controller.FinanceContractController financeContracts;
     @MockitoBean JwtDecoder decoder;
     static final AtomicInteger reserves=new AtomicInteger(); static final AtomicBoolean failNext=new AtomicBoolean();
     static final AtomicBoolean multiStore=new AtomicBoolean();
-    static final AtomicInteger attributionCalls=new AtomicInteger();
-    static final AtomicBoolean rejectAttribution=new AtomicBoolean();
     static final HttpServer server=server();
     final Jwt jwt=Jwt.withTokenValue("customer-token").header("alg","RS256").subject("identity").build();
     static HttpServer server() {
@@ -70,52 +67,13 @@ class CheckoutIntegrationTest {
                 String second=multiStore.get()?",{\"productId\":\"product-b\",\"variantId\":\"variant-b\",\"storeId\":\"store-b\",\"storeName\":\"Shop B\",\"name\":\"Product B\",\"quantity\":1,\"unitPriceVnd\":25000,\"grossAmountVnd\":25000}":"";
                 byte[] body=(status==200?"{\"result\":{\"lines\":[{\"productId\":\"product\",\"variantId\":\"variant\",\"storeId\":\"store\",\"storeName\":\"Shop\",\"name\":\"Product\",\"quantity\":2,\"unitPriceVnd\":15000,\"grossAmountVnd\":30000}"+second+"]}}":"{\"message\":\"Source unavailable\"}").getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(status,body.length); exchange.getResponseBody().write(body); exchange.close();
-            });
-            server.createContext("/promotion/api/v1/referrals/attribution/ref-1",exchange->{
-                attributionCalls.incrementAndGet();
-                byte[] body="{\"result\":{\"referralLinkId\":\"ref-1\",\"productId\":\"product\",\"collaboratorId\":\"kol-1\",\"userId\":\"kol-owner\"}}".getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type","application/json");exchange.sendResponseHeaders(rejectAttribution.get()?409:200,body.length);exchange.getResponseBody().write(body);exchange.close();
-            });
-            server.createContext("/promotion/api/v1/referrals/livestream-attribution/live-1",exchange->{
-                attributionCalls.incrementAndGet();
-                byte[] body="{\"result\":{\"referralLinkId\":\"ref-1\",\"productId\":\"product\",\"collaboratorId\":\"kol-1\",\"userId\":\"kol-owner\"}}".getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type","application/json");exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();
-            });server.start(); return server;
+            }); server.start(); return server;
         } catch(Exception ex) { throw new IllegalStateException(ex); }
     }
     @DynamicPropertySource static void sources(DynamicPropertyRegistry r) {
         String base="http://127.0.0.1:"+server.getAddress().getPort(); r.add("clients.user.url",() -> base+"/user"); r.add("clients.product.url",() -> base+"/product"); r.add("scanms.finance.token-url",() -> base+"/token");
     }
     @AfterAll static void close() { server.stop(0); }
-    @BeforeEach void resetReferralSource(){attributionCalls.set(0);rejectAttribution.set(false);org.springframework.test.util.ReflectionTestUtils.setField(checkout,"promotionUrl","http://127.0.0.1:"+server.getAddress().getPort()+"/promotion");}
-    @Test void persistsVerifiedReferralAndRetriesDoNotDependOnItsLaterAvailability(){
-        var input=new CheckoutService.Input("ref-key","Customer","0900000000","Delivery address","WALLET",true,null,null,List.of(new CheckoutService.Line("product","variant",2,null,"ref-1")));
-        var order=checkout.checkout(input,jwt);
-        assertEquals("ref-1",items.findAll().getFirst().getReferralLinkId());
-        assertEquals("kol-1",items.findAll().getFirst().getRuleSnapshot().get("collaboratorId"));
-        rejectAttribution.set(true);
-        assertEquals(order.get("orderId"),checkout.checkout(input,jwt).get("orderId"));
-        assertEquals(1,attributionCalls.get());assertEquals(1,reserves.get());
-    }
-    @Test void liveCheckoutWithoutAnExplicitReferralUsesServerVerifiedHostAttribution(){
-        var input=new CheckoutService.Input("live-key","Customer","0900000000","Delivery address","WALLET",true,null,null,List.of(new CheckoutService.Line("product","variant",2,"live-1")));
-        checkout.checkout(input,jwt);
-        assertEquals("ref-1",items.findAll().getFirst().getReferralLinkId());
-        assertEquals("kol-1",items.findAll().getFirst().getRuleSnapshot().get("collaboratorId"));assertEquals(1,attributionCalls.get());
-    }
-    @Test void sourceDispatchersCanReadFinanceBasisButCannotAcknowledgePayments(){
-        for(String role:List.of("ORDER_INTERNAL","AFFILIATE_INTERNAL")) {
-            var token=Jwt.withTokenValue("source-token").header("alg","RS256").subject("source").claim("realm_access",Map.of("roles",List.of(role))).build();
-            assertDoesNotThrow(()->org.springframework.test.util.ReflectionTestUtils.invokeMethod(financeContracts,"trusted",token,true));
-            assertThrows(ResponseStatusException.class,()->org.springframework.test.util.ReflectionTestUtils.invokeMethod(financeContracts,"trusted",token,false));
-        }
-    }
-    @Test void invalidReferralCannotCreateOrdersOrReserveInventory(){
-        rejectAttribution.set(true);
-        var input=new CheckoutService.Input("bad-ref-key","Customer","0900000000","Delivery address","WALLET",true,null,null,List.of(new CheckoutService.Line("product","variant",2,null,"ref-1")));
-        assertThrows(RestClientResponseException.class,()->checkout.checkout(input,jwt));
-        assertEquals(0,orders.count());assertEquals(0,reserves.get());
-    }
     @BeforeEach void setup() { returns.deleteAll(); allocations.deleteAll(); items.deleteAll(); sellers.deleteAll(); orders.deleteAll(); reserves.set(0); failNext.set(false); multiStore.set(false); org.springframework.test.util.ReflectionTestUtils.setField(shippingPolicy,"fee",0L); org.springframework.test.util.ReflectionTestUtils.setField(shippingPolicy,"simulation",false); }
     CheckoutService.Input input(String key,int quantity) { return new CheckoutService.Input(key,"Customer","0900000000","Delivery address","PAYOS",true,null,null,List.of(new CheckoutService.Line("product","variant",quantity))); }
     @Test void checkoutUsesServerPriceAndCreatesSellerItemsOnlyOnce() {

@@ -11,6 +11,13 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.client.RestClient;
 import java.time.*;
 import java.util.*;
+import com.scanms.order.entity.Order;
+import com.scanms.order.entity.ReturnRequest;
+import com.scanms.order.entity.SellerOrder;
+import java.net.http.HttpClient;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Source commands are derived from persisted business state; Payment deduplicates every reference. */
 @Component @RequiredArgsConstructor
@@ -19,7 +26,7 @@ public class FinanceDispatch {
     private final SellerOrderRepository sellers;
     private final OrderItemRepository items;
     private final OrderRepository orders;
-    private final org.springframework.transaction.PlatformTransactionManager transactions;
+    private final PlatformTransactionManager transactions;
     @Value("${scanms.finance.token-url:}") private String tokenUrl;
     @Value("${scanms.finance.client-id:order-service}") private String clientId;
     @Value("${scanms.finance.client-secret:}") private String secret;
@@ -33,7 +40,7 @@ public class FinanceDispatch {
     }
     private final RestClient http=client();
     static RestClient client() {
-        var factory=new org.springframework.http.client.JdkClientHttpRequestFactory(java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
+        var factory=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
         factory.setReadTimeout(Duration.ofSeconds(15)); return RestClient.builder().requestFactory(factory).build();
     }
     private String token() {
@@ -56,7 +63,7 @@ public class FinanceDispatch {
         String token;
         try { token=token(); } catch(Exception ex) { return; }
         if(token==null) return;
-        for(var r:batch(returns.findAll().stream().filter(r -> Set.of(ReturnRequestStatus.RECEIVED,ReturnRequestStatus.REFUND_PENDING,ReturnRequestStatus.REFUNDED).contains(r.getStatus())).sorted(Comparator.comparing(com.scanms.order.entity.ReturnRequest::getReturnRequestId)).toList(),refundCursor)) {
+        for(var r:batch(returns.findAll().stream().filter(r -> Set.of(ReturnRequestStatus.RECEIVED,ReturnRequestStatus.REFUND_PENDING,ReturnRequestStatus.REFUNDED).contains(r.getStatus())).sorted(Comparator.comparing(ReturnRequest::getReturnRequestId)).toList(),refundCursor)) {
             try {
                 if (r.getStatus() != ReturnRequestStatus.REFUNDED)
                     post(paymentUrl+"/api/v1/finance/refunds/"+r.getReturnRequestId(),token,Map.of());
@@ -66,7 +73,7 @@ public class FinanceDispatch {
             } catch(Exception ex) { /* Retry persisted source reference next cycle. */ }
         }
         refundCursor+=20;
-        for(var seller:batch(sellers.findAll().stream().filter(s -> s.getStatus()==SellerOrderStatus.COMPLETED && s.getReturnDeadline()!=null && s.getReturnDeadline().isBefore(LocalDateTime.now(ZoneOffset.UTC))).sorted(Comparator.comparing(com.scanms.order.entity.SellerOrder::getSellerOrderId)).toList(),settlementCursor)) {
+        for(var seller:batch(sellers.findAll().stream().filter(s -> s.getStatus()==SellerOrderStatus.COMPLETED && s.getReturnDeadline()!=null && s.getReturnDeadline().isBefore(LocalDateTime.now(ZoneOffset.UTC))).sorted(Comparator.comparing(SellerOrder::getSellerOrderId)).toList(),settlementCursor)) {
             try {
                 for(var item:items.findAll().stream().filter(i -> seller.getSellerOrderId().equals(i.getSellerOrderId())).toList())
                     post(promotionUrl+"/api/v1/finance/commission-finalizations/"+item.getOrderItemId(),token,Map.of("reason","Return window closed; finalize source commission"));
@@ -74,9 +81,9 @@ public class FinanceDispatch {
             } catch(Exception ex) { /* Ineligible/unresolved sources remain blocked; no money is invented. */ }
         }
         settlementCursor+=20;
-        for(var candidate:batch(orders.findAll().stream().filter(o -> o.getCheckoutRequest()!=null && o.getSagaState()!=null && !Boolean.TRUE.equals(o.getSagaState().get("resourcesFinalized"))).sorted(Comparator.comparing(com.scanms.order.entity.Order::getOrderId)).toList(),checkoutCursor)) {
+        for(var candidate:batch(orders.findAll().stream().filter(o -> o.getCheckoutRequest()!=null && o.getSagaState()!=null && !Boolean.TRUE.equals(o.getSagaState().get("resourcesFinalized"))).sorted(Comparator.comparing(Order::getOrderId)).toList(),checkoutCursor)) {
             try {
-                var order=new org.springframework.transaction.support.TransactionTemplate(transactions).execute(s -> {
+                var order=new TransactionTemplate(transactions).execute(s -> {
                     var current=orders.lockById(candidate.getOrderId()).orElseThrow();
                     if(Set.of(OrderStatus.PENDING,OrderStatus.AWAITING_PAYMENT).contains(current.getStatus()) && current.getExpiresAt()!=null && !current.getExpiresAt().isAfter(LocalDateTime.now(ZoneOffset.UTC))) current.setStatus(OrderStatus.EXPIRED);
                     return orders.saveAndFlush(current);
@@ -87,7 +94,7 @@ public class FinanceDispatch {
                 post(productUrl+"/api/v1/inventory/reservations/"+order.getOrderId()+"/"+action,token,Map.of());
                 if(usesVoucher(order.getCheckoutRequest()))
                     post(promotionUrl+"/api/v1/checkout-vouchers/"+order.getOrderId()+"/"+action,token,Map.of());
-                new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(s -> {
+                new TransactionTemplate(transactions).executeWithoutResult(s -> {
                     var current=orders.lockById(order.getOrderId()).orElseThrow(); var saga=new LinkedHashMap<>(current.getSagaState()); saga.put("resourcesFinalized",true); saga.put("resourceOutcome",action); current.setSagaState(saga); orders.save(current);
                 });
             } catch(Exception ex) { /* Both commands are idempotent, and recovery remains persisted on the order. */ }

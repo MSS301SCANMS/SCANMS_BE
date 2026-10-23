@@ -17,6 +17,7 @@ import jakarta.validation.constraints.*;
 import java.time.*;
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.function.Supplier;
 
 @Service @RequiredArgsConstructor
 public class CheckoutService {
@@ -33,10 +34,8 @@ public class CheckoutService {
     @Value("${scanms.finance.client-id:order-service}") private String clientId;
     @Value("${scanms.finance.client-secret:}") private String secret;
     private final RestClient http=FinanceDispatch.client();
-    public record Line(@NotBlank String productId,String variantId,@Min(1) @Max(1000) int quantity,String sourceLivestreamId,
-        @Pattern(regexp="[A-Za-z0-9_-]{1,100}") String referralLinkId) {
-        public Line(String productId,String variantId,int quantity) { this(productId,variantId,quantity,null,null); }
-        public Line(String productId,String variantId,int quantity,String sourceLivestreamId) { this(productId,variantId,quantity,sourceLivestreamId,null); }
+    public record Line(@NotBlank String productId,String variantId,@Min(1) @Max(1000) int quantity,String sourceLivestreamId) {
+        public Line(String productId,String variantId,int quantity) { this(productId,variantId,quantity,null); }
     }
     public record Input(@NotBlank @Size(max=128) String idempotencyKey,@NotBlank @Size(max=100) String customerName,
         @NotBlank @Size(max=30) String customerPhone,@NotBlank @Size(max=500) String shippingAddress,
@@ -47,7 +46,7 @@ public class CheckoutService {
             this(key,name,phone,address,payment,accepted,coupon,notes,items,null);
         }
     }
-    private <T> T tx(java.util.function.Supplier<T> action) { return new TransactionTemplate(transactions).execute(s -> action.get()); }
+    private <T> T tx(Supplier<T> action) { return new TransactionTemplate(transactions).execute(s -> action.get()); }
     @SuppressWarnings("unchecked") private Map<String,Object> result(Map<?,?> response) {
         if(response==null || !(response.get("result") instanceof Map<?,?> value)) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Checkout source contract unavailable");
         return (Map<String,Object>)value;
@@ -69,19 +68,9 @@ public class CheckoutService {
         if(!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject"))) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Active customer profile required");
         String customer=user.get("userId").toString(), serialized=tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(input);
         String token=serviceToken();
-        var existing=orders.findByCustomerIdAndIdempotencyKey(customer,input.idempotencyKey());
-        Map<String,Map<String,Object>> referrals=new HashMap<>();
-        for(Line line:input.items()) if((line.referralLinkId()!=null || line.sourceLivestreamId()!=null) && (existing.isEmpty() || !"READY".equals(existing.get().getSagaState().get("checkoutState")))) {
-            String attributionPath=line.referralLinkId()!=null?"/api/v1/referrals/attribution/{id}?productId={product}":"/api/v1/referrals/livestream-attribution/{id}?productId={product}";
-            var attribution=result(http.get().uri(promotionUrl+attributionPath,line.referralLinkId()!=null?line.referralLinkId():line.sourceLivestreamId(),line.productId())
-                    .headers(h->h.setBearerAuth(token)).retrieve().body(Map.class));
-            if(attribution.isEmpty() && line.referralLinkId()==null) continue;
-            if(!line.productId().equals(attribution.get("productId")) || (line.referralLinkId()!=null && !line.referralLinkId().equals(attribution.get("referralLinkId"))))
-                throw new ResponseStatusException(HttpStatus.CONFLICT,"Không xác minh được liên kết giới thiệu cho sản phẩm.");
-            if(!customer.equals(attribution.get("userId"))) referrals.put(line.productId()+":"+Objects.toString(line.variantId(),""),attribution);
-        }
         shippingPolicy.perStore();
         // Idempotent retries must use the original order's captured policy.
+        var existing=orders.findByCustomerIdAndIdempotencyKey(customer,input.idempotencyKey());
         if((existing.isEmpty() || !"READY".equals(existing.get().getSagaState().get("checkoutState"))) && input.expectedShippingFeeVnd()!=null) {
             var quote=post(productUrl+"/api/v1/inventory/reservations/quote",token,Map.of("items",input.items()));
             var quotedLines=(List<Map<String,Object>>)quote.get("lines");
@@ -111,8 +100,6 @@ public class CheckoutService {
                 for(var d:ds) discount=Math.addExact(discount,number(d,"allocatedAmountVnd"));
                 if(discount<0 || discount>gross) throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid allocated discount");
                 OrderItem item=items.saveAndFlush(OrderItem.builder().sellerOrderId(seller.getSellerOrderId()).productId(line.get("productId").toString()).variantId(line.get("variantId").toString()).sourceLivestreamId(Objects.toString(line.get("sourceLivestreamId"),null)).quantity(((Number)line.get("quantity")).intValue()).unitPrice(number(line,"unitPriceVnd")).grossAmountVnd(gross).discountAmountVnd(discount).netPaidAmountVnd(gross-discount).productSnapshot(line).selectedSize(Objects.toString(line.get("size"),null)).build());
-                var attribution=referrals.getOrDefault(item.getProductId()+":"+item.getVariantId(),referrals.get(item.getProductId()+":"));
-                if(attribution!=null) { item.setReferralLinkId(attribution.get("referralLinkId").toString());item.setRuleSnapshot(Map.of("collaboratorId",attribution.get("collaboratorId"))); }
                 for(var d:ds) if(number(d,"allocatedAmountVnd")>0) allocations.save(DiscountAllocation.builder().orderItemId(item.getOrderItemId()).voucherId(d.get("voucherId").toString()).sourceType(DiscountSourceType.VOUCHER).fundedBy(DiscountFundingType.valueOf(d.get("fundedBy").toString())).allocatedAmountVnd(number(d,"allocatedAmountVnd")).ruleSnapshotJson(tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(d)).build());
                 total=Math.addExact(total,gross-discount);
                 Map<String,Object> totals=new LinkedHashMap<>(seller.getTotalsSnapshot()); totals.put("storeName",line.get("storeName")); totals.put("netPaidVnd",Math.addExact(((Number)totals.getOrDefault("netPaidVnd",0L)).longValue(),gross-discount)); seller.setTotalsSnapshot(totals);

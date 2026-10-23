@@ -10,6 +10,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import com.scanms.order.constant.ReturnRequestStatus;
+import com.scanms.order.exception.AppException;
+import com.scanms.order.exception.ErrorCode;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/returns")
@@ -17,25 +21,25 @@ import java.util.*;
 public class ReturnRequestController {
     private final ReturnRequestService service;
 
-    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
     public ResponseEntity<ApiResponse<ReturnRequestResponse>> create(@Valid @RequestBody CreateReturnRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
-    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canDecideReturn(authentication)")
+    @PreAuthorize("@financeBoundary.canDecideReturn(authentication)")
     @PostMapping("/{id}/decision")
     public ApiResponse<ReturnRequestResponse> processDecision(
             @PathVariable String id,
             @RequestBody(required = false) ReturnDecisionRequest decision,
-            @RequestParam(required = false) com.scanms.order.constant.ReturnRequestStatus status,
+            @RequestParam(required = false) ReturnRequestStatus status,
             @RequestParam(required = false) String decisionReason) {
         ReturnDecisionRequest finalDecision = decision;
         if (finalDecision == null && status != null) {
             finalDecision = new ReturnDecisionRequest(status, decisionReason, null, null);
         }
         if (finalDecision == null) {
-            throw new com.scanms.order.exception.AppException(com.scanms.order.exception.ErrorCode.INVALID_REQUEST, "Decision status is required");
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Decision status is required");
         }
         return ApiResponse.success(service.processDecision(id, finalDecision));
     }

@@ -3,24 +3,31 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import java.time.*;
 import java.util.*;
+import com.scanms.payment.entity.BankClosedDay;
+import com.scanms.payment.exception.AppException;
+import com.scanms.payment.exception.ErrorCode;
+import com.scanms.payment.repository.BankClosedDayRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 @Component
 public class BankBusinessCalendar {
     @Value("${scanms.payment.bank-closed-dates:}") private String closedDates;
-    @org.springframework.beans.factory.annotation.Autowired private com.scanms.payment.repository.BankClosedDayRepository days;
-    @org.springframework.beans.factory.annotation.Autowired private PaymentAccess access;
-    public java.util.List<Map<String,Object>> configuredDays() {
+    @Autowired private BankClosedDayRepository days;
+    @Autowired private PaymentAccess access;
+    public List<Map<String,Object>> configuredDays() {
         access.operatorOnly();
-        return days.findAll().stream().sorted(Comparator.comparing(com.scanms.payment.entity.BankClosedDay::getClosedDate))
+        return days.findAll().stream().sorted(Comparator.comparing(BankClosedDay::getClosedDate))
                 .map(d -> Map.<String,Object>of("date",d.getClosedDate().toString(),"reason",d.getReason(),"actor",d.getConfiguredBy(),"configuredAt",d.getConfiguredAt())).toList();
     }
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     public void closeDay(LocalDate date,String reason) {
         access.operatorOnly();
         if(reason==null || reason.isBlank() || reason.length()>500 || date.isBefore(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"))))
-            throw new com.scanms.payment.exception.AppException(com.scanms.payment.exception.ErrorCode.INVALID_REQUEST,"Future bank closure and reason required");
-        var row=days.findById(date).orElseGet(com.scanms.payment.entity.BankClosedDay::new);
+            throw new AppException(ErrorCode.INVALID_REQUEST,"Future bank closure and reason required");
+        var row=days.findById(date).orElseGet(BankClosedDay::new);
         row.setClosedDate(date); row.setReason(reason.trim()); row.setConfiguredAt(Instant.now());
-        row.setConfiguredBy(org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName()); days.save(row);
+        row.setConfiguredBy(SecurityContextHolder.getContext().getAuthentication().getName()); days.save(row);
     }
     public Instant nextProcessingAt(Instant now) {
         ZoneId zone=ZoneId.of("Asia/Ho_Chi_Minh"); LocalDate day=now.atZone(zone).toLocalDate();

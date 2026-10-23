@@ -16,6 +16,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.*;
 import java.util.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
+import org.springframework.security.core.context.SecurityContextHolder;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 
 @Service @RequiredArgsConstructor @Transactional
 public class FinanceService {
@@ -33,8 +41,8 @@ public class FinanceService {
     private final BankBusinessCalendar calendar;
     private final FinanceOutbox outbox;
     private final PaymentRepository payments;
-    private final jakarta.persistence.EntityManager entityManager;
-    private final org.springframework.core.env.Environment environment;
+    private final EntityManager entityManager;
+    private final Environment environment;
     @Value("${scanms.payment.sandbox-enabled:false}") private boolean sandboxEnabled;
     @Value("${clients.order.url:http://localhost:8083}") private String orderUrl;
     @Value("${clients.promotion.url:http://localhost:8085}") private String promotionUrl;
@@ -56,11 +64,11 @@ public class FinanceService {
     }
     public WalletView wallet(String id) { return walletView(ownedWallet(id)); }
     public Wallet lockOwnedWallet(String id) {
-        Wallet w=ownedWallet(id); entityManager.refresh(w,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE); return w;
+        Wallet w=ownedWallet(id); entityManager.refresh(w,LockModeType.PESSIMISTIC_WRITE); return w;
     }
     public boolean sandboxTopUpAvailable() {
-        return sandboxEnabled && environment.acceptsProfiles(org.springframework.core.env.Profiles.of("local"))
-                && !environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod", "production"));
+        return sandboxEnabled && environment.acceptsProfiles(Profiles.of("local"))
+                && !environment.acceptsProfiles(Profiles.of("prod", "production"));
     }
     public Map<String,Object> capabilities() { return Map.of("minimumWithdrawalVnd",minimum,"currency","VND","sandboxTopUpAvailable",sandboxTopUpAvailable()); }
     public WalletTransactionResponse sandboxTopUp(TopUpInput input) {
@@ -72,7 +80,7 @@ public class FinanceService {
         if (wallet.getOwnerType()!=WalletOwnerType.CUSTOMER || !Objects.equals(wallet.getOwnerRefId(),access.userId()))
             throw new AppException(ErrorCode.FORBIDDEN,"Only your own customer wallet supports sandbox top-up");
         if (wallet.getStatus()!=WalletStatus.ACTIVE) throw new AppException(ErrorCode.CONFLICT,"Wallet is not active");
-        String key="sandbox:"+UUID.nameUUIDFromBytes((wallet.getWalletId()+":"+input.idempotencyKey()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String key="sandbox:"+UUID.nameUUIDFromBytes((wallet.getWalletId()+":"+input.idempotencyKey()).getBytes(StandardCharsets.UTF_8));
         return post(wallet.getWalletId(),WalletTransactionType.TOP_UP,WalletTransactionDirection.CREDIT,
                 input.amountVnd(),"TOPUP_DEMO",wallet.getWalletId(),key);
     }
@@ -83,12 +91,12 @@ public class FinanceService {
         ownedWallet(id);
         if(from!=null && to!=null && from.isAfter(to)) throw new AppException(ErrorCode.INVALID_REQUEST,"Invalid date range");
         var results=entries.findAll((root,query,cb) -> {
-            var predicates=new ArrayList<jakarta.persistence.criteria.Predicate>(); predicates.add(cb.equal(root.get("walletId"),id));
+            var predicates=new ArrayList<Predicate>(); predicates.add(cb.equal(root.get("walletId"),id));
             if(type!=null) predicates.add(cb.equal(root.get("type"),type));
             if(from!=null) predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"),from));
             if(to!=null) predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"),to));
             if(reference!=null && !reference.isBlank()) predicates.add(cb.equal(root.get("referenceId"),reference));
-            return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+            return cb.and(predicates.toArray(Predicate[]::new));
         },paging(page,size,"createdAt"));
         return new PageView<>(results.stream().map(e -> new LedgerView(e.getTransactionId(),e.getType(),e.getDirection(),e.getAmountVnd(),
                 e.getBalanceBeforeVnd(),e.getBalanceAfterVnd(),e.getHeldBeforeVnd(),e.getHeldAfterVnd(),e.getReferenceType(),e.getReferenceId(),e.getCreatedAt())).toList(),results.getTotalElements(),page,size);
@@ -101,10 +109,10 @@ public class FinanceService {
     public PageView<WalletView> walletList(WalletOwnerType type,String owner,int page,int size) {
         access.operatorOnly();
         var result=wallets.findAll((root,query,cb) -> {
-            var p=new ArrayList<jakarta.persistence.criteria.Predicate>();
+            var p=new ArrayList<Predicate>();
             if(type!=null) p.add(cb.equal(root.get("ownerType"),type));
             if(owner!=null && !owner.isBlank()) p.add(cb.equal(root.get("ownerRefId"),owner));
-            return cb.and(p.toArray(jakarta.persistence.criteria.Predicate[]::new));
+            return cb.and(p.toArray(Predicate[]::new));
         },paging(page,size,"createdAt"));
         return new PageView<>(result.stream().map(this::walletView).toList(),result.getTotalElements(),page,size);
     }
@@ -135,12 +143,12 @@ public class FinanceService {
         return (type==WalletOwnerType.STORE?banks.findByStoreId(owner):banks.findByCollaboratorId(owner)).stream().map(this::bankView).toList();
     }
     public BankView bankStatus(String id,BankAccountVerificationStatus status) {
-        access.operatorOnly(); BankAccount b=bank(id); entityManager.refresh(b,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        access.operatorOnly(); BankAccount b=bank(id); entityManager.refresh(b,LockModeType.PESSIMISTIC_WRITE);
         if(!Boolean.TRUE.equals(b.getActive())) throw new AppException(ErrorCode.CONFLICT,"An inactive bank account cannot be verified");
-        b.setVerificationStatus(status); b.setVerifiedBy(org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication()==null?"operator":org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName()); b.setVerifiedAt(Instant.now()); return bankView(banks.save(b));
+        b.setVerificationStatus(status); b.setVerifiedBy(SecurityContextHolder.getContext().getAuthentication()==null?"operator":SecurityContextHolder.getContext().getAuthentication().getName()); b.setVerifiedAt(Instant.now()); return bankView(banks.save(b));
     }
     public BankView replaceBank(String id,BankInput input) {
-        BankAccount old=bank(id); entityManager.refresh(old,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        BankAccount old=bank(id); entityManager.refresh(old,LockModeType.PESSIMISTIC_WRITE);
         access.owner(input.ownerType(),input.ownerRefId());
         if(!Objects.equals(input.ownerType()==WalletOwnerType.STORE?old.getStoreId():old.getCollaboratorId(),input.ownerRefId())) throw new AppException(ErrorCode.FORBIDDEN);
         var previous=banks.findByReplacesBankId(id);
@@ -176,7 +184,7 @@ public class FinanceService {
     }
     public WithdrawalView requestWithdrawal(WithdrawalInput input) {
         Wallet wallet=ownedWallet(input.walletId());
-        entityManager.refresh(wallet,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        entityManager.refresh(wallet,LockModeType.PESSIMISTIC_WRITE);
         var previous=withdrawals.findByIdempotencyKey(input.idempotencyKey());
         if(previous.isPresent()) {
             WithdrawalRequest old=previous.get();
@@ -215,7 +223,7 @@ public class FinanceService {
     public WithdrawalRequest lockedWithdrawal(String id) { return withdrawals.lockById(id).orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND)); }
     private Wallet lockedWallet(String id) {
         Wallet w=wallets.findById(id).orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
-        entityManager.refresh(w,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE); return w;
+        entityManager.refresh(w,LockModeType.PESSIMISTIC_WRITE); return w;
     }
     @Transactional(readOnly=true) public PageView<WithdrawalView> withdrawalList(String walletId,int page,int size) {
         Page<WithdrawalRequest> result;
@@ -370,7 +378,7 @@ public class FinanceService {
         return PageRequest.of(page,size,Sort.by(Sort.Direction.DESC,sort));
     }
     public static long number(Map<String,Object> map,String key) {
-        try { return new java.math.BigDecimal(Objects.toString(map.get(key))).longValueExact(); }
+        try { return new BigDecimal(Objects.toString(map.get(key))).longValueExact(); }
         catch(Exception ex) { throw new AppException(ErrorCode.CONFLICT,"Missing or invalid contract field: "+key); }
     }
     public static String json(Object value) { return tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(value); }

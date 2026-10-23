@@ -13,13 +13,14 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import java.util.Map;
 import java.util.Objects;
+import com.scanms.promotion.service.VoucherAccess;
 @RestController @RequiredArgsConstructor
 public class CollaboratorIdentityController {
     private final CollaboratorProfileRepository repository;
     private final CollaboratorProfileMapper mapper;
-    private final com.scanms.promotion.service.VoucherAccess access;
+    private final VoucherAccess access;
     @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
-    @GetMapping("/api/v1/collaborators/me") ApiResponse<CollaboratorProfileResponse> me(@AuthenticationPrincipal Jwt jwt) {
+    @GetMapping("/api/v1/collaborators/me") public ApiResponse<CollaboratorProfileResponse> me(@AuthenticationPrincipal Jwt jwt) {
         String userId=access.userId();
         return ApiResponse.success(repository.findByUserId(Objects.toString(userId, null))
                 .map(mapper::toResponse)

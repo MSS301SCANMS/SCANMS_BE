@@ -31,18 +31,18 @@ public class PublicStoreController {
     }
 
     @GetMapping("/public/id/{shopId}/follow")
-    ApiResponse<Map<String, Object>> followStatus(@PathVariable String shopId) {
+    public ApiResponse<Map<String, Object>> followStatus(@PathVariable String shopId) {
         // Existing compatibility stub; persistence is not part of the catalog seed.
         return ApiResponse.success(Map.of("following", false, "shopId", shopId));
     }
 
     @PostMapping("/public/id/{shopId}/follow")
-    ApiResponse<Map<String, Object>> follow(@PathVariable String shopId) {
+    public ApiResponse<Map<String, Object>> follow(@PathVariable String shopId) {
         return ApiResponse.success(Map.of("following", true, "shopId", shopId));
     }
 
     @DeleteMapping("/public/id/{shopId}/follow")
-    ApiResponse<Map<String, Object>> unfollow(@PathVariable String shopId) {
+    public ApiResponse<Map<String, Object>> unfollow(@PathVariable String shopId) {
         return ApiResponse.success(Map.of("following", false, "shopId", shopId));
     }
 }

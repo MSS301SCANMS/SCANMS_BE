@@ -19,32 +19,32 @@ public class StoreApplicationController {
     public record ReviewRequest(String note) {}
 
     @PostMapping
-    ResponseEntity<ApiResponse<StoreApplicationResponse>> create(@Valid @RequestBody CreateStoreApplicationRequest request) {
+    public ResponseEntity<ApiResponse<StoreApplicationResponse>> create(@Valid @RequestBody CreateStoreApplicationRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<StoreApplicationResponse> getById(@PathVariable String id) {
+    public ApiResponse<StoreApplicationResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @PutMapping("/{id}")
-    ApiResponse<StoreApplicationResponse> updatePending(@PathVariable String id, @Valid @RequestBody CreateStoreApplicationRequest request) {
+    public ApiResponse<StoreApplicationResponse> updatePending(@PathVariable String id, @Valid @RequestBody CreateStoreApplicationRequest request) {
         return ApiResponse.success(service.updatePending(id, request));
     }
 
     @GetMapping
-    ApiResponse<List<StoreApplicationResponse>> findAll() {
+    public ApiResponse<List<StoreApplicationResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 
     @PostMapping("/{id}/approve")
-    ApiResponse<StoreApplicationResponse> approve(@PathVariable String id, @RequestBody(required = false) ReviewRequest request) {
+    public ApiResponse<StoreApplicationResponse> approve(@PathVariable String id, @RequestBody(required = false) ReviewRequest request) {
         return ApiResponse.success(service.review(id, true, request == null ? null : request.note()));
     }
 
     @PostMapping("/{id}/reject")
-    ApiResponse<StoreApplicationResponse> reject(@PathVariable String id, @RequestBody(required = false) ReviewRequest request) {
+    public ApiResponse<StoreApplicationResponse> reject(@PathVariable String id, @RequestBody(required = false) ReviewRequest request) {
         return ApiResponse.success(service.review(id, false, request == null ? null : request.note()));
     }
 }

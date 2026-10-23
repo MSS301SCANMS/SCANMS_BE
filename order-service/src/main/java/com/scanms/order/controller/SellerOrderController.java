@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/seller-orders")
@@ -18,7 +19,7 @@ import java.util.*;
 public class SellerOrderController {
     private final SellerOrderService service;
 
-    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
     public ResponseEntity<ApiResponse<SellerOrderResponse>> create(@Valid @RequestBody CreateSellerOrderRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
@@ -34,7 +35,7 @@ public class SellerOrderController {
         return ApiResponse.success(service.getSummaryById(id));
     }
 
-    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PatchMapping("/{id}/status")
     public ApiResponse<SellerOrderResponse> updateStatus(
             @PathVariable String id,

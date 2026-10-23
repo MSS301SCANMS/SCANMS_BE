@@ -10,6 +10,7 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -24,7 +25,7 @@ public class ShopRoleGranter {
             RestClient.builder().requestFactory(factory).build().post()
                     .uri(userUrl + "/api/v1/auth/" + userId + "/roles/shop-owner")
                     .headers(headers -> headers.setBearerAuth(access.bearerToken()))
-                    .body(java.util.Map.of()).retrieve().toBodilessEntity();
+                    .body(Map.of()).retrieve().toBodilessEntity();
         } catch (RestClientException ex) {
             throw new AppException(ErrorCode.CONFLICT, "Cannot grant SHOP_OWNER role; store approval was rolled back");
         }

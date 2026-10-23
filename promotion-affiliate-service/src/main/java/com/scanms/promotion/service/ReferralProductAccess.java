@@ -9,6 +9,7 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.*;
 import org.springframework.web.server.ResponseStatusException;
+import java.util.Objects;
 
 @Component
 public class ReferralProductAccess {
@@ -27,7 +28,7 @@ public class ReferralProductAccess {
         var product = result("/api/v1/public/products/" + productId);
         if (!"ACTIVE".equals(product.get("status")))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Sản phẩm hiện không mở bán.");
-        String storeId = java.util.Objects.toString(product.get("storeId"), "");
+        String storeId = Objects.toString(product.get("storeId"), "");
         if (!storeId.matches("[A-Za-z0-9_-]{1,100}")) throw unavailable();
         var store = result("/api/v1/stores/public/id/" + storeId);
         if (!"APPROVED".equals(store.get("approvalStatus")))

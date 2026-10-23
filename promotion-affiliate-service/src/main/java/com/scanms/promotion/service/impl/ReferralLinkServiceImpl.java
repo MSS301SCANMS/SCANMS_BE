@@ -17,6 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import com.scanms.promotion.constant.ReferralLinkStatus;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 @Service
 @RequiredArgsConstructor
@@ -43,7 +46,7 @@ public class ReferralLinkServiceImpl implements ReferralLinkService {
             throw new AppException(ErrorCode.CONFLICT,
                     "Hồ sơ KOL cần được duyệt trước khi tạo liên kết tiếp thị.");
         }
-        if (request.status() != null && request.status() != com.scanms.promotion.constant.ReferralLinkStatus.ACTIVE)
+        if (request.status() != null && request.status() != ReferralLinkStatus.ACTIVE)
             throw new AppException(ErrorCode.INVALID_REQUEST, "Liên kết mới phải ở trạng thái hoạt động.");
         if (request.livestreamId() != null)
             throw new AppException(ErrorCode.INVALID_REQUEST, "Tạo liên kết sản phẩm không hỗ trợ gắn phiên phát trực tiếp.");
@@ -61,7 +64,7 @@ public class ReferralLinkServiceImpl implements ReferralLinkService {
                 throw new AppException(ErrorCode.CONFLICT, "Mã liên kết đã được sử dụng. Vui lòng tạo yêu cầu mới.");
             return mapper.toResponse(link);
         }
-        if (request.expiresAt() != null && !request.expiresAt().isAfter(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)))
+        if (request.expiresAt() != null && !request.expiresAt().isAfter(LocalDateTime.now(ZoneOffset.UTC)))
             throw new AppException(ErrorCode.INVALID_REQUEST, "Thời hạn liên kết phải ở trong tương lai.");
         if (repository.countByCollaboratorIdAndProductId(profile.getCollaboratorId(), request.productId()) >= 20)
             throw new AppException(ErrorCode.CONFLICT, "Bạn đã đạt giới hạn 20 liên kết cho sản phẩm này.");
@@ -70,7 +73,7 @@ public class ReferralLinkServiceImpl implements ReferralLinkService {
         entity.setCollaboratorId(profile.getCollaboratorId());
         entity.setToken(token);
         entity.setLabel(label);
-        entity.setStatus(com.scanms.promotion.constant.ReferralLinkStatus.ACTIVE);
+        entity.setStatus(ReferralLinkStatus.ACTIVE);
         return mapper.toResponse(repository.saveAndFlush(entity));
     }
 

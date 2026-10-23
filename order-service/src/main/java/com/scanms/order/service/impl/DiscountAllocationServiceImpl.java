@@ -10,6 +10,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import com.scanms.order.constant.DiscountFundingType;
+import com.scanms.order.constant.DiscountSourceType;
+import com.scanms.order.entity.DiscountAllocation;
+import com.scanms.order.entity.OrderItem;
 
 @Service
 @RequiredArgsConstructor
@@ -33,20 +37,20 @@ public class DiscountAllocationServiceImpl implements DiscountAllocationService 
     }
 
     @Override
-    public Map<String, Long> allocateOrderDiscount(List<com.scanms.order.entity.OrderItem> items, Long totalDiscountVnd) {
+    public Map<String, Long> allocateOrderDiscount(List<OrderItem> items, Long totalDiscountVnd) {
         Map<String, Long> allocationMap = new LinkedHashMap<>();
         if (items == null || items.isEmpty() || totalDiscountVnd == null || totalDiscountVnd <= 0) {
             if (items != null) {
-                for (com.scanms.order.entity.OrderItem item : items) {
+                for (OrderItem item : items) {
                     allocationMap.put(item.getOrderItemId(), 0L);
                 }
             }
             return allocationMap;
         }
 
-        long totalGross = items.stream().mapToLong(com.scanms.order.entity.OrderItem::getGrossAmountVnd).sum();
+        long totalGross = items.stream().mapToLong(OrderItem::getGrossAmountVnd).sum();
         if (totalGross <= 0) {
-            for (com.scanms.order.entity.OrderItem item : items) {
+            for (OrderItem item : items) {
                 allocationMap.put(item.getOrderItemId(), 0L);
             }
             return allocationMap;
@@ -57,7 +61,7 @@ public class DiscountAllocationServiceImpl implements DiscountAllocationService 
         String maxGrossItemId = null;
         long maxGross = -1;
 
-        for (com.scanms.order.entity.OrderItem item : items) {
+        for (OrderItem item : items) {
             long itemGross = item.getGrossAmountVnd();
             if (itemGross > maxGross) {
                 maxGross = itemGross;
@@ -76,7 +80,7 @@ public class DiscountAllocationServiceImpl implements DiscountAllocationService 
             long currentAlloc = allocationMap.get(targetId);
             long itemGross = items.stream()
                     .filter(i -> i.getOrderItemId().equals(targetId))
-                    .mapToLong(com.scanms.order.entity.OrderItem::getGrossAmountVnd)
+                    .mapToLong(OrderItem::getGrossAmountVnd)
                     .findFirst()
                     .orElse(currentAlloc);
 
@@ -88,22 +92,22 @@ public class DiscountAllocationServiceImpl implements DiscountAllocationService 
     }
 
     @Override
-    public List<com.scanms.order.entity.DiscountAllocation> createAllocations(
-            List<com.scanms.order.entity.OrderItem> items,
+    public List<DiscountAllocation> createAllocations(
+            List<OrderItem> items,
             String voucherId,
-            com.scanms.order.constant.DiscountFundingType fundingType,
+            DiscountFundingType fundingType,
             Map<String, Long> itemAllocations) {
-        List<com.scanms.order.entity.DiscountAllocation> list = new ArrayList<>();
+        List<DiscountAllocation> list = new ArrayList<>();
         if (items == null || itemAllocations == null) return list;
 
-        for (com.scanms.order.entity.OrderItem item : items) {
+        for (OrderItem item : items) {
             Long alloc = itemAllocations.getOrDefault(item.getOrderItemId(), 0L);
             if (alloc > 0) {
-                com.scanms.order.entity.DiscountAllocation da = com.scanms.order.entity.DiscountAllocation.builder()
+                DiscountAllocation da = DiscountAllocation.builder()
                         .orderItemId(item.getOrderItemId())
                         .voucherId(voucherId != null && !voucherId.isBlank() ? voucherId : "VOUCHER_ORDER")
-                        .sourceType(com.scanms.order.constant.DiscountSourceType.VOUCHER)
-                        .fundedBy(fundingType != null ? fundingType : com.scanms.order.constant.DiscountFundingType.PLATFORM)
+                        .sourceType(DiscountSourceType.VOUCHER)
+                        .fundedBy(fundingType != null ? fundingType : DiscountFundingType.PLATFORM)
                         .allocatedAmountVnd(alloc)
                         .ruleSnapshotJson(String.format("{\"allocated\":%d,\"gross\":%d,\"unitPrice\":%d,\"quantity\":%d}",
                                 alloc, item.getGrossAmountVnd(), item.getUnitPrice(), item.getQuantity()))
