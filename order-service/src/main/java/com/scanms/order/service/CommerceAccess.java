@@ -28,7 +28,7 @@ public class CommerceAccess {
     public String customer(Jwt jwt) {
         if(jwt==null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         try {
-            Map<?,?> envelope=FinanceDispatch.client().get().uri(userUrl+"/api/v1/users/me")
+            Map<?,?> envelope=FinanceDispatch.client().get().uri(userUrl+"/api/v1/users")
                 .headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
             if(envelope!=null && envelope.get("result") instanceof Map<?,?> user && "ACTIVE".equals(user.get("status"))
                 && jwt.getSubject().equals(user.get("identitySubject")) && user.get("userId") instanceof String id) return id;

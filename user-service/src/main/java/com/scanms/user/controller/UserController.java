@@ -21,12 +21,12 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
     private final UserService service;
 
-    @GetMapping("/me")
+    @GetMapping
     public ApiResponse<UserResponse> me(@AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.success(service.synchronizeCurrentUser(jwt));
     }
 
-    @PatchMapping("/me")
+    @PatchMapping
     public ApiResponse<UserResponse> updateMe(@AuthenticationPrincipal Jwt jwt,
                                        @Valid @RequestBody UpdateUserProfileRequest request) {
         return ApiResponse.success(service.updateCurrentUser(jwt.getSubject(), request));

@@ -26,7 +26,7 @@ public class CollaborationAccess {
 
     public List<Map<?, ?>> stores(Jwt jwt, boolean admin) {
         if (admin) {
-            Object result = result(userUrl + "/api/v1/users/me", jwt);
+            Object result = result(userUrl + "/api/v1/users", jwt);
             if (!(result instanceof Map<?, ?> user) || !"ACTIVE".equals(user.get("status"))
                     || !jwt.getSubject().equals(user.get("identitySubject")))
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản chưa được kích hoạt.");

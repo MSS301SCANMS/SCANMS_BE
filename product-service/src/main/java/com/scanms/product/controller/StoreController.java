@@ -30,7 +30,7 @@ public class StoreController {
     @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
     @GetMapping("/mine") public ApiResponse<List<Map<String,Object>>> mine(@AuthenticationPrincipal Jwt jwt) {
         var factory=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()); factory.setReadTimeout(Duration.ofSeconds(10));
-        Map<?,?> response=RestClient.builder().requestFactory(factory).build().get().uri(userUrl+"/api/v1/users/me").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
+        Map<?,?> response=RestClient.builder().requestFactory(factory).build().get().uri(userUrl+"/api/v1/users").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
         if(response==null || !(response.get("result") instanceof Map<?,?> user) || !"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject"))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         return ApiResponse.success(stores.findByOwnerUserId(user.get("userId").toString()).stream().map(s -> Map.<String,Object>of("storeId",s.getStoreId(),"name",s.getName(),"approvalStatus",s.getApprovalStatus())).toList());
     }

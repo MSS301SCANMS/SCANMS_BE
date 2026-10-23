@@ -21,7 +21,7 @@ public class ManagerStatisticsAccess {
         if (Collections.disjoint(roles, Set.of("ADMIN", "MANAGER")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ quản trị viên được xem thống kê toàn sàn.");
         try {
-            Map<?, ?> envelope = http.get().uri(userUrl + "/api/v1/users/me")
+            Map<?, ?> envelope = http.get().uri(userUrl + "/api/v1/users")
                     .headers(headers -> headers.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
             if (envelope == null || !(envelope.get("result") instanceof Map<?, ?> user)
                     || !"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject")))
