@@ -8,13 +8,15 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController @RequiredArgsConstructor
 public class PublicVoucherController {
     private final VoucherRepository vouchers;
     @GetMapping("/api/v1/vouchers/public")
     public ApiResponse<List<Map<String,Object>>> list(@RequestParam String storeId) {
-        if(storeId.isBlank()||storeId.length()>255) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,"Store required");
+        if(storeId.isBlank()||storeId.length()>255) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Store required");
         var now=LocalDateTime.now(ZoneOffset.UTC);
         var result=vouchers.findByStoreId(storeId).stream()
                 .filter(v->v.getIssuerType()==VoucherIssuerType.STORE&&v.getValidFrom()!=null&&v.getValidUntil()!=null&&!v.getValidFrom().isAfter(now)&&v.getValidUntil().isAfter(now))

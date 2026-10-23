@@ -6,31 +6,15 @@ import com.scanms.user.entity.Role;
 import com.scanms.user.entity.User;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.springframework.stereotype.Component;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
-@Component
-public class UserMapper {
-    public UserResponse toResponse(User user) {
-        return new UserResponse(
-                user.getUserId(),
-                user.getIdentitySubject(),
-                user.getUsername(),
-                user.getEmail(),
-                user.getFullName(),
-                user.getPhoneNumber(),
-                user.getDateOfBirth(),
-                user.getGender(),
-                user.getAddress(),
-                user.getAvatarUrl(),
-                user.getBio(),
-                user.getStatus(),
-                toRoleNames(user.getRoles()),
-                user.getCreatedAt(),
-                user.getUpdatedAt()
-        );
-    }
+@Mapper(componentModel = "spring")
+public interface UserMapper {
+    @Mapping(target = "roles", expression = "java(toRoleNames(user.getRoles()))")
+    UserResponse toResponse(User user);
 
-    private Set<RoleName> toRoleNames(Set<Role> roles) {
+    default Set<RoleName> toRoleNames(Set<Role> roles) {
         if (roles == null || roles.isEmpty()) {
             return Set.of();
         }

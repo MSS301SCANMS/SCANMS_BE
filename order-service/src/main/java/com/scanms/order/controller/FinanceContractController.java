@@ -23,6 +23,7 @@ import com.scanms.order.service.RefundAllocation;
 import java.net.http.HttpClient;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import java.math.BigDecimal;
+import tools.jackson.databind.json.JsonMapper;
 
 /** Boundary owned by Order: Payment reads validated amounts, never client-supplied totals. */
 @Slf4j
@@ -146,7 +147,7 @@ public class FinanceContractController {
                 allocated=Math.addExact(allocated,a.getAllocatedAmountVnd());
                 long platformShare=a.getFundedBy()==DiscountFundingType.PLATFORM?a.getAllocatedAmountVnd():0;
                 if(a.getFundedBy()==DiscountFundingType.SHARED) {
-                    Map<?,?> rule=tools.jackson.databind.json.JsonMapper.builder().build().readValue(a.getRuleSnapshotJson(),Map.class);
+                    Map<?,?> rule=JsonMapper.builder().build().readValue(a.getRuleSnapshotJson(),Map.class);
                     if(!(rule.get("platformFundedVnd") instanceof Number)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Shared funding snapshot missing");
                     platformShare=new BigDecimal(rule.get("platformFundedVnd").toString()).longValueExact();
                     if(platformShare<0 || platformShare>a.getAllocatedAmountVnd()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid shared funding");

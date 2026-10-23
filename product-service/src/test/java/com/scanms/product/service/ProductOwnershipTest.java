@@ -21,12 +21,13 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mapstruct.factory.Mappers;
 
 class ProductOwnershipTest {
     private final ProductAccess access = mock(ProductAccess.class);
     private final ProductRepository products = mock(ProductRepository.class);
     private final ProductCategoryRepository categories = mock(ProductCategoryRepository.class);
-    private final ProductServiceImpl service = new ProductServiceImpl(products, new ProductMapper(), access, categories);
+    private final ProductServiceImpl service = new ProductServiceImpl(products, Mappers.getMapper(ProductMapper.class), access, categories);
 
     private CreateProductRequest productRequest() {
         return new CreateProductRequest("store-1", null, "Linen shirt", null, null, "linen",
@@ -50,7 +51,7 @@ class ProductOwnershipTest {
 
     @Test void variantCannotBeAddedToAnotherOwnersProduct() {
         var variants = mock(ProductVariantRepository.class);
-        var variantService = new ProductVariantServiceImpl(variants, new ProductVariantMapper(), products, access);
+        var variantService = new ProductVariantServiceImpl(variants, Mappers.getMapper(ProductVariantMapper.class), products, access);
         when(products.findById("product-1")).thenReturn(Optional.of(Product.builder().productId("product-1").storeId("store-1").build()));
         doThrow(new AppException(ErrorCode.FORBIDDEN)).when(access).requireApprovedStore("store-1");
         var request = new CreateProductVariantRequest("product-1", "SKU-1", "M", "White", 100000L, 5, ProductVariantStatus.ACTIVE);

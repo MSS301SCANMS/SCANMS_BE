@@ -21,12 +21,13 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
+import org.mapstruct.factory.Mappers;
 
 class UserIdentitySyncTest {
     private final UserRepository users = mock(UserRepository.class);
     private final RoleRepository roles = mock(RoleRepository.class);
     private final KeycloakAdminClient keycloakAdminClient = mock(KeycloakAdminClient.class);
-    private final UserServiceImpl service = new UserServiceImpl(users, roles, keycloakAdminClient, new UserMapper());
+    private final UserServiceImpl service = new UserServiceImpl(users, roles, keycloakAdminClient, Mappers.getMapper(UserMapper.class));
 
     @BeforeEach
     void setup() {

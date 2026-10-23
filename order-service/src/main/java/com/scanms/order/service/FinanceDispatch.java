@@ -18,6 +18,7 @@ import java.net.http.HttpClient;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.json.JsonMapper;
 
 /** Source commands are derived from persisted business state; Payment deduplicates every reference. */
 @Component @RequiredArgsConstructor
@@ -39,7 +40,7 @@ public class FinanceDispatch {
         var result=new ArrayList<T>(); for(int i=0;i<Math.min(20,values.size());i++) result.add(values.get((start+i)%values.size())); return result;
     }
     private final RestClient http=client();
-    static RestClient client() {
+    public static RestClient client() {
         var factory=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
         factory.setReadTimeout(Duration.ofSeconds(15)); return RestClient.builder().requestFactory(factory).build();
     }
@@ -53,7 +54,7 @@ public class FinanceDispatch {
         return http.post().uri(url).headers(h -> h.setBearerAuth(token)).body(body).retrieve().body(Map.class);
     }
     private boolean usesVoucher(String checkoutRequest) {
-        var request=tools.jackson.databind.json.JsonMapper.builder().build().readTree(checkoutRequest);
+        var request=JsonMapper.builder().build().readTree(checkoutRequest);
         var code=request.path("couponCode");
         if(code.isMissingNode() || code.isNull()) code=request.path("voucherCode");
         return code.isTextual() && !code.asText().isBlank();

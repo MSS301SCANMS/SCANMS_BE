@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.time.ZoneOffset;
 
 @Slf4j
 @Service
@@ -66,7 +67,7 @@ public class ShipmentServiceImpl implements ShipmentService {
         if (trackingCode != null && !trackingCode.isBlank()) shipment.setTrackingCode(trackingCode);
 
         Instant nowInstant = Instant.now();
-        LocalDateTime nowLocal = LocalDateTime.now(java.time.ZoneOffset.UTC);
+        LocalDateTime nowLocal = LocalDateTime.now(ZoneOffset.UTC);
 
         if (status == ShipmentStatus.SHIPPED) {
             shipment.setShippedAt(nowInstant);

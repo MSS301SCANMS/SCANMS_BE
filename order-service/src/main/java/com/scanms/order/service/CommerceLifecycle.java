@@ -17,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.net.URI;
 import java.time.*;
 import java.util.*;
+import org.springframework.core.env.Environment;
 
 /** Authenticated fulfillment and physical return commands. Money stays in Finance. */
 @Service @RequiredArgsConstructor @Transactional
@@ -28,7 +29,7 @@ public class CommerceLifecycle {
     private final ShipmentRepository shipments;
     private final ReturnRequestRepository returns;
     private final CommerceAccess access;
-    private final org.springframework.core.env.Environment environment;
+    private final Environment environment;
     @Value("${scanms.shipping.simulation-enabled:false}")
     private boolean simulationEnabled;
 

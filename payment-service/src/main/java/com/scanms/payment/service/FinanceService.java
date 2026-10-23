@@ -24,6 +24,7 @@ import org.springframework.core.env.Profiles;
 import org.springframework.security.core.context.SecurityContextHolder;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import tools.jackson.databind.json.JsonMapper;
 
 @Service @RequiredArgsConstructor @Transactional
 public class FinanceService {
@@ -381,7 +382,7 @@ public class FinanceService {
         try { return new BigDecimal(Objects.toString(map.get(key))).longValueExact(); }
         catch(Exception ex) { throw new AppException(ErrorCode.CONFLICT,"Missing or invalid contract field: "+key); }
     }
-    public static String json(Object value) { return tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(value); }
+    public static String json(Object value) { return JsonMapper.builder().build().writeValueAsString(value); }
     @SuppressWarnings("unchecked") private Map<String,Object> snapshotMap(Map<String,Object> map,String key) {
         if(!(map.get(key) instanceof Map<?,?> value)) throw new AppException(ErrorCode.CONFLICT,"Fee snapshot missing");
         return (Map<String,Object>)value;

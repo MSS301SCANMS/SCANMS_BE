@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.*;
 import java.math.BigDecimal;
 import java.util.function.Supplier;
+import tools.jackson.databind.json.JsonMapper;
 
 @Service @RequiredArgsConstructor
 public class WithdrawalProcessor {
@@ -36,7 +37,7 @@ public class WithdrawalProcessor {
         });
         if(request.getStatus()==WithdrawalStatus.SUCCESS) return finance.withdrawalView(request);
         try {
-            Map<String,Object> dest=tools.jackson.databind.json.JsonMapper.builder().build().readValue(request.getDestinationSnapshot(),Map.class);
+            Map<String,Object> dest=JsonMapper.builder().build().readValue(request.getDestinationSnapshot(),Map.class);
             Map<String,Object> result=request.getProviderReference()!=null?provider.payoutStatus(request.getProviderReference()):provider.findPayout(id);
             if(result.isEmpty()) {
                 Instant now=Instant.now(), candidate=calendar.nextProcessingAt(now);
@@ -83,7 +84,7 @@ public class WithdrawalProcessor {
             if(transactions.size()!=1) throw new AppException(ErrorCode.CONFLICT,"Unexpected payout transaction count");
             Map<?,?> transaction=transactions.getFirst();
             if(new BigDecimal(Objects.toString(transaction.get("amount"))).longValueExact()!=w.getNetAmountVnd()) throw new AppException(ErrorCode.CONFLICT,"Payout amount mismatch");
-            @SuppressWarnings("unchecked") Map<String,Object> dest=tools.jackson.databind.json.JsonMapper.builder().build().readValue(w.getDestinationSnapshot(),Map.class);
+            @SuppressWarnings("unchecked") Map<String,Object> dest=JsonMapper.builder().build().readValue(w.getDestinationSnapshot(),Map.class);
             if(!Objects.equals(transaction.get("toBin"),dest.get("bankCode")) || !Objects.equals(transaction.get("toAccountNumber"),cipher.decrypt(dest.get("accountCiphertext").toString()))) throw new AppException(ErrorCode.CONFLICT,"Payout destination mismatch");
             String state=Objects.toString(transaction.get("state"));
             if("SUCCEEDED".equals(state)) {

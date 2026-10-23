@@ -7,6 +7,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.*;
+import org.springframework.web.client.RestClientException;
 
 /** Business identity and shop ownership are resolved from trusted services. */
 @Service @RequiredArgsConstructor
@@ -32,7 +33,7 @@ public class CommerceAccess {
                 .headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
             if(envelope!=null && envelope.get("result") instanceof Map<?,?> user && "ACTIVE".equals(user.get("status"))
                 && jwt.getSubject().equals(user.get("identitySubject")) && user.get("userId") instanceof String id) return id;
-        } catch(org.springframework.web.client.RestClientException ex) {
+        } catch(RestClientException ex) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Cannot verify active customer profile");
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Active customer profile required");

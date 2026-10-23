@@ -13,6 +13,7 @@ import java.security.MessageDigest;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.time.ZoneOffset;
+import tools.jackson.databind.json.JsonMapper;
 
 @Service
 public class PayosProvider {
@@ -87,7 +88,7 @@ public class PayosProvider {
     private static String canonicalValue(Object value) {
         if(value==null || "null".equals(value) || "undefined".equals(value)) return "";
         if(value instanceof Map<?,?> || value instanceof Collection<?>) {
-            try { return tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(sorted(value)); }
+            try { return JsonMapper.builder().build().writeValueAsString(sorted(value)); }
             catch(Exception ex) { throw new AppException(ErrorCode.INVALID_REQUEST,"Invalid provider signature data"); }
         }
         return value.toString();

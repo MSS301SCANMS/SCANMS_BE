@@ -9,6 +9,10 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import java.util.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.server.ResponseStatusException;
 
 /** Resolves business UUIDs from the authenticated identity, never a client owner claim. */
 @Service
@@ -31,15 +35,15 @@ public class PaymentAccess {
         Map<?, ?> response;
         try {
             response = client.get().uri(url).headers(h -> h.setBearerAuth(token())).retrieve().body(Map.class);
-        } catch (org.springframework.web.client.RestClientResponseException ex) {
+        } catch (RestClientResponseException ex) {
             // A rejected business command is a conflict, not a successful refund or a generic 500.
             if (ex.getStatusCode().value()==409 || ex.getStatusCode().value()==422)
                 throw new AppException(ErrorCode.CONFLICT,"Order/return is not eligible for this financial operation");
             if (ex.getStatusCode().value()==404) throw new AppException(ErrorCode.RESOURCE_NOT_FOUND);
             if (ex.getStatusCode().value()==401 || ex.getStatusCode().value()==403) throw new AppException(ErrorCode.FORBIDDEN);
-            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,"Business source service unavailable");
-        } catch (org.springframework.web.client.RestClientException ex) {
-            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,"Business source service unavailable");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Business source service unavailable");
+        } catch (RestClientException ex) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Business source service unavailable");
         }
         if (response == null || !(response.get("result") instanceof Map<?, ?> result)) throw new AppException(ErrorCode.CONFLICT, "Business contract unavailable");
         @SuppressWarnings("unchecked") Map<String,Object> value = (Map<String,Object>) result;

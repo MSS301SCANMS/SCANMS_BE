@@ -25,6 +25,7 @@ import java.util.*;
 import com.scanms.product.dto.request.UpdateFeedbackRequest;
 import com.scanms.product.entity.Feedback;
 import com.scanms.product.entity.Product;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @Service
 @RequiredArgsConstructor
@@ -59,9 +60,9 @@ public class FeedbackServiceImpl implements FeedbackService {
         var feedback = mapper.toEntity(request);
         feedback.setCustomerId(customerId);
         feedback.setStatus(FeedbackStatus.ACTIVE);
-        com.scanms.product.entity.Feedback saved;
+        Feedback saved;
         try { saved = repository.save(feedback); repository.flush(); }
-        catch(org.springframework.dao.DataIntegrityViolationException ex) {
+        catch(DataIntegrityViolationException ex) {
             if(!Objects.toString(ex.getMostSpecificCause().getMessage(),"").toLowerCase(Locale.ROOT).contains("uk_feedback_order_item_customer")) throw ex;
             throw new AppException(ErrorCode.CONFLICT,"Sản phẩm trong đơn này đã được đánh giá. Vui lòng tải lại danh sách đơn hàng.");
         }

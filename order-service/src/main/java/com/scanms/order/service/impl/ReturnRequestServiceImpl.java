@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.time.ZoneOffset;
 
 @Slf4j
 @Service
@@ -111,7 +112,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         }
         rr.setStatus(decision.status());
         rr.setDecisionReason(decision.decisionReason().trim());
-        rr.setResolvedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+        rr.setResolvedAt(LocalDateTime.now(ZoneOffset.UTC));
         // Approval is not a credit. Receive goods, then Finance uses the persisted
         // paid basis, an idempotent ledger entry and a durable acknowledgement.
 

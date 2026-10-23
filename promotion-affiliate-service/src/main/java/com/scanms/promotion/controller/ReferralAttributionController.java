@@ -11,13 +11,17 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.*;
 import java.util.*;
+import com.scanms.promotion.entity.ReferralLink;
+import com.scanms.promotion.service.LivestreamAttributionSource;
+import java.nio.charset.StandardCharsets;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController @RequiredArgsConstructor
 public class ReferralAttributionController {
     private final ReferralLinkRepository links;
     private final CollaboratorProfileRepository profiles;
     private final PartnershipInvitationRepository invitations;
-    private final com.scanms.promotion.service.LivestreamAttributionSource livestreams;
+    private final LivestreamAttributionSource livestreams;
     @GetMapping("/api/v1/referrals/attribution/{id}")
     public ApiResponse<Map<String,String>> verify(@PathVariable String id,@RequestParam String productId,@AuthenticationPrincipal Jwt jwt) {
         requireOrder(jwt);
@@ -30,7 +34,7 @@ public class ReferralAttributionController {
         if(jwt.getClaim("resource_access") instanceof Map<?,?> resources) resources.values().forEach(value->{if(value instanceof Map<?,?> client && client.get("roles") instanceof Collection<?> values) values.forEach(role->roles.add(role.toString()));});
         if(!roles.contains("ORDER_INTERNAL")) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
-    private ApiResponse<Map<String,String>> verified(com.scanms.promotion.entity.ReferralLink link,String productId) {
+    private ApiResponse<Map<String,String>> verified(ReferralLink link,String productId) {
         if(!productId.equals(link.getProductId()) || link.getStatus()!=ReferralLinkStatus.ACTIVE || (link.getExpiresAt()!=null&&!link.getExpiresAt().isAfter(LocalDateTime.now(ZoneOffset.UTC))))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Liên kết giới thiệu không hợp lệ hoặc đã hết hạn.");
         var profile=profiles.findById(link.getCollaboratorId()).filter(p->p.getApprovalStatus()==CollaboratorStatus.APPROVED)
@@ -38,7 +42,7 @@ public class ReferralAttributionController {
         return ApiResponse.success(Map.of("referralLinkId",link.getReferralLinkId(),"productId",productId,"collaboratorId",profile.getCollaboratorId(),"userId",profile.getUserId()));
     }
     @GetMapping("/api/v1/referrals/livestream-attribution/{id}")
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     public ApiResponse<Map<String,String>> livestream(@PathVariable String id,@RequestParam String productId,@AuthenticationPrincipal Jwt jwt) {
         requireOrder(jwt);
         var live=livestreams.session(id,jwt.getTokenValue());
@@ -57,8 +61,8 @@ public class ReferralAttributionController {
         if(invitations.findByStoreIdInOrderByCreatedAtDesc(List.of(storeId)).stream()
                 .noneMatch(invite->collaboratorId.equals(invite.getCollaboratorId()) && "ACCEPTED".equals(invite.getStatus())))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Accepted shop partnership required");
-        String token="live-"+UUID.nameUUIDFromBytes((id+":"+productId+":"+collaboratorId).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        var link=links.findByToken(token).orElseGet(()->links.saveAndFlush(com.scanms.promotion.entity.ReferralLink.builder()
+        String token="live-"+UUID.nameUUIDFromBytes((id+":"+productId+":"+collaboratorId).getBytes(StandardCharsets.UTF_8));
+        var link=links.findByToken(token).orElseGet(()->links.saveAndFlush(ReferralLink.builder()
                 .collaboratorId(collaboratorId).productId(productId).livestreamId(id).token(token).label("Livestream checkout")
                 .channel("LIVESTREAM").status(ReferralLinkStatus.ACTIVE).build()));
         return verified(link,productId);
