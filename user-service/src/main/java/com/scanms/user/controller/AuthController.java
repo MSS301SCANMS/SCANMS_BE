@@ -2,27 +2,19 @@ package com.scanms.user.controller;
 
 import com.scanms.user.config.RefreshTokenCookie;
 import com.scanms.user.dto.ApiResponse;
-import com.scanms.user.dto.request.LoginRequest;
-import com.scanms.user.dto.request.RegisterRequest;
-import com.scanms.user.dto.request.GoogleLoginRequest;
-import com.scanms.user.dto.request.ForgotPasswordSendOtpRequest;
-import com.scanms.user.dto.request.ForgotPasswordVerifyOtpRequest;
-import com.scanms.user.dto.request.ForgotPasswordResetRequest;
+import com.scanms.user.dto.request.*;
 import com.scanms.user.dto.response.AuthResponse;
 import com.scanms.user.exception.AppException;
 import com.scanms.user.exception.ErrorCode;
 import com.scanms.user.service.AuthService;
-import com.scanms.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -33,6 +25,7 @@ public class AuthController {
 
     private final AuthService service;
     private final RefreshTokenCookie refreshCookie;
+
     @PostMapping("/register")
     public ApiResponse<String> register(@Valid @RequestBody RegisterRequest request) {
         service.register(request);
@@ -49,33 +42,6 @@ public class AuthController {
         return withRefreshCookie(service.googleLogin(request));
     }
 
-    @DeleteMapping("/{userId}/roles")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<String> removeRole(
-            @PathVariable String userId,
-            @RequestParam String roleName) {
-
-        service.removeRoleFromUser(userId, roleName);
-        return ApiResponse.success("Đã thu hồi role của user!");
-    }
-    @PostMapping("/{userId}/roles/shop-owner")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ApiResponse<String> grantShopOwnerRole(@PathVariable String userId) {
-        service.grantShopOwnerRole(userId);
-        return ApiResponse.success("SHOP_OWNER role granted");
-    }
-    @PostMapping("/{userId}/roles/kol-ctv")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ApiResponse<String> grantKolRole(@PathVariable String userId) {
-        service.grantKolRole(userId);
-        return ApiResponse.success("KOL_CTV role granted");
-    }
-    @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<String> createRole(@RequestParam @NotBlank String roleName) {
-        service.createNewRole(roleName);
-        return ApiResponse.success("Tạo role mới thành công trên Keycloak!");
-    }
     @PostMapping("/change-password")
     public ApiResponse<String> changePassword(
             @RequestParam String oldPassword,
@@ -84,6 +50,7 @@ public class AuthController {
         service.changePassword(oldPassword, newPassword);
         return ApiResponse.success("Đổi mật khẩu thành công!");
     }
+
     /**
      * Huỷ phiên trên Keycloak bằng refresh token trong cookie, rồi luôn xoá cookie.
      * Không cần JWT: access token có thể đã hết hạn, và chỉ server mới xoá được cookie HttpOnly.
@@ -105,7 +72,9 @@ public class AuthController {
                 .body(ApiResponse.success("Đăng xuất thành công!"));
     }
 
-    /** Đổi refresh token (đọc từ cookie HttpOnly) lấy access token mới; cookie được thay bằng refresh token mới. */
+    /**
+     * Đổi refresh token (đọc từ cookie HttpOnly) lấy access token mới; cookie được thay bằng refresh token mới.
+     */
     @PostMapping("/refresh-token")
     public ResponseEntity<ApiResponse<AuthResponse>> refreshToken(HttpServletRequest request) {
         if (!refreshCookie.hasCsrfHeader(request)) return csrfRejected();
@@ -119,7 +88,9 @@ public class AuthController {
         }
     }
 
-    /** Đặt refresh token vào cookie HttpOnly và bỏ nó khỏi body — FE chỉ nhận access token. */
+    /**
+     * Đặt refresh token vào cookie HttpOnly và bỏ nó khỏi body — FE chỉ nhận access token.
+     */
     private ResponseEntity<ApiResponse<AuthResponse>> withRefreshCookie(AuthResponse auth) {
         ResponseEntity.BodyBuilder response = ResponseEntity.ok();
         if (auth.refreshToken() != null && !auth.refreshToken().isBlank()) {
@@ -129,7 +100,9 @@ public class AuthController {
         return response.body(ApiResponse.success(body));
     }
 
-    /** 401 + xoá cookie: refresh token không còn hợp lệ, FE phải đăng nhập lại. */
+    /**
+     * 401 + xoá cookie: refresh token không còn hợp lệ, FE phải đăng nhập lại.
+     */
     private <T> ResponseEntity<ApiResponse<T>> sessionExpired(String message) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .header(HttpHeaders.SET_COOKIE, refreshCookie.clear())

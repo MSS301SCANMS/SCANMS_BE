@@ -82,7 +82,7 @@ public class OrderController {
     private String resolveBusinessUserId(Jwt jwt) {
         try {
             Map<?, ?> envelope = RestClient.create().get()
-                    .uri(userUrl + "/api/v1/users/me")
+                    .uri(userUrl + "/api/v1/users")
                     .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
                     .retrieve()
                     .body(Map.class);

@@ -29,7 +29,7 @@ Ví FROZEN chặn khoản trừ mới/HOLD nhưng cho phép nhận credit, RELEA
 3. Tạo `BANK_ENCRYPTION_KEY` từ 32 byte ngẫu nhiên, base64. Giữ ổn định và quản lý sao lưu khóa cùng dữ liệu mã hóa; thay khóa cần giải mã rồi mã hóa lại dữ liệu bằng quy trình riêng.
 4. Keycloak public client `scanms-fe`: Standard Flow bật, PKCE S256, redirect `http://localhost:5173/auth/keycloak/callback`, Web Origins `http://localhost:5173`. Không đặt client secret ở FE.
 5. Keycloak confidential client `payment-service`: bật Service Accounts, gán role `PAYMENT_INTERNAL`; cấu hình PAYMENT_SERVICE_TOKEN_URL/CLIENT_ID/CLIENT_SECRET. Outbox chưa có cấu hình sẽ giữ sự kiện, không giả vờ đồng bộ thành công.
-6. JWT realm/client roles: USER, KOL_CTV, SHOP_OWNER, ADMIN, MANAGER. Alias SYSTEM_ADMIN/SYSTEM_MANAGER/SHOP_MANAGER/COLLABORATOR hỗ trợ ở payment. Hồ sơ `/users/me` phải có identitySubject trùng JWT sub và status ACTIVE; KOL phải có CollaboratorProfile APPROVED/ACTIVE; shop phải có ownerUserId đúng User UUID.
+6. JWT realm/client roles: USER, KOL_CTV, SHOP_OWNER, ADMIN, MANAGER. Alias SYSTEM_ADMIN/SYSTEM_MANAGER/SHOP_MANAGER/COLLABORATOR hỗ trợ ở payment. Hồ sơ `/users` phải có identitySubject trùng JWT sub và status ACTIVE; KOL phải có CollaboratorProfile APPROVED/ACTIVE; shop phải có ownerUserId đúng User UUID.
 7. Gateway `FRONTEND_ORIGINS` hỗ trợ danh sách origin cách nhau dấu phẩy. Triển khai HTTPS thì thay URL mẫu tương ứng.
 8. Với DB cũ: sao lưu, kiểm tra dữ liệu trùng và chạy `db/finance-upgrade.sql` trong cửa sổ triển khai. Script chưa được chạy trên DB thật. Không tự điền số dư, chuyển trạng thái tiền hoặc xóa ledger cũ để làm migration qua.
 

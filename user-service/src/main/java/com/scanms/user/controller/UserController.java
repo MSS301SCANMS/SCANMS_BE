@@ -11,8 +11,8 @@ import com.scanms.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -21,14 +21,14 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
     private final UserService service;
 
-    @GetMapping("/me")
+    @GetMapping
     public ApiResponse<UserResponse> me(@AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.success(service.synchronizeCurrentUser(jwt));
     }
 
-    @PatchMapping("/me")
+    @PatchMapping
     public ApiResponse<UserResponse> updateMe(@AuthenticationPrincipal Jwt jwt,
-                                       @Valid @RequestBody UpdateUserProfileRequest request) {
+                                              @Valid @RequestBody UpdateUserProfileRequest request) {
         return ApiResponse.success(service.updateCurrentUser(jwt.getSubject(), request));
     }
 

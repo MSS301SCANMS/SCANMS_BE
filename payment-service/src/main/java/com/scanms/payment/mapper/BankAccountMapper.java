@@ -3,35 +3,14 @@ package com.scanms.payment.mapper;
 import com.scanms.payment.dto.request.RegisterBankAccountRequest;
 import com.scanms.payment.dto.response.BankAccountResponse;
 import com.scanms.payment.entity.BankAccount;
-import org.springframework.stereotype.Component;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
-@Component
-public class BankAccountMapper {
-    public BankAccount toEntity(RegisterBankAccountRequest request) {
-        return BankAccount.builder()
-                .storeId(request.storeId())
-                .collaboratorId(request.collaboratorId())
-                .bankCode(request.bankCode())
-                .holderName(request.holderName())
-                .accountCiphertext(request.accountCiphertext())
-                .maskedNumber(request.maskedNumber())
-                .verificationStatus(request.verificationStatus())
-                .active(request.active())
-                .build();
-    }
+@Mapper(componentModel = "spring")
+public interface BankAccountMapper {
+    BankAccount toEntity(RegisterBankAccountRequest request);
 
-    public BankAccountResponse toResponse(BankAccount entity) {
-        return new BankAccountResponse(
-                entity.getBankAccountId(),
-                entity.getStoreId(),
-                entity.getCollaboratorId(),
-                entity.getBankCode(),
-                entity.getHolderName(),
-                null,
-                entity.getMaskedNumber(),
-                entity.getVerificationStatus(),
-                entity.getActive(),
-                entity.getCreatedAt(),
-                entity.getUpdatedAt());
-    }
+    // Không bao giờ trả accountCiphertext ra response — giữ đúng hành vi cũ (luôn null).
+    @Mapping(target = "accountCiphertext", ignore = true)
+    BankAccountResponse toResponse(BankAccount entity);
 }

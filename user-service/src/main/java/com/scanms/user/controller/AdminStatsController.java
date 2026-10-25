@@ -8,7 +8,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Thống kê người dùng cho dashboard admin. */
+/**
+ * Thống kê người dùng cho dashboard admin.
+ */
 @RestController
 @RequiredArgsConstructor
 public class AdminStatsController {

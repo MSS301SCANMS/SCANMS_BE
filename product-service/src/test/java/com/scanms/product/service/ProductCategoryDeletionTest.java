@@ -11,13 +11,14 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
+import org.mapstruct.factory.Mappers;
 
 class ProductCategoryDeletionTest {
     private final ProductCategoryRepository categories = mock(ProductCategoryRepository.class);
     private final ProductRepository products = mock(ProductRepository.class);
     private final ProductAccess access = mock(ProductAccess.class);
     private final ProductCategoryServiceImpl service = new ProductCategoryServiceImpl(categories, products,
-            new ProductCategoryMapper(), access);
+            Mappers.getMapper(ProductCategoryMapper.class), access);
 
     @Test void managerCanDeleteUnusedCategory() {
         var category = ProductCategory.builder().categoryId("category-1").name("Shirts").slug("shirts").build();

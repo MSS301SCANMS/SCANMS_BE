@@ -2,33 +2,39 @@ package com.scanms.user.service;
 
 import com.scanms.user.dto.response.AdminStatsResponse;
 import com.scanms.user.dto.response.AdminStatsResponse.Bucket;
+
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Date;
+import java.util.*;
 
-/** Dựng {@link AdminStatsResponse} từ các truy vấn đếm/gom nhóm của một bảng. */
+/**
+ * Dựng {@link AdminStatsResponse} từ các truy vấn đếm/gom nhóm của một bảng.
+ */
 public final class AdminStatsBuilder {
 
-    /** Các truy vấn cần cho một bảng (mỗi hàng trả về [bucket/status, count]). */
+    /**
+     * Các truy vấn cần cho một bảng (mỗi hàng trả về [bucket/status, count]).
+     */
     public interface Source {
         long total();
+
         long countSince(LocalDateTime from);
+
         List<Object[]> countByStatus();
+
         List<Object[]> countPerHourSince(LocalDateTime from);
+
         List<Object[]> countPerDaySince(LocalDateTime from);
+
         List<Object[]> countPerMonthSince(LocalDateTime from);
     }
 
-    private AdminStatsBuilder() {}
+    private AdminStatsBuilder() {
+    }
 
     public static AdminStatsResponse build(Source source) {
         LocalDateTime now = LocalDateTime.now();

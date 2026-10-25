@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+import com.scanms.product.service.PublicReviewService;
 
 /**
  * Public catalog endpoints consumed by SCANMS_FE marketplace / chat / storefront.
@@ -29,7 +30,7 @@ public class PublicProductController {
     private final ProductRepository products;
     private final StoreRepository stores;
     private final PublicCatalogService catalog;
-    @Autowired(required=false) private com.scanms.product.service.PublicReviewService reviewSummaries;
+    @Autowired(required=false) private PublicReviewService reviewSummaries;
 
     @Autowired
     public PublicProductController(ProductRepository products, StoreRepository stores, PublicCatalogService catalog) {

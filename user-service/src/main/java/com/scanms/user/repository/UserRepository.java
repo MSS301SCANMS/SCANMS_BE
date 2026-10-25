@@ -3,13 +3,16 @@ package com.scanms.user.repository;
 import com.scanms.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import java.util.*;
-import java.time.LocalDateTime;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
 public interface UserRepository extends JpaRepository<User, String>, JpaSpecificationExecutor<User> {
     Optional<User> findByIdentitySubject(String identitySubject);
+
     Optional<User> findByEmail(String email);
 
     // --- Thống kê admin (COUNT/GROUP BY trong DB) ---

@@ -1,21 +1,30 @@
 package com.scanms.promotion.service;
 
-import java.net.http.HttpClient;
-import java.time.Duration;
-import java.util.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.*;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
-/** Resolves store ownership through Product, never through browser-supplied store IDs. */
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Resolves store ownership through Product, never through browser-supplied store IDs.
+ */
 @Component
 public class CollaborationAccess {
-    @Value("${clients.product.url:http://localhost:8082}") private String productUrl;
-    @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
+    @Value("${clients.product.url:http://localhost:8082}")
+    private String productUrl;
+    @Value("${clients.user.url:http://localhost:8081}")
+    private String userUrl;
     private final RestClient http;
 
     public CollaborationAccess() {
@@ -26,18 +35,24 @@ public class CollaborationAccess {
 
     public List<Map<?, ?>> stores(Jwt jwt, boolean admin) {
         if (admin) {
-            Object result = result(userUrl + "/api/v1/users/me", jwt);
+            Object result = result(userUrl + "/api/v1/users", jwt);
             if (!(result instanceof Map<?, ?> user) || !"ACTIVE".equals(user.get("status"))
                     || !jwt.getSubject().equals(user.get("identitySubject")))
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản chưa được kích hoạt.");
         }
         var stores = list(productUrl + (admin ? "/api/v1/stores" : "/api/v1/stores/mine"), jwt);
-        if (stores.stream().anyMatch(store -> !(store.get("storeId") instanceof String id) || id.isBlank())) throw unavailable();
+        if (stores.stream().anyMatch(store -> !(store.get("storeId") instanceof String id) || id.isBlank()))
+            throw unavailable();
         return stores;
     }
 
-    public List<Map<?, ?>> products(Jwt jwt) { return list(productUrl + "/api/v1/products", jwt); }
-    public List<Map<?, ?>> livestreams(Jwt jwt) { return list(productUrl + "/api/v1/livestreams", jwt); }
+    public List<Map<?, ?>> products(Jwt jwt) {
+        return list(productUrl + "/api/v1/products", jwt);
+    }
+
+    public List<Map<?, ?>> livestreams(Jwt jwt) {
+        return list(productUrl + "/api/v1/livestreams", jwt);
+    }
 
     private List<Map<?, ?>> list(String url, Jwt jwt) {
         Object result = result(url, jwt);
@@ -59,7 +74,9 @@ public class CollaborationAccess {
             if (ex.getStatusCode().value() == 401 || ex.getStatusCode().value() == 403)
                 throw new ResponseStatusException(ex.getStatusCode(), "Bạn không có quyền xem dữ liệu hợp tác.");
             throw unavailable();
-        } catch (RestClientException ex) { throw unavailable(); }
+        } catch (RestClientException ex) {
+            throw unavailable();
+        }
         throw unavailable();
     }
 

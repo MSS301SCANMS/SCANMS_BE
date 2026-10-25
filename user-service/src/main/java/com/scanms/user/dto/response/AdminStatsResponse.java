@@ -23,5 +23,6 @@ public record AdminStatsResponse(
         List<Bucket> monthly,
         LocalDateTime generatedAt
 ) implements Serializable {
-    public record Bucket(LocalDateTime start, long count) implements Serializable {}
+    public record Bucket(LocalDateTime start, long count) implements Serializable {
+    }
 }

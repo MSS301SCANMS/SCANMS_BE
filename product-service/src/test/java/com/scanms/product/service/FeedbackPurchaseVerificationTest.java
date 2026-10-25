@@ -26,6 +26,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mapstruct.factory.Mappers;
 
 class FeedbackPurchaseVerificationTest {
     static HttpServer orderSource;
@@ -61,7 +62,7 @@ class FeedbackPurchaseVerificationTest {
         var products = mock(ProductRepository.class);
         var stores = mock(StoreRepository.class);
         var access = mock(ProductAccess.class);
-        var service = new FeedbackServiceImpl(feedbacks, new FeedbackMapper(), access, products, stores);
+        var service = new FeedbackServiceImpl(feedbacks, Mappers.getMapper(FeedbackMapper.class), access, products, stores);
         ReflectionTestUtils.setField(service, "orderUrl", "http://127.0.0.1:" + orderSource.getAddress().getPort());
         var product = Product.builder().productId("product-1").storeId("store-1").build();
         var store = Store.builder().storeId("store-1").build();

@@ -20,6 +20,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.http.HttpMethod;
 
 @Configuration
 public class SecurityConfig {
@@ -36,10 +37,10 @@ public class SecurityConfig {
                 // 3. Phân quyền Endpoint
                 .authorizeExchange(auth -> auth
                         // Cho phép toàn bộ preflight OPTIONS request qua CORS
-                        .pathMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
-                        .pathMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/auth/refresh-token").permitAll()
+                        .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/auth/refresh-token").permitAll()
                         // Đăng xuất dựa trên cookie refresh token (HttpOnly); access token có thể đã hết hạn.
-                        .pathMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/auth/logout").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
 
                         // Công khai Swagger, OpenAPI docs và các API public
                         .pathMatchers(
@@ -60,8 +61,8 @@ public class SecurityConfig {
                                 "/api/v1/stores/marketplace",
                                 "/api/v1/stores/public/**"
                         ).permitAll()
-                        .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/orders/track").permitAll()
-                        .pathMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/referrals/resolve/*").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/orders/track").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/referrals/resolve/*").permitAll()
 
                         // Các request còn lại bắt buộc phải có JWT hợp lệ
                         .anyExchange().authenticated()

@@ -1,19 +1,23 @@
 package com.scanms.promotion.service;
 
-import java.net.http.HttpClient;
-import java.time.Duration;
-import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.*;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 
 @Component
 public class ReferralProductAccess {
-    @Value("${clients.product.url:http://localhost:8082}") private String productUrl;
+    @Value("${clients.product.url:http://localhost:8082}")
+    private String productUrl;
     private final RestClient http;
 
     public ReferralProductAccess() {
@@ -41,9 +45,12 @@ public class ReferralProductAccess {
             if (envelope != null && envelope.get("result") instanceof Map<?, ?> result) return result;
         } catch (HttpClientErrorException.NotFound ex) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy sản phẩm hoặc gian hàng.");
-        } catch (RestClientException ex) { throw unavailable(); }
+        } catch (RestClientException ex) {
+            throw unavailable();
+        }
         throw unavailable();
     }
+
     private ResponseStatusException unavailable() {
         return new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kiểm tra được sản phẩm. Vui lòng thử lại.");
     }

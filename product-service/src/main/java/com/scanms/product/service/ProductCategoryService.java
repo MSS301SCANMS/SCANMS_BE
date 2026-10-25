@@ -1,15 +1,20 @@
 package com.scanms.product.service;
 
 import com.scanms.product.dto.request.CreateProductCategoryRequest;
-import com.scanms.product.dto.response.ProductCategoryResponse;
-import java.util.*;
 import com.scanms.product.dto.request.UpdateProductCategoryRequest;
+import com.scanms.product.dto.response.ProductCategoryResponse;
+
+import java.util.List;
 
 public interface ProductCategoryService {
     ProductCategoryResponse create(CreateProductCategoryRequest request);
+
     ProductCategoryResponse getById(String id);
+
     List<ProductCategoryResponse> findAll();
+
     ProductCategoryResponse update(String id, UpdateProductCategoryRequest request);
+
     void delete(String id);
 }
 

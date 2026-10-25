@@ -11,6 +11,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mapstruct.factory.Mappers;
 
 class WalletTransactionServiceImplTest {
     @Test
@@ -29,7 +30,7 @@ class WalletTransactionServiceImplTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         var service = new WalletTransactionServiceImpl(
-                transactionRepository, walletRepository, new WalletTransactionMapper(), mock(jakarta.persistence.EntityManager.class));
+                transactionRepository, walletRepository, Mappers.getMapper(WalletTransactionMapper.class), mock(jakarta.persistence.EntityManager.class));
         var request = new CreateWalletTransactionRequest(
                 walletId, WalletTransactionType.ORDER_PAYMENT, WalletTransactionDirection.DEBIT,
                 30_000L, WalletTransactionStatus.SUCCESS, "ORDER", java.util.UUID.randomUUID().toString(),

@@ -3,12 +3,16 @@ package com.scanms.promotion.service;
 import com.scanms.promotion.dto.request.CreateCommissionPolicyRequest;
 import com.scanms.promotion.dto.response.CommissionPolicyResponse;
 import com.scanms.promotion.entity.CommissionPolicy;
-import java.util.*;
+
+import java.util.List;
 
 public interface CommissionPolicyService {
     CommissionPolicyResponse create(CreateCommissionPolicyRequest request);
+
     CommissionPolicyResponse update(String id, Long version, CreateCommissionPolicyRequest request);
+
     CommissionPolicyResponse getById(String id);
+
     List<CommissionPolicyResponse> findAll();
 
     /**
