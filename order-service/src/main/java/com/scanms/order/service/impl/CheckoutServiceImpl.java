@@ -205,31 +205,38 @@ public class CheckoutServiceImpl implements CheckoutService {
             for (SellerOrder seller : sellerMap.values()) {
                 long shippingFee = shippingQuote.fees().get(seller.getStoreId());
                 long storeShippingDiscount = 0;
-                for (var d : discounts) if ("SHIPPING".equals(d.get("benefitType")) && seller.getStoreId().equals(d.get("storeId")))
-                    storeShippingDiscount = Math.addExact(storeShippingDiscount,number(d,"allocatedAmountVnd"));
-                if (storeShippingDiscount<0 || storeShippingDiscount>shippingFee)
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid shipping discount");
-                shippingDiscount = Math.addExact(shippingDiscount,storeShippingDiscount);
+                for (var d : discounts) {
+                    if ("SHIPPING".equals(d.get("benefitType")) && seller.getStoreId().equals(d.get("storeId"))) {
+                        storeShippingDiscount = Math.addExact(storeShippingDiscount, number(d, "allocatedAmountVnd"));
+                    }
+                }
+                if (storeShippingDiscount < 0 || storeShippingDiscount > shippingFee) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid shipping discount");
+                }
+                shippingDiscount = Math.addExact(shippingDiscount, storeShippingDiscount);
+
                 var totals = new LinkedHashMap<String, Object>(seller.getTotalsSnapshot());
                 totals.putAll(shippingQuote.snapshots().get(seller.getStoreId()));
-                totals.put("shippingOriginalFeeVnd",shippingFee);
-                totals.put("shippingDiscountVnd",storeShippingDiscount);
-                totals.put("shippingFeeVnd", shippingFee-storeShippingDiscount);
-                totals.put("customerTotalVnd", Math.addExact(((Number) totals.get("netPaidVnd")).longValue(), shippingFee-storeShippingDiscount));
+                totals.put("shippingOriginalFeeVnd", shippingFee);
+                totals.put("shippingDiscountVnd", storeShippingDiscount);
+                totals.put("shippingFeeVnd", shippingFee - storeShippingDiscount);
+                totals.put("customerTotalVnd", Math.addExact(((Number) totals.get("netPaidVnd")).longValue(), shippingFee - storeShippingDiscount));
                 seller.setTotalsSnapshot(totals);
             }
-            total = Math.addExact(total, shippingQuote.total()-shippingDiscount);
-            if (total <= 0)
+            total = Math.addExact(total, shippingQuote.total() - shippingDiscount);
+            if (total <= 0) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Zero-value checkout requires a separate free-order policy");
+            }
             order.setPayableVnd(total);
             order.setStatus(OrderStatus.AWAITING_PAYMENT);
+
             var saga = new LinkedHashMap<String, Object>(shippingQuote.mode());
-            saga.put("shippingFeesByStore",shippingQuote.fees());
+            saga.put("shippingFeesByStore", shippingQuote.fees());
             saga.put("checkoutState", "READY");
             saga.put("paymentMethod", input.paymentMethod());
-            saga.put("shippingOriginalFeeVnd",shippingQuote.total());
-            saga.put("shippingDiscountVnd",shippingDiscount);
-            saga.put("shippingFeeVnd", shippingQuote.total()-shippingDiscount);
+            saga.put("shippingOriginalFeeVnd", shippingQuote.total());
+            saga.put("shippingDiscountVnd", shippingDiscount);
+            saga.put("shippingFeeVnd", shippingQuote.total() - shippingDiscount);
             order.setSagaState(saga);
             orders.saveAndFlush(order);
             return view(order);
@@ -242,48 +249,115 @@ public class CheckoutServiceImpl implements CheckoutService {
 
     public Map<String, Object> view(Order order) {
         List<Map<String, Object>> sellerViews = new ArrayList<>();
-        for (SellerOrder s : sellers.findAll().stream().filter(s -> order.getOrderId().equals(s.getOrderId())).toList())
-            sellerViews.add(Map.of("storeId", s.getStoreId(), "storeName", s.getTotalsSnapshot().getOrDefault("storeName", "Shop"), "publicOrderCode", order.getOrderId(), "finalAmount", s.getTotalsSnapshot().getOrDefault("customerTotalVnd", s.getTotalsSnapshot().getOrDefault("netPaidVnd", 0)), "shippingFeeVnd", s.getTotalsSnapshot().getOrDefault("shippingFeeVnd", 0), "items", items.findAll().stream().filter(i -> s.getSellerOrderId().equals(i.getSellerOrderId())).map(OrderItem::getProductSnapshot).toList()));
-        var response = new LinkedHashMap<String, Object>(Map.of("orderId", order.getOrderId(), "publicOrderCode", order.getOrderId(), "finalAmount", order.getPayableVnd(), "paymentMethod", order.getSagaState().get("paymentMethod"), "paymentStatus", order.getStatus() == OrderStatus.PAID ? "PAID" : "UNPAID", "status", order.getStatus(), "isMultiStore", sellerViews.size() > 1, "orders", sellerViews));
-        for (String key : List.of("shippingFeeVnd", "shippingOriginalFeeVnd", "shippingDiscountVnd", "shippingMode", "shippingPayer", "shippingSettlementResponsible", "shippingSettlementStatus"))
-            if (order.getSagaState().containsKey(key)) response.put(key, order.getSagaState().get(key));
+        var matchedSellers = sellers.findAll().stream()
+                .filter(s -> order.getOrderId().equals(s.getOrderId()))
+                .toList();
+
+        for (SellerOrder s : matchedSellers) {
+            var orderItems = items.findAll().stream()
+                    .filter(i -> s.getSellerOrderId().equals(i.getSellerOrderId()))
+                    .map(OrderItem::getProductSnapshot)
+                    .toList();
+
+            sellerViews.add(Map.of(
+                    "storeId", s.getStoreId(),
+                    "storeName", s.getTotalsSnapshot().getOrDefault("storeName", "Shop"),
+                    "publicOrderCode", order.getOrderId(),
+                    "finalAmount", s.getTotalsSnapshot().getOrDefault("customerTotalVnd", s.getTotalsSnapshot().getOrDefault("netPaidVnd", 0)),
+                    "shippingFeeVnd", s.getTotalsSnapshot().getOrDefault("shippingFeeVnd", 0),
+                    "items", orderItems
+            ));
+        }
+
+        var response = new LinkedHashMap<String, Object>(Map.of(
+                "orderId", order.getOrderId(),
+                "publicOrderCode", order.getOrderId(),
+                "finalAmount", order.getPayableVnd(),
+                "paymentMethod", order.getSagaState().get("paymentMethod"),
+                "paymentStatus", order.getStatus() == OrderStatus.PAID ? "PAID" : "UNPAID",
+                "status", order.getStatus(),
+                "isMultiStore", sellerViews.size() > 1,
+                "orders", sellerViews
+        ));
+
+        for (String key : List.of("shippingFeeVnd", "shippingOriginalFeeVnd", "shippingDiscountVnd", "shippingMode", "shippingPayer", "shippingSettlementResponsible", "shippingSettlementStatus")) {
+            if (order.getSagaState().containsKey(key)) {
+                response.put(key, order.getSagaState().get(key));
+            }
+        }
         return response;
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, Object> quote(QuoteInput input, Jwt jwt) {
-        Map<String, Object> user = result(http.get().uri(userUrl + "/api/v1/users").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class));
-        if (!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject")))
+        Map<String, Object> user = result(http.get()
+                .uri(userUrl + "/api/v1/users")
+                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
+                .retrieve()
+                .body(Map.class));
+
+        if (!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+
         String token = serviceToken();
-        List<Map<String, Object>> lines = (List<Map<String, Object>>) post(productUrl + "/api/v1/inventory/reservations/quote", token, Map.of("items", input.items())).get("lines");
+        List<Map<String, Object>> lines = (List<Map<String, Object>>) post(
+                productUrl + "/api/v1/inventory/reservations/quote",
+                token,
+                Map.of("items", input.items())
+        ).get("lines");
+
         long gross = 0;
-        for (var line : lines) gross = Math.addExact(gross, number(line, "grossAmountVnd"));
-        var shippingQuote=shippingQuotes.quote(lines,input.shippingDestination());
+        for (var line : lines) {
+            gross = Math.addExact(gross, number(line, "grossAmountVnd"));
+        }
+
+        var shippingQuote = shippingQuotes.quote(lines, input.shippingDestination());
         long discount = 0;
         long shippingDiscount = 0;
         String benefit = "GOODS";
-        if (hasVoucher(input.couponCode(),input.shippingCouponCode())) {
-            var promotion = post(promotionUrl + "/api/v1/checkout-vouchers/quote", token, voucherInput(input.couponCode(),input.shippingCouponCode(),user.get("userId"),lines,shippingQuote.fees()));
+
+        if (hasVoucher(input.couponCode(), input.shippingCouponCode())) {
+            var promotion = post(
+                    promotionUrl + "/api/v1/checkout-vouchers/quote",
+                    token,
+                    voucherInput(input.couponCode(), input.shippingCouponCode(), user.get("userId"), lines, shippingQuote.fees())
+            );
             Object raw = promotion.get("allocations");
-            if (raw instanceof List<?> rows) for (Object value : rows) {
-                if (value instanceof Map<?,?> row && "SHIPPING".equals(row.get("benefitType"))) {
-                    shippingDiscount = Math.addExact(shippingDiscount,new BigDecimal(row.get("allocatedAmountVnd").toString()).longValueExact());
-                    benefit = "SHIPPING";
+            if (raw instanceof List<?> rows) {
+                for (Object value : rows) {
+                    if (value instanceof Map<?, ?> row && "SHIPPING".equals(row.get("benefitType"))) {
+                        shippingDiscount = Math.addExact(shippingDiscount, new BigDecimal(row.get("allocatedAmountVnd").toString()).longValueExact());
+                        benefit = "SHIPPING";
+                    }
                 }
             }
-            discount = number(promotion,"discountAmountVnd")-shippingDiscount;
-            if(discount>0 && shippingDiscount>0) benefit="MIXED";
+            discount = number(promotion, "discountAmountVnd") - shippingDiscount;
+            if (discount > 0 && shippingDiscount > 0) {
+                benefit = "MIXED";
+            }
         }
+
         long shipping = shippingQuote.total();
-        if (shippingDiscount<0 || shippingDiscount>shipping || discount<0 || discount>gross)
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid voucher discount");
+        if (shippingDiscount < 0 || shippingDiscount > shipping || discount < 0 || discount > gross) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid voucher discount");
+        }
+
         var response = new LinkedHashMap<String, Object>(shippingQuote.mode());
-        response.put("shippingFeesByStore",shippingQuote.fees());
-        response.put("shippingSnapshotsByStore",shippingQuote.snapshots());
-        response.putAll(Map.of("code", Objects.toString(input.couponCode(), ""), "discountAmount", discount, "discountType", "VOUCHER", "subtotalVnd", gross, "shippingFeeVnd", shipping, "shippingDiscountVnd",shippingDiscount,"benefitType",benefit,"finalAmount", Math.addExact(gross - discount, shipping-shippingDiscount)));
-        response.put("shippingCouponCode",Objects.toString(input.shippingCouponCode(),""));
+        response.put("shippingFeesByStore", shippingQuote.fees());
+        response.put("shippingSnapshotsByStore", shippingQuote.snapshots());
+        response.putAll(Map.of(
+                "code", Objects.toString(input.couponCode(), ""),
+                "discountAmount", discount,
+                "discountType", "VOUCHER",
+                "subtotalVnd", gross,
+                "shippingFeeVnd", shipping,
+                "shippingDiscountVnd", shippingDiscount,
+                "benefitType", benefit,
+                "finalAmount", Math.addExact(gross - discount, shipping - shippingDiscount)
+        ));
+        response.put("shippingCouponCode", Objects.toString(input.shippingCouponCode(), ""));
         return response;
     }
 }
