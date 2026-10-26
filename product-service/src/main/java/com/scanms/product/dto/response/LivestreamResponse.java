@@ -22,5 +22,6 @@ public record LivestreamResponse(
         LocalDateTime startedAt,
         LocalDateTime endedAt,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Long likeCount
 ) {}

@@ -18,12 +18,14 @@ import java.util.*;
 
 @Service @RequiredArgsConstructor @Transactional
 public class LivestreamServiceImpl implements LivestreamService {
-    private static final Set<String> CONSENT_KEYS=Set.of("inviteStatus","collaboratorResponses","respondedBySubject","respondedAt");
+    private static final Set<String> CONSENT_KEYS=Set.of("inviteStatus","collaboratorResponses","respondedBySubject","respondedAt","voucherDrops","lifecycle");
     private final LivestreamRepository repository;
     private final LivestreamMapper mapper;
     private final ProductAccess access;
     private final ProductRepository products;
     private final LivestreamAffiliateClient affiliate;
+    private final LivestreamSchedulePolicy schedule;
+    private final LivestreamLifecycleService lifecycle;
 
     public LivestreamResponse create(CreateLivestreamRequest request) {
         access.requireApprovedStore(request.storeId());
@@ -34,6 +36,7 @@ public class LivestreamServiceImpl implements LivestreamService {
         validateSchedule(request.scheduledAt(),participants,true);
         setResponses(participants,ids,Map.of());
         var live=mapper.toEntity(request);
+        live.setProductRefs(request.productRefs()==null?null:Map.of("productIds",request.productRefs().getOrDefault("productIds",List.of())));
         live.setParticipantRefs(participants);
         live.setStatus(LivestreamStatus.SCHEDULED);
         live.setViewerCount(0L);live.setUniqueViewerCount(0L);live.setPeakConcurrentViewerCount(0L);
@@ -41,12 +44,13 @@ public class LivestreamServiceImpl implements LivestreamService {
         return mapper.toResponse(repository.save(live));
     }
 
-    @Transactional(readOnly=true)
     public LivestreamResponse getById(String id) {
-        return repository.findById(id).map(mapper::toResponse).orElseThrow(()->missing(id));
+        return mapper.toResponse(locked(id));
     }
-    @Transactional(readOnly=true)
-    public List<LivestreamResponse> findAll() { return repository.findAll().stream().map(mapper::toResponse).toList(); }
+    public List<LivestreamResponse> findAll() {
+        lifecycle.closeElapsedSessions();
+        return repository.findAll().stream().map(mapper::toResponse).toList();
+    }
 
     public LivestreamResponse update(String id,UpdateLivestreamRequest request) {
         var live=owned(id);
@@ -66,7 +70,11 @@ public class LivestreamServiceImpl implements LivestreamService {
         if(request.description()!=null)live.setDescription(request.description());
         if(request.providerSessionId()!=null)live.setProviderSessionId(request.providerSessionId());
         if(request.playbackRef()!=null)live.setPlaybackRef(request.playbackRef());
-        if(request.productRefs()!=null){validateProducts(live.getStoreId(),request.productRefs());live.setProductRefs(request.productRefs());}
+        if(request.productRefs()!=null){
+            validateProducts(live.getStoreId(),request.productRefs());
+            var refs=new LinkedHashMap<String,Object>(live.getProductRefs()==null?Map.of():live.getProductRefs());
+            refs.put("productIds",request.productRefs().getOrDefault("productIds",List.of()));live.setProductRefs(refs);
+        }
         live.setParticipantRefs(participants);live.setScheduledAt(schedule);
         if(request.collaboratorRefs()!=null)live.setCollaboratorRefs(request.collaboratorRefs());
         return mapper.toResponse(repository.save(live));
@@ -120,15 +128,32 @@ public class LivestreamServiceImpl implements LivestreamService {
     }
 
     private Livestream owned(String id){var live=locked(id);access.requireApprovedStore(live.getStoreId());return live;}
-    private Livestream locked(String id){return repository.lockById(id).orElseThrow(()->missing(id));}
+    public LivestreamResponse pinProduct(String id,String productId) {
+        var live=locked(id);requireHost(live);
+        if(live.getStatus()!=LivestreamStatus.LIVE)throw conflict("Phiên chưa phát sóng.");
+        if(productId!=null){
+            if(live.getProductRefs()==null||!(live.getProductRefs().get("productIds") instanceof Collection<?> ids)||!ids.contains(productId))throw invalid("Sản phẩm không thuộc phiên live.");
+            validateProducts(live.getStoreId(),Map.of("productIds",List.of(productId)));
+        }
+        var refs=new LinkedHashMap<String,Object>(live.getProductRefs()==null?Map.of():live.getProductRefs());refs.put("pinnedProductId",productId);live.setProductRefs(refs);
+        return mapper.toResponse(repository.save(live));
+    }
+    private Livestream locked(String id){
+        var live=repository.lockById(id).orElseThrow(()->missing(id));
+        schedule.closeIfElapsed(live,Instant.now());
+        return live;
+    }
     private void requireHost(Livestream live){
+        // Store ownership is sufficient; an affiliate outage must not block the shop's controls.
+        try{access.requireApprovedStore(live.getStoreId());return;}
+        catch(AppException ex){if(ex.getErrorCode()!=ErrorCode.FORBIDDEN)throw ex;}
         String user=access.userId();
         for(String kol:collaborators(live.getCollaboratorRefs())){
             if(!"ACCEPTED".equals(responses(live).get(kol)))continue;
             try{if(user.equals(partnership(live.getStoreId(),kol).get("userId")))return;}
             catch(AppException ex){if(ex.getErrorCode()!=ErrorCode.FORBIDDEN)throw ex;}
         }
-        access.requireApprovedStore(live.getStoreId());
+        throw new AppException(ErrorCode.FORBIDDEN,"Only the store owner or an accepted KOL may control this livestream");
     }
     private Map<String,Object> partnership(String store,String kol){
         try{
@@ -175,6 +200,7 @@ public class LivestreamServiceImpl implements LivestreamService {
         if(changed&&schedule!=null&&!schedule.isAfter(LocalDateTime.now(ZoneOffset.UTC)))throw invalid("Scheduled time must be in the future");
         if(participants.get("endsAt")!=null){
             var end=parseEnd(participants.get("endsAt"));
+            if(!end.isAfter(LocalDateTime.now(ZoneOffset.UTC)))throw invalid("End time must be in the future");
             if(!end.isAfter(schedule==null?LocalDateTime.now(ZoneOffset.UTC):schedule))throw invalid("End time must be after start time");
         }
     }

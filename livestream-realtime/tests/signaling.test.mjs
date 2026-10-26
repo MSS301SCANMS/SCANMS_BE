@@ -14,10 +14,18 @@ test('signed identity, host consent, room isolation, chat identity, pinning and 
   };
   const sessions = new Map(['room-a','room-b','scheduled'].map(id => [id, { livestreamId: id, storeId: 'store-a', status: id === 'scheduled' ? 'SCHEDULED' : 'LIVE', productRefs: { productIds: ['shirt','dress'] }, collaboratorRefs: { collaboratorIds: ['kol-a'] }, participantRefs: { collaboratorResponses: { 'kol-a': 'ACCEPTED' } } }]));
   const metricRequests=[];
+  let businessUnavailable=false;
+  let pinApiStatus=200;
   const server = createLiveServer({ pollMs: 100, metricsSecret:'fixture-metrics-key-32-characters-long', verifyToken: async token => (await jwtVerify(token, publicKey, { issuer: 'fixture' })).payload,
     fetcher: async (url, options) => {
+      if(businessUnavailable)return Response.json({message:'Temporary outage'},{status:503});
       const { payload } = await jwtVerify(options.headers.Authorization.slice(7), publicKey);
       if(['POST','PATCH'].includes(options.method)){
+        if(url.endsWith('/pin')) {
+          if(pinApiStatus!==200)return Response.json({message:'Pin request denied by Product'},{status:pinApiStatus});
+          const body=JSON.parse(options.body);sessions.get(url.split('/').at(-2)).productRefs.pinnedProductId=body.productId;
+          return Response.json({result:true});
+        }
         metricRequests.push({url,method:options.method,body:JSON.parse(options.body),user:payload.sub,signature:options.headers['X-Live-Metrics-Signature']});
         return Response.json({result:true});
       }
@@ -58,13 +66,51 @@ test('signed identity, host consent, room isolation, chat identity, pinning and 
     const chat = once(host, 'new_live_chat');
     await emit(viewer, 'send_live_chat', { sessionId: 'room-a', text: 'Hello', sender: 'ADMIN', role: 'HOST' });
     const message = await chat;assert.equal(message.sender, 'buyer');assert.equal(message.role, 'VIEWER');
+    const shop = await connect(credentials.shop);
+    const history = once(shop, 'live_chat_history');
+    const shopSubscriber = once(host, 'live_viewer_joined');
+    assert.equal((await emit(shop,'join_live_room',{sessionId:'room-a',requestedRole:'moderator'})).ok,true);
+    assert.equal((await shopSubscriber).viewerSocketId,shop.id,'shop must subscribe to the KOL camera');
+    assert.ok((await history).messages.some(row=>row.id===message.id),'shop and late hosts receive recent messages');
+    assert.equal(server.rooms.get('room-a').hostId,host.id,'moderator must not take the KOL camera slot');
+    const shopOffer=once(shop,'live_signal');
+    assert.equal((await emit(host,'live_signal',{sessionId:'room-a',targetSocketId:shop.id,signal:{description:{type:'offer',sdp:'fixture'}}})).ok,true);
+    await shopOffer;
+    const shopAnswer=once(host,'live_signal');
+    assert.equal((await emit(shop,'live_signal',{sessionId:'room-a',targetSocketId:host.id,signal:{description:{type:'answer',sdp:'fixture'}}})).ok,true);
+    await shopAnswer;
+    assert.equal((await emit(shop,'live_signal',{sessionId:'room-a',targetSocketId:viewer.id,signal:{description:{type:'offer',sdp:'fixture'}}})).ok,false,'subscribers cannot impersonate a publisher');
+    const reconnect=once(host,'live_viewer_joined');
+    assert.equal((await emit(shop,'request_live_stream',{sessionId:'room-a'})).ok,true);
+    assert.equal((await reconnect).replace,true);
+    assert.equal((await emit(viewer,'join_live_room',{sessionId:'room-a',requestedRole:'moderator'})).ok,false);
+    const sent=await emit(viewer,'send_live_chat',{sessionId:'room-a',text:'Retry-safe message',clientMessageId:'same-message'});
+    const retried=await emit(viewer,'send_live_chat',{sessionId:'room-a',text:'Retry-safe message',clientMessageId:'same-message'});
+    assert.equal(sent.message.id,retried.message.id);
+    assert.equal(server.rooms.get('room-a').messages.filter(row=>row.clientMessageId==='same-message').length,1);
+    assert.equal((await emit(viewer,'send_live_chat',{sessionId:'room-b',text:'Other room'})).ok,false);
     assert.equal((await emit(viewer, 'host_pin_product', { sessionId: 'room-a', productIndex: 1, productId: 'dress' })).ok, false);
     assert.equal((await emit(host, 'host_pin_product', { sessionId: 'room-a', productIndex: 1, productId: 'wrong' })).ok, false);
     const pin = once(viewer, 'product_pinned_changed');
     assert.equal((await emit(host, 'host_pin_product', { sessionId: 'room-a', productIndex: 1, productId: 'dress' })).ok, true);
     assert.equal((await pin).productId, 'dress');
+    const shopPin=once(viewer,'product_pinned_changed');
+    assert.equal((await emit(shop,'host_pin_product',{sessionId:'room-a',productIndex:0,productId:'shirt'})).ok,true);
+    assert.equal((await shopPin).productId,'shirt','moderator shop must persist and broadcast a pin');
+    const shopUnpin=once(viewer,'product_pinned_changed');
+    assert.equal((await emit(shop,'host_pin_product',{sessionId:'room-a',productIndex:-1})).ok,true);
+    assert.equal((await shopUnpin).productId,null);
+    pinApiStatus=404;
+    const missingApi=await emit(shop,'host_pin_product',{sessionId:'room-a',productIndex:1,productId:'dress'});
+    assert.equal(missingApi.ok,false);assert.match(missingApi.message,/cập nhật dịch vụ/);
+    assert.equal(server.rooms.get('room-a').pinnedProductId,null,'failed persistence cannot broadcast a successful pin');
+    pinApiStatus=200;
     assert.equal((await emit(host, 'refresh_live_auth', { token: credentials.viewer })).ok, false, 'token rotation cannot switch identity');
     assert.equal((await emit(host, 'refresh_live_auth', { token: await token('kol-user', ['KOL_CTV']) })).ok, true);
+    const interrupted=once(viewer,'live_stream_error');businessUnavailable=true;await interrupted;
+    assert.equal(viewer.connected,true,'temporary business API outages must not falsely end the live');
+    const recovered=once(viewer,'live_service_ready');businessUnavailable=false;await recovered;
+    assert.equal(server.rooms.has('room-a'),true);
     const ended = once(viewer, 'live_session_ended');sessions.get('room-a').status = 'ENDED';await ended;
     assert.equal(server.rooms.has('room-a'), false);
     const scheduledHost = await connect(credentials.shop);
@@ -72,6 +118,10 @@ test('signed identity, host consent, room isolation, chat identity, pinning and 
     assert.equal((await emit(scheduledHost, 'live_stream_started', { sessionId: 'scheduled' })).ok, false, 'camera cannot publish before shop starts the session');
     sessions.get('scheduled').status = 'LIVE';
     assert.equal((await emit(scheduledHost, 'live_stream_started', { sessionId: 'scheduled' })).ok, true);
+    const timedOut=once(scheduledHost,'live_session_ended');
+    sessions.get('scheduled').participantRefs.endsAt=new Date(Date.now()-1).toISOString();
+    await timedOut;
+    assert.equal(server.rooms.has('scheduled'),false,'the deadline closes a room even when a stale API still reports LIVE');
     assert.ok(metricRequests.some(r=>r.method==='POST'&&r.url.endsWith('/views')&&r.user==='buyer'),'viewer joins must persist to Product using the viewer identity');
     assert.ok(metricRequests.some(r=>r.method==='PATCH'&&r.url.endsWith('/stats')&&r.body.concurrentViewerCount>0),'realtime viewer peaks must persist');
     assert.ok(metricRequests.every(r=>/^[a-f0-9]{64}$/.test(r.signature)),'only the authenticated relay signs metric requests');

@@ -45,6 +45,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final PlatformTransactionManager transactions;
     private final CheckoutShippingPolicy shippingPolicy;
     private final com.scanms.order.service.CheckoutAttribution attribution;
+    private final com.scanms.order.client.InventoryCheckoutClient inventory;
     @Value("${clients.product.url:http://localhost:8082}")
     private String productUrl;
     @Value("${clients.promotion.url:http://localhost:8085}")
@@ -116,6 +117,27 @@ public class CheckoutServiceImpl implements CheckoutService {
         return input;
     }
 
+    private Map<String,Object> inventoryQuote(List<Line> lines,Jwt jwt,String token,String orderId) {
+        try {
+            var input=Map.<String,Object>of("items",lines,"buyerIdentitySubject",jwt.getSubject());
+            return result(orderId==null?inventory.quote("Bearer "+token,shippingPolicy.perStore(),input)
+                    :inventory.reserve(orderId,"Bearer "+token,shippingPolicy.perStore(),input));
+        }catch(feign.FeignException ex){
+            String message="Chưa thể xác nhận giá hoặc tồn kho sản phẩm.";
+            try{var error=JsonMapper.builder().build().readTree(ex.contentUTF8());if(error.path("message").isTextual())message=error.path("message").asText();}catch(Exception ignored){}
+            throw new ResponseStatusException(ex.status()>0?org.springframework.http.HttpStatusCode.valueOf(ex.status()):HttpStatus.SERVICE_UNAVAILABLE,message);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String fingerprint(Input input) {
+        var json=JsonMapper.builder().build();
+        Map<String,Object> value=json.convertValue(input,Map.class);
+        if(input.expectedPayableVnd()==null)value.remove("expectedPayableVnd");
+        if(value.get("items") instanceof List<?> lines)for(Object line:lines)if(line instanceof Map<?,?> fields)((Map<String,Object>)fields).remove("livePurchaseToken");
+        return json.writeValueAsString(value);
+    }
+
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, Object> checkout(Input input, Jwt jwt) {
@@ -124,13 +146,13 @@ public class CheckoutServiceImpl implements CheckoutService {
         Map<String, Object> user = result(http.get().uri(userUrl + "/api/v1/users").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class));
         if (!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Active customer profile required");
-        String customer = user.get("userId").toString(), serialized = JsonMapper.builder().build().writeValueAsString(input);
+        String customer = user.get("userId").toString(), serialized = fingerprint(input);
         String token = serviceToken();
         shippingPolicy.perStore();
         // Idempotent retries must use the original order's captured policy.
         var existing = orders.findByCustomerIdAndIdempotencyKey(customer, input.idempotencyKey());
         if ((existing.isEmpty() || !"READY".equals(existing.get().getSagaState().get("checkoutState"))) && input.expectedShippingFeeVnd() != null) {
-            var quote = post(productUrl + "/api/v1/inventory/reservations/quote", token, Map.of("items", input.items()));
+            var quote = inventoryQuote(input.items(),jwt,token,null);
             var quotedLines = (List<Map<String, Object>>) quote.get("lines");
             long expected = shippingPolicy.total(quotedLines.stream().map(l -> l.get("storeId")).distinct().count());
             if (input.expectedShippingFeeVnd() != expected)
@@ -158,7 +180,7 @@ public class CheckoutServiceImpl implements CheckoutService {
                 var previous=attributed.putIfAbsent(requested.productId(),verified);
                 if(previous!=null&&!previous.equals(verified)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Sản phẩm có nhiều nguồn giới thiệu khác nhau.");
             }
-            Map<String, Object> reserved = post(productUrl + "/api/v1/inventory/reservations/" + order.getOrderId(), token, Map.of("items", input.items()));
+            Map<String, Object> reserved = inventoryQuote(input.items(),jwt,token,order.getOrderId());
             List<Map<String, Object>> lines = (List<Map<String, Object>>) reserved.get("lines");
             List<Map<String, Object>> discounts = List.of();
             if (hasVoucher(input.couponCode(),input.shippingCouponCode()))
@@ -202,6 +224,8 @@ public class CheckoutServiceImpl implements CheckoutService {
                 seller.setTotalsSnapshot(totals);
             }
             total = Math.addExact(total, shippingPolicy.total(sellerMap.size())-shippingDiscount);
+            if(input.expectedPayableVnd()!=null&&input.expectedPayableVnd()!=total)
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Giá hoặc ưu đãi đã thay đổi. Vui lòng kiểm tra lại tổng thanh toán trước khi đặt hàng.");
             if (total <= 0)
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Zero-value checkout requires a separate free-order policy");
             order.setPayableVnd(total);
@@ -239,7 +263,7 @@ public class CheckoutServiceImpl implements CheckoutService {
         if (!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         String token = serviceToken();
-        List<Map<String, Object>> lines = (List<Map<String, Object>>) post(productUrl + "/api/v1/inventory/reservations/quote", token, Map.of("items", input.items())).get("lines");
+        List<Map<String, Object>> lines = (List<Map<String, Object>>) inventoryQuote(input.items(),jwt,token,null).get("lines");
         long gross = 0;
         for (var line : lines) gross = Math.addExact(gross, number(line, "grossAmountVnd"));
         long discount = 0;
@@ -263,6 +287,7 @@ public class CheckoutServiceImpl implements CheckoutService {
         var response = new LinkedHashMap<String, Object>(shippingPolicy.snapshot());
         response.putAll(Map.of("code", Objects.toString(input.couponCode(), ""), "discountAmount", discount, "discountType", "VOUCHER", "subtotalVnd", gross, "shippingFeeVnd", shipping, "shippingDiscountVnd",shippingDiscount,"benefitType",benefit,"finalAmount", Math.addExact(gross - discount, shipping-shippingDiscount)));
         response.put("shippingCouponCode",Objects.toString(input.shippingCouponCode(),""));
+        response.put("lines",lines);
         return response;
     }
 }

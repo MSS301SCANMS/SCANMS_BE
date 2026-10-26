@@ -27,6 +27,7 @@ public class LivestreamController {
     private final LivestreamService service;
     private final com.scanms.product.service.LiveMetricsSignature metricsSignature;
     private final com.scanms.product.service.LivestreamViewerService viewers;
+    private final com.scanms.product.service.LivestreamReactionService reactions;
 
     @PostMapping
     public ResponseEntity<ApiResponse<LivestreamResponse>> create(@Valid @RequestBody CreateLivestreamRequest request) {
@@ -79,6 +80,21 @@ public class LivestreamController {
     }
 
     public record RespondRequest(boolean accepted) {}
+    @PatchMapping("/{id}/reactions/stats")
+    public ApiResponse<com.scanms.product.dto.response.LivestreamReactionCountResponse> reactionStats(
+            @PathVariable String id,@Valid @RequestBody com.scanms.product.dto.request.UpdateLivestreamReactionCountRequest request,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal Jwt jwt,
+            @org.springframework.web.bind.annotation.RequestHeader(value="X-Live-Metrics-Time",defaultValue="") String timestamp,
+            @org.springframework.web.bind.annotation.RequestHeader(value="X-Live-Metrics-Signature",defaultValue="") String signature) {
+        metricsSignature.require("LIKES\n"+id+"\n"+request.likeCount(),timestamp,signature);
+        return ApiResponse.success(new com.scanms.product.dto.response.LivestreamReactionCountResponse(reactions.updateCount(id,request.likeCount(),jwt)));
+    }
+    public record PinRequest(@jakarta.validation.constraints.Pattern(regexp="[A-Za-z0-9_-]{1,100}") String productId) {}
+
+    @PostMapping("/{id}/pin")
+    public ApiResponse<LivestreamResponse> pin(@PathVariable String id,@Valid @RequestBody PinRequest request) {
+        return ApiResponse.success(service.pinProduct(id,request.productId()));
+    }
 
     /** KOL chấp nhận / từ chối lời mời live (lưu trong participantRefs.inviteStatus). */
     @PatchMapping("/{id}/respond")

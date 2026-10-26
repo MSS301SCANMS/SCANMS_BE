@@ -9,7 +9,11 @@ import java.util.Map;
 
 public interface CheckoutService {
     record Line(@NotBlank String productId, String variantId, @Min(1) @Max(1000) int quantity,
-                String sourceLivestreamId, @Size(max=100) String referralLinkId, @Pattern(regexp="[A-Za-z0-9_-]{1,100}") String referralClickId) {
+                String sourceLivestreamId, @Size(max=100) String referralLinkId, @Pattern(regexp="[A-Za-z0-9_-]{1,100}") String referralClickId,
+                @Size(max=3000) String livePurchaseToken) {
+        public Line(String productId,String variantId,int quantity,String liveId,String referralLinkId,String referralClickId){
+            this(productId,variantId,quantity,liveId,referralLinkId,referralClickId,null);
+        }
         public Line(String productId, String variantId, int quantity, String liveId) {
             this(productId,variantId,quantity,liveId,null,null);
         }
@@ -23,7 +27,11 @@ public interface CheckoutService {
                  @NotBlank String paymentMethod, @AssertTrue boolean policyAccepted, @Size(max = 100) String couponCode,
                  @Size(max = 500) String orderNotes, @NotEmpty @Size(max = 100) List<@Valid Line> items,
                  @Min(0) Long expectedShippingFeeVnd,
-                 @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) @Size(max=100) String shippingCouponCode) {
+                 @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) @Size(max=100) String shippingCouponCode,
+                 @Min(0) Long expectedPayableVnd) {
+        public Input(String key,String name,String phone,String address,String payment,boolean accepted,String coupon,String notes,List<Line> items,Long shippingFee,String shippingCoupon) {
+            this(key,name,phone,address,payment,accepted,coupon,notes,items,shippingFee,shippingCoupon,null);
+        }
         public Input(String key, String name, String phone, String address, String payment, boolean accepted, String coupon, String notes, List<Line> items, Long shippingFee) {
             this(key,name,phone,address,payment,accepted,coupon,notes,items,shippingFee,null);
         }

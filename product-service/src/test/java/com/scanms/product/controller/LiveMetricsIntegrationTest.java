@@ -39,4 +39,27 @@ class LiveMetricsIntegrationTest {
     @Test void customersCannotForgeMetricsWithoutRelaySignature()throws Exception{
         mvc.perform(post("/api/v1/livestreams/"+id+"/views").with(jwt()).contentType("application/json").content("{\"visitId\":\"forged\"}")).andExpect(status().isForbidden());assertEquals(0L,lives.findById(id).orElseThrow().getViewerCount());
     }
+    @Test void sharedHeartsPersistMonotonicallyAndExposeOnlyTheTotal()throws Exception{
+        visit("viewer-a","view-before-heart");
+        for(long count:new long[]{17,17,5}){
+            String time=""+Instant.now().getEpochSecond();
+            mvc.perform(patch("/api/v1/livestreams/"+id+"/reactions/stats").with(jwt())
+                .header("X-Live-Metrics-Time",time).header("X-Live-Metrics-Signature",signature("LIKES\n"+id+"\n"+count,time))
+                .contentType("application/json").content("{\"likeCount\":"+count+"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.likeCount").value(17));
+        }
+        mvc.perform(get("/api/v1/livestreams/"+id).with(jwt())).andExpect(status().isOk())
+            .andExpect(jsonPath("$.result.likeCount").value(17)).andExpect(jsonPath("$.result.statistics").doesNotExist());
+        assertEquals(1L,lives.findById(id).orElseThrow().getUniqueViewerCount());
+    }
+    @Test void browserCannotForgeAHeartTotalOrReuseASignatureForAnotherCount()throws Exception{
+        mvc.perform(patch("/api/v1/livestreams/"+id+"/reactions/stats").with(jwt()).contentType("application/json").content("{\"likeCount\":9999}"))
+            .andExpect(status().isForbidden());
+        String time=""+Instant.now().getEpochSecond();
+        mvc.perform(patch("/api/v1/livestreams/"+id+"/reactions/stats").with(jwt())
+            .header("X-Live-Metrics-Time",time).header("X-Live-Metrics-Signature",signature("LIKES\n"+id+"\n1",time))
+            .contentType("application/json").content("{\"likeCount\":9999}"))
+            .andExpect(status().isForbidden());
+        assertFalse(lives.findById(id).orElseThrow().getStatistics()!=null&&lives.findById(id).orElseThrow().getStatistics().containsKey("likeCount"));
+    }
 }

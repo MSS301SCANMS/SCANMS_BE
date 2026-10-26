@@ -13,4 +13,6 @@ public interface LivestreamRepository extends JpaRepository<Livestream, String> 
     @Query("select live from Livestream live where live.livestreamId = :id")
     Optional<Livestream> lockById(@Param("id") String id);
     long countByStoreId(String storeId);
+    @Query("select live.livestreamId from Livestream live where live.status in :statuses order by live.livestreamId")
+    java.util.List<String> findIdsByStatusIn(@Param("statuses") java.util.Collection<com.scanms.product.constant.LivestreamStatus> statuses);
 }

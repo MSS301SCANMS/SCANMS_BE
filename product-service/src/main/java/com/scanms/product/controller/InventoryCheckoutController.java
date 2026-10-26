@@ -24,15 +24,21 @@ import java.util.*;
 public class InventoryCheckoutController {
     private final EntityManager em;
     private final com.scanms.product.client.OrderCancellationClient cancellations;
+    private final com.scanms.product.service.LiveOfferPricing livePricing;
+    private final com.scanms.product.service.LivestreamSchedulePolicy schedule;
 
     public record Line(
-            @NotBlank String productId, String variantId, @Min(1) @Max(1000) int quantity, String sourceLivestreamId) {
+            @NotBlank String productId, String variantId, @Min(1) @Max(1000) int quantity, String sourceLivestreamId,
+            @Size(max=3000) String livePurchaseToken) {
+        public Line(String productId,String variantId,int quantity,String liveId){this(productId,variantId,quantity,liveId,null);}
         public Line(String productId, String variantId, int quantity) {
-            this(productId, variantId, quantity, null);
+            this(productId, variantId, quantity, null, null);
         }
     }
 
-    public record Input(@NotEmpty @Size(max = 100) List<@Valid Line> items) {}
+    public record Input(@NotEmpty @Size(max = 100) List<@Valid Line> items, String buyerIdentitySubject) {
+        public Input(List<Line> items){this(items,null);}
+    }
 
     private void internal(Jwt jwt) {
         var roles = new HashSet<String>();
@@ -69,7 +75,7 @@ public class InventoryCheckoutController {
         Map<String, Product> products = new HashMap<>();
         for (String id : productIds) {
             Product p = em.find(Product.class, id, LockModeType.PESSIMISTIC_WRITE);
-            if (p == null || p.getStatus() != ProductStatus.ACTIVE) {
+            if (p == null) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Product is not available");
             }
             products.put(id, p);
@@ -84,7 +90,10 @@ public class InventoryCheckoutController {
                 != requested.size()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Merge duplicate cart lines before checkout");
         }
-        String hash = JsonMapper.builder().build().writeValueAsString(requested);
+        String hash = JsonMapper.builder().build().writeValueAsString(requested.stream().map(line->{
+            var fields=new LinkedHashMap<String,Object>();fields.put("productId",line.productId());fields.put("variantId",line.variantId());
+            fields.put("quantity",line.quantity());fields.put("sourceLivestreamId",line.sourceLivestreamId());return fields;
+        }).toList());
         CheckoutReservation existing =
                 preview ? null : em.find(CheckoutReservation.class, orderId, LockModeType.PESSIMISTIC_WRITE);
         if (existing != null) {
@@ -95,15 +104,19 @@ public class InventoryCheckoutController {
             return ApiResponse.success(Map.of("orderId", orderId, "lines", existing.getLines()));
         }
         List<Map<String, Object>> lines = new ArrayList<>();
+        Map<String,Livestream> sources=new HashMap<>();
+        for(String liveId:requested.stream().map(Line::sourceLivestreamId).filter(Objects::nonNull).distinct().sorted().toList())
+            sources.put(liveId,em.find(Livestream.class,liveId,LockModeType.PESSIMISTIC_WRITE));
         for (Line line : requested) {
             Product p = products.get(line.productId());
+            if(p.getStatus()!=ProductStatus.ACTIVE)throw new ResponseStatusException(HttpStatus.CONFLICT,"Product is not available");
             Store store = em.find(Store.class, p.getStoreId());
             if (store == null || store.getApprovalStatus() != StoreStatus.APPROVED) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Store is not approved");
             }
             if (line.sourceLivestreamId() != null) {
-                Livestream livestream = em.find(Livestream.class, line.sourceLivestreamId());
-                if (livestream == null || livestream.getStatus() != LivestreamStatus.LIVE
+                Livestream livestream = sources.get(line.sourceLivestreamId());
+                if (livestream == null || livestream.getStatus() != LivestreamStatus.LIVE || schedule.hasElapsed(livestream)
                         || !p.getStoreId().equals(livestream.getStoreId())
                         || livestream.getProductRefs() == null
                         || !(livestream.getProductRefs().get("productIds") instanceof Collection<?> ids)
@@ -136,12 +149,18 @@ public class InventoryCheckoutController {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Variant or stock is unavailable");
             }
             if (!preview) variant.setStockQuantity(variant.getStockQuantity() - line.quantity());
+            var liveOffer=line.sourceLivestreamId()==null?Map.<String,Object>of():livePricing.apply(sources.get(line.sourceLivestreamId()),variant.getVariantId(),line.quantity(),!preview,line.livePurchaseToken(),input.buyerIdentitySubject());
+            long unitPrice=liveOffer.isEmpty()?variant.getPriceVnd():((Number)liveOffer.get("unitPriceVnd")).longValue();
             Map<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("productId", p.getProductId());
             snapshot.put("variantId", variant.getVariantId());
             snapshot.put("quantity", line.quantity());
-            snapshot.put("unitPriceVnd", variant.getPriceVnd());
-            snapshot.put("grossAmountVnd", Math.multiplyExact(variant.getPriceVnd(), line.quantity()));
+            snapshot.put("unitPriceVnd", unitPrice);
+            snapshot.put("grossAmountVnd", Math.multiplyExact(unitPrice, line.quantity()));
+            snapshot.put("sku",variant.getSku());
+            if(liveOffer.get("sourceLiveOfferId")!=null)snapshot.put("sourceLiveOfferId",liveOffer.get("sourceLiveOfferId"));
+            var images=em.createQuery("select i.imageUrl from ProductImage i where i.productId=:id order by i.primaryImage desc,i.sortOrder asc",String.class).setParameter("id",p.getProductId()).setMaxResults(1).getResultList();
+            if(!images.isEmpty())snapshot.put("imageUrl",images.getFirst());
             snapshot.put("storeId", p.getStoreId());
             snapshot.put("storeName", store.getName());
             snapshot.put("name", p.getName());
@@ -182,6 +201,8 @@ public class InventoryCheckoutController {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Committed stock cannot be released");
         }
         for (Map<String, Object> line : r.getLines().stream()
+                .sorted(Comparator.comparing(l -> Objects.toString(l.get("sourceLivestreamId"),""))).toList())livePricing.release(line);
+        for (Map<String, Object> line : r.getLines().stream()
                 .sorted(Comparator.comparing(l -> l.get("variantId").toString()))
                 .toList()) {
             ProductVariant v = em.find(ProductVariant.class, line.get("variantId").toString(), LockModeType.PESSIMISTIC_WRITE);
@@ -208,6 +229,7 @@ public class InventoryCheckoutController {
                     throw new ResponseStatusException(HttpStatus.CONFLICT,"Committed stock can only be restored before delivery cancellation");
             }catch(feign.FeignException ex){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Cannot verify cancellation");}
         }else if(!"RESERVED".equals(reservation.getStatus()))throw new ResponseStatusException(HttpStatus.CONFLICT,"Unknown reservation state");
+        for(var line:reservation.getLines().stream().sorted(Comparator.comparing(l->Objects.toString(l.get("sourceLivestreamId"),""))).toList())livePricing.release(line);
         for(var line:reservation.getLines().stream().sorted(Comparator.comparing(l->l.get("variantId").toString())).toList()){
             var variant=em.find(ProductVariant.class,line.get("variantId").toString(),LockModeType.PESSIMISTIC_WRITE);
             variant.setStockQuantity(Math.addExact(variant.getStockQuantity(),((Number)line.get("quantity")).intValue()));

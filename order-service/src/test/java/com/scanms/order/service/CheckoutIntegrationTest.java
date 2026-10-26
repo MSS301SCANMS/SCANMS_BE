@@ -176,9 +176,16 @@ class CheckoutIntegrationTest {
         assertThrows(ResponseStatusException.class,() -> checkout.checkout(input("key",1),jwt)); assertEquals(1,reserves.get());
     }
     @Test void failedSourceRetainsOneCheckoutReferenceForSafeRetry() {
-        failNext.set(true); assertThrows(RestClientResponseException.class,() -> checkout.checkout(input("retry",2),jwt));
+        failNext.set(true); var failure=assertThrows(ResponseStatusException.class,() -> checkout.checkout(input("retry",2),jwt));
+        assertEquals(503,failure.getStatusCode().value());
         assertEquals(1,orders.count()); assertEquals(0,items.count()); String id=orders.findAll().getFirst().getOrderId();
         assertEquals(id,checkout.checkout(input("retry",2),jwt).get("orderId")); assertEquals(1,items.count()); assertEquals(1,orders.count());
+    }
+    @Test void changedPayableCannotCreateReadyOrderAtAnUnexpectedPrice() {
+        var request=new CheckoutService.Input("expected-total","Customer","0900000000","Delivery address","WALLET",true,null,null,input("unused",2).items(),null,null,100L);
+        var error=assertThrows(ResponseStatusException.class,()->checkout.checkout(request,jwt));
+        assertEquals(409,error.getStatusCode().value());assertEquals(0,items.count());
+        assertTrue(orders.findAll().stream().noneMatch(order->"READY".equals(order.getSagaState().get("checkoutState"))));
     }
     @Test void paidOrderWithoutVoucherFinalizesInventoryWithoutVoucherReservation() {
         var created=checkout.checkout(input("no-voucher",2),jwt);

@@ -2,21 +2,25 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { Server } from 'socket.io';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 
 const idPattern = /^[A-Za-z0-9_-]{1,100}$/;
 const emojis = new Set(['❤️','👍','😂','😮','😢','😡','🔥','🎁','🎉','💯','⭐']);
 const unpack = body => body?.result ?? body?.data ?? body;
+const subscriber = socket => ['viewer','moderator'].includes(socket?.data.role);
 export function createLiveServer({
   apiUrl = process.env.API_URL || 'http://localhost:8080/api/v1',
   issuer = process.env.KEYCLOAK_ISSUER || 'http://localhost:8180/realms/scanms',
   origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(value => value.trim()),
   maxViewers = Number(process.env.MAX_VIEWERS_PER_ROOM || 20),
+  maxConcurrentJoins = Number(process.env.MAX_CONCURRENT_JOINS || 32),
   pollMs = 10000,
   verifyToken,
   fetcher = fetch,
   metricsSecret = process.env.LIVE_METRICS_SECRET || '',
+  reactionFlushMs = 500,
 } = {}) {
+  if (!Number.isInteger(maxViewers) || maxViewers < 1 || !Number.isInteger(maxConcurrentJoins) || maxConcurrentJoins < 1) throw new Error('Livestream connection limits must be positive integers.');
   const jwks = createRemoteJWKSet(new URL(`${issuer}/protocol/openid-connect/certs`));
   const verify = verifyToken || (async token => (await jwtVerify(token, jwks, {
     issuer, algorithms: ['RS256'], requiredClaims: ['sub', 'exp'],
@@ -31,22 +35,26 @@ export function createLiveServer({
   });
   const live = io.of('/live-stream');
   const rooms = new Map();
+  const reactionStates = new Map();
+  let joiningCount = 0;
   const read = async (path, token) => {
     const response = await fetcher(`${apiUrl}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(6000) });
-    if (!response.ok) throw new Error('Không xác minh được quyền hoặc trạng thái phiên live.');
+    if (!response.ok) { const error=new Error('Không xác minh được quyền hoặc trạng thái phiên live.');error.status=response.status;throw error; }
     return unpack(await response.json());
   };
   const validIdentity = socket => {
-    if (!socket.data.claims?.exp || socket.data.claims.exp * 1000 <= Date.now()) throw new Error('Phiên đăng nhập đã hết hạn.');
+    if (!socket.data.claims?.exp || socket.data.claims.exp * 1000 <= Date.now()) {const error=new Error('Phiên đăng nhập đã hết hạn.');error.status=401;throw error;}
   };
   const authorize = async (socket, id, role) => {
     validIdentity(socket);
     const session = await read(`/livestreams/${id}`, socket.data.token);
-    if ((session.livestreamId || session.id) !== id || !['LIVE','SCHEDULED'].includes(session.status)) throw new Error('Phiên livestream đã kết thúc hoặc không tồn tại.');
-    if (role === 'host') {
+    const plannedEnd=session.participantRefs?.endsAt || session.endsAt;
+    const endTime=plannedEnd ? Date.parse(/(Z|[+-]\d{2}:\d{2})$/.test(plannedEnd) ? plannedEnd : `${plannedEnd}Z`) : NaN;
+    if ((session.livestreamId || session.id) !== id || !['LIVE','SCHEDULED'].includes(session.status) || Number.isFinite(endTime) && endTime<=Date.now()) {const error=new Error('Phiên livestream đã kết thúc hoặc hết lịch phát.');error.closed=true;throw error;}
+    if (role === 'host' || role === 'moderator') {
       const realmRoles = socket.data.claims.realm_access?.roles || [];
       let authorized = false;
-      if (realmRoles.includes('KOL_CTV')) {
+      if (role === 'host' && realmRoles.includes('KOL_CTV')) {
         const profile = await read('/collaborators/me', socket.data.token);
         authorized = profile?.approvalStatus === 'APPROVED'
           && session.collaboratorRefs?.collaboratorIds?.includes(profile.collaboratorId)
@@ -60,7 +68,7 @@ export function createLiveServer({
         const stores = await read('/stores/mine', socket.data.token);
         authorized = Array.isArray(stores) && stores.some(store => (store.storeId || store.id) === session.storeId && store.approvalStatus === 'APPROVED');
       }
-      if (!authorized) throw new Error('Chỉ chủ shop hoặc KOL đã chấp nhận lời mời của phiên mới được phát sóng.');
+      if (!authorized) {const error=new Error('Bạn không có quyền điều khiển phiên livestream này.');error.status=403;throw error;}
     }
     return session;
   };
@@ -71,6 +79,19 @@ export function createLiveServer({
     return room;
   };
   const pendingViews = new Map();
+  const purchaseAccess = async socket => {
+    if(socket.data.role!=='viewer')return null;
+    if(socket.data.purchaseExpiresAt>Date.now()+30000)return socket.data.purchaseToken;
+    const time=String(Math.floor(Date.now()/1000)),id=socket.data.sessionId;
+    if(!metricsSecret||!id)return null;
+    try {
+      const response=await fetcher(`${apiUrl}/livestreams/${encodeURIComponent(id)}/purchase-access`,{method:'POST',
+        headers:{Authorization:`Bearer ${socket.data.token}`,'Content-Type':'application/json','X-Live-Metrics-Time':time,'X-Live-Metrics-Signature':createHmac('sha256',metricsSecret).update(`ACCESS\n${id}\n${time}`).digest('hex')},body:'{}',signal:AbortSignal.timeout(6000)});
+      const value=response.ok?unpack(await response.json()):null;
+      if(typeof value?.token!=='string')return null;
+      socket.data.purchaseToken=value.token;socket.data.purchaseExpiresAt=Date.now()+100000;return value.token;
+    }catch{return null;}
+  };
   const metrics = async (method, id, token, body) => {
     if (!metricsSecret) return false;
     const time = String(Math.floor(Date.now()/1000));
@@ -84,23 +105,73 @@ export function createLiveServer({
       return response.ok;
     } catch { return false; }
   };
-  const flushViews = async () => {
-    for(const [key,event] of [...pendingViews]) {
-      if(event.expiresAt*1000<=Date.now()){pendingViews.delete(key);continue;}
-      if(await metrics('POST',event.id,event.token,{visitId:event.visitId}))pendingViews.delete(key);
-    }
+  let flushingViews;
+  const flushViews = () => {
+    if (flushingViews) return flushingViews;
+    flushingViews = (async () => {
+      // Coalesce simultaneous joins and bound outbound Product API work.
+      const batch = [...pendingViews].slice(0,64);
+      let index = 0;
+      await Promise.all(Array.from({length:Math.min(4,batch.length)},async()=>{
+        while(index<batch.length){
+          const [key,event]=batch[index++];
+          if(event.expiresAt*1000<=Date.now()){pendingViews.delete(key);continue;}
+          if(await metrics('POST',event.id,event.token,{visitId:event.visitId}))pendingViews.delete(key);
+        }
+      }));
+    })().finally(()=>{flushingViews=null;});
+    return flushingViews;
+  };
+  const audienceCount = room => {
+    const members=[...room.members].map(id=>live.sockets.get(id)).filter(Boolean);
+    const publisher=live.sockets.get(room.hostId)?.data.claims.sub;
+    return new Set(members.filter(socket=>subscriber(socket)&&socket.data.claims.sub!==publisher).map(socket=>socket.data.claims.sub)).size;
+  };
+  const reactionsFor = (id,session,token) => {
+    const saved=Number.isSafeInteger(session.likeCount)&&session.likeCount>=0?session.likeCount:0;
+    const state=reactionStates.get(id)||{id,count:saved,persisted:saved,events:new Map(),updatedAt:Date.now()};
+    state.count=Math.max(state.count,saved);state.persisted=Math.max(state.persisted,saved);state.token=token;
+    reactionStates.set(id,state);return state;
+  };
+  const persistReactions = state => {
+    if(state.saving)return state.saving;
+    if(!metricsSecret||state.count<=state.persisted)return Promise.resolve();
+    const count=state.count,time=String(Math.floor(Date.now()/1000));
+    state.saving=(async()=>{
+      try{
+        const response=await fetcher(`${apiUrl}/livestreams/${encodeURIComponent(state.id)}/reactions/stats`,{
+          method:'PATCH',headers:{Authorization:`Bearer ${state.token}`,'Content-Type':'application/json',
+            'X-Live-Metrics-Time':time,'X-Live-Metrics-Signature':createHmac('sha256',metricsSecret).update(`LIKES\n${state.id}\n${count}\n${time}`).digest('hex')},
+          body:JSON.stringify({likeCount:count}),signal:AbortSignal.timeout(6000)});
+        if(!response.ok)return;
+        state.persisted=Math.max(state.persisted,count);
+        const saved=unpack(await response.json());
+        if(Number.isSafeInteger(saved?.likeCount)&&saved.likeCount>state.count){state.count=saved.likeCount;state.persisted=saved.likeCount;live.to(state.id).emit('live_reaction_count',{likesCount:state.count});}
+      }catch{ /* Keep the dirty counter for the next room poll. */ }
+    })().finally(()=>{state.saving=null;});
+    return state.saving;
+  };
+  const scheduleReactionSave = state => {
+    if(state.timer)return;
+    state.timer=setTimeout(()=>{state.timer=null;void persistReactions(state)},reactionFlushMs);state.timer.unref();
   };
   const emitCounts = room => {
-    const count=[...room.members].filter(id => live.sockets.get(id)?.data.role === 'viewer').length;
-    live.to(room.id).emit('live_viewer_count',{count});
-    const host=live.sockets.get(room.hostId);
+    const count=audienceCount(room);
     room.peak=Math.max(room.peak||0,count);
-    if(host&&room.session.status==='LIVE') {
-      room.metricsPending=true;
-      room.metricsChain=(room.metricsChain||Promise.resolve()).then(async()=>{
-        room.metricsPending=!(await metrics('PATCH',room.id,host.data.token,{viewerCount:0,uniqueViewerCount:0,concurrentViewerCount:room.peak}));
-      });
-    }
+    if(room.peak>(room.persistedPeak||0))room.metricsPending=true;
+    if(room.countTimer)return;
+    room.countTimer=setTimeout(()=>{
+      room.countTimer=null;
+      if(rooms.get(room.id)===room)live.to(room.id).emit('live_viewer_count',{count:audienceCount(room)});
+    },100);
+    room.countTimer.unref();
+  };
+  const flushPeak = async room => {
+    const host=live.sockets.get(room.hostId);
+    if(!room.metricsPending||!host||room.session.status!=='LIVE')return;
+    const peak=room.peak;
+    if(await metrics('PATCH',room.id,host.data.token,{viewerCount:0,uniqueViewerCount:0,concurrentViewerCount:peak}))room.persistedPeak=peak;
+    room.metricsPending=room.peak>(room.persistedPeak||0);
   };
   const leave = socket => {
     const room = rooms.get(socket.data.sessionId);
@@ -110,7 +181,7 @@ export function createLiveServer({
       room.hostId = null; room.publishing = false;
       live.to(room.id).emit('live_host_left');
     } else if (room.hostId) live.to(room.hostId).emit('live_viewer_left', { viewerSocketId: socket.id });
-    if (!room.members.size) rooms.delete(room.id);
+    if (!room.members.size) {clearTimeout(room.countTimer);rooms.delete(room.id);}
     else emitCounts(room);
     socket.data.sessionId = null;
   };
@@ -136,45 +207,59 @@ export function createLiveServer({
         if (typeof ack === 'function') ack({ ok: true, ...result });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Thao tác livestream thất bại.';
-        if (typeof ack === 'function') ack({ ok: false, message });
+        if (typeof ack === 'function') ack({ ok: false, message, ...(error.code?{code:error.code}:{}), ...(error.retryAfterMs?{retryAfterMs:error.retryAfterMs}:{}) });
         else socket.emit('live_stream_error', { message });
       }
     });
     on('join_live_room', async ({ sessionId, requestedRole }) => {
-      if (!idPattern.test(sessionId) || !['host','viewer'].includes(requestedRole) || socket.data.joining) throw new Error('Phòng live không hợp lệ.');
+      if (!idPattern.test(sessionId) || !['host','moderator','viewer'].includes(requestedRole) || socket.data.joining) throw new Error('Phòng live không hợp lệ.');
+      if(joiningCount>=maxConcurrentJoins){const error=new Error('Nhiều người đang vào phòng. Vui lòng thử kết nối lại sau vài giây.');error.code='ROOM_BUSY';error.retryAfterMs=2000;throw error;}
       socket.data.joining = true;
+      joiningCount++;
       try {
         const session = await authorize(socket, sessionId, requestedRole);
         if (!socket.connected) throw new Error('Kết nối đã đóng.');
         if (socket.data.sessionId === sessionId && socket.data.role === requestedRole) {
-          const room = roomFor(socket);return { hostOnline: Boolean(room.hostId), streamActive: room.publishing };
+          const room = roomFor(socket);return { hostOnline: Boolean(room.hostId), streamActive: room.publishing, viewerCount:audienceCount(room), likesCount:reactionsFor(sessionId,session,socket.data.token).count };
         }
-        const room = rooms.get(sessionId) || { id: sessionId, members: new Set(), hostId: null, publishing: false, session };
+        const room = rooms.get(sessionId) || { id: sessionId, members: new Set(), hostId: null, publishing: false, session, messages: [] };
         if (requestedRole === 'host' && room.hostId && room.hostId !== socket.id) throw new Error('Phiên đã có người phát sóng. Hãy đóng phòng phát cũ trước.');
-        if (requestedRole === 'viewer' && room.members.size >= maxViewers + (room.hostId ? 1 : 0)) throw new Error('Phòng live đã đủ người xem cho cấu hình hiện tại.');
+        if (requestedRole !== 'host' && [...room.members].filter(id => subscriber(live.sockets.get(id))).length >= maxViewers) {const error=new Error('Phòng live đã đủ kết nối xem cho cấu hình hiện tại. Vui lòng thử lại sau.');error.code='ROOM_FULL';throw error;}
         leave(socket); rooms.set(sessionId, room);
         socket.data.sessionId = sessionId; socket.data.role = requestedRole;
         room.members.add(socket.id); room.session = session; socket.join(sessionId);
         if (requestedRole === 'host') {
           room.hostId = socket.id;socket.to(sessionId).emit('live_host_available');
-          for (const id of room.members) if (id !== socket.id) socket.emit('live_viewer_joined', { viewerSocketId: id });
+          for (const id of room.members) if (subscriber(live.sockets.get(id))) socket.emit('live_viewer_joined', { viewerSocketId: id });
         } else if (room.hostId) live.to(room.hostId).emit('live_viewer_joined', { viewerSocketId: socket.id });
+        socket.emit('live_chat_history', { messages: room.messages || [] });
         emitCounts(room);
-        if(requestedRole==='viewer'&&session.status==='LIVE'){
+        if(subscriber(socket)&&session.status==='LIVE'){
           const key=`${sessionId}:${socket.id}`;
           pendingViews.set(key,{id:sessionId,visitId:socket.id,token:socket.data.token,expiresAt:socket.data.claims.exp});
           socket.data.viewQueuedSession=sessionId;void flushViews();
         }
         if (room.pinnedProductId !== undefined) socket.emit('product_pinned_changed', { productIndex: (room.session.productRefs?.productIds || []).indexOf(room.pinnedProductId), productId: room.pinnedProductId });
-        return { hostOnline: Boolean(room.hostId), streamActive: room.publishing };
-      } finally { socket.data.joining = false; }
+        const purchaseToken=await purchaseAccess(socket);
+        return { hostOnline: Boolean(room.hostId), streamActive: room.publishing, viewerCount:audienceCount(room), likesCount:reactionsFor(sessionId,session,socket.data.token).count, purchaseToken };
+      } finally { socket.data.joining = false;joiningCount--; }
+    });
+    on('request_live_stream', ({sessionId})=>{
+      const room=roomFor(socket);
+      if(sessionId!==room.id||!subscriber(socket))throw new Error('Chỉ người nhận video trong phòng được kết nối lại camera.');
+      if(Date.now()-(socket.data.lastMediaRequest||0)<1500)throw new Error('Đang thử kết nối camera. Vui lòng chờ một chút.');
+      socket.data.lastMediaRequest=Date.now();
+      if(room.hostId&&room.publishing)live.to(room.hostId).emit('live_viewer_joined',{viewerSocketId:socket.id,replace:true});
+      return {hostOnline:Boolean(room.hostId),streamActive:room.publishing};
     });
     on('refresh_live_auth', async ({ token }) => {
       if (typeof token !== 'string' || token.length > 16384) throw new Error('Thông tin đăng nhập không hợp lệ.');
       const claims = await verify(token);
       if (claims.sub !== socket.data.claims.sub || !claims.exp || claims.exp * 1000 <= Date.now()) throw new Error('Tài khoản đã thay đổi. Hãy mở lại phòng live.');
       socket.data.token = token; socket.data.claims = claims;
+      const reactions=reactionStates.get(socket.data.sessionId);if(reactions)reactions.token=token;
       const pending=pendingViews.get(`${socket.data.sessionId}:${socket.id}`);if(pending){pending.token=token;pending.expiresAt=claims.exp;}
+      return { purchaseToken: await purchaseAccess(socket) };
     });
     for (const event of ['live_stream_started','live_stream_stopped']) on(event, async ({ sessionId }) => {
       const room = roomFor(socket);
@@ -188,30 +273,55 @@ export function createLiveServer({
     });
     on('live_signal', ({ sessionId, targetSocketId, signal }) => {
       const room = roomFor(socket);const target = live.sockets.get(targetSocketId);
-      if (sessionId !== room.id || !room.members.has(targetSocketId) || !target || target.data.role === socket.data.role) throw new Error('Không được gửi tín hiệu sang phòng khác.');
+      const fromHost=socket.id===room.hostId;
+      const validPair=fromHost?subscriber(target):subscriber(socket)&&targetSocketId===room.hostId;
+      if (sessionId !== room.id || !room.members.has(targetSocketId) || !target || !validPair) throw new Error('Không được gửi tín hiệu sang phòng khác.');
       validIdentity(target);
       if (!room.publishing) throw new Error('Camera chưa phát sóng.');
       const description = signal?.description, candidate = signal?.candidate;
-      if (description && (description.type !== (socket.data.role === 'host' ? 'offer' : 'answer') || typeof description.sdp !== 'string' || description.sdp.length > 100000)) throw new Error('Tín hiệu video không hợp lệ.');
+      if (description && (description.type !== (fromHost ? 'offer' : 'answer') || typeof description.sdp !== 'string' || description.sdp.length > 100000)) throw new Error('Tín hiệu video không hợp lệ.');
       if (candidate && (typeof candidate.candidate !== 'string' || candidate.candidate.length > 8192)) throw new Error('Tín hiệu kết nối không hợp lệ.');
       if (!description && !candidate) throw new Error('Thiếu tín hiệu video.');
       live.to(targetSocketId).emit('live_signal', { fromSocketId: socket.id, signal: { ...(description ? { description } : {}), ...(candidate ? { candidate } : {}) } });
     });
-    on('send_live_chat', ({ sessionId, text }) => {
+    on('send_live_chat', ({ sessionId, text, clientMessageId }) => {
       const room = roomFor(socket);
       if (sessionId !== room.id || typeof text !== 'string' || !text.trim() || text.length > 1000) throw new Error('Tin nhắn không hợp lệ.');
-      live.to(room.id).emit('new_live_chat', { id: crypto.randomUUID(), sender: socket.data.claims.name || socket.data.claims.preferred_username || 'Người xem', role: socket.data.role === 'host' ? 'HOST' : 'VIEWER', text: text.trim(), time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) });
+      if (clientMessageId != null && !idPattern.test(clientMessageId)) throw new Error('Mã tin nhắn không hợp lệ.');
+      const previous = room.messages?.find(message => message.senderId === socket.data.claims.sub && message.clientMessageId === clientMessageId && clientMessageId);
+      if (previous) return { message: previous };
+      const message = { id: randomUUID(), clientMessageId, senderId: socket.data.claims.sub, sender: socket.data.claims.name || socket.data.claims.preferred_username || 'Người xem', role: socket.data.role === 'host' ? 'HOST' : socket.data.role === 'moderator' ? 'SHOP' : 'VIEWER', text: text.trim(), createdAt: new Date().toISOString(), time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) };
+      room.messages = [...(room.messages || []), message].slice(-100);
+      live.to(room.id).emit('new_live_chat', message);
+      return { message };
     });
-    on('host_pin_product', ({ sessionId, productIndex, productId }) => {
+    on('host_pin_product', async ({ sessionId, productIndex, productId }) => {
       const room = roomFor(socket); const ids = room.session.productRefs?.productIds || [];
-      if (sessionId !== room.id || room.hostId !== socket.id || !Number.isInteger(productIndex) || productIndex < -1 || productIndex >= ids.length || (productId && ids[productIndex] !== productId)) throw new Error('Sản phẩm ghim không hợp lệ.');
-      room.pinnedProductId = productIndex === -1 ? null : ids[productIndex];
+      if (sessionId !== room.id || (room.hostId !== socket.id && socket.data.role !== 'moderator') || !Number.isInteger(productIndex) || productIndex < -1 || productIndex >= ids.length || (productId && ids[productIndex] !== productId)) throw new Error('Sản phẩm ghim không hợp lệ.');
+      const pinned=productIndex === -1 ? null : ids[productIndex];
+      const response=await fetcher(`${apiUrl}/livestreams/${encodeURIComponent(sessionId)}/pin`,{method:'POST',headers:{Authorization:`Bearer ${socket.data.token}`,'Content-Type':'application/json'},body:JSON.stringify({productId:pinned}),signal:AbortSignal.timeout(6000)});
+      if(!response.ok){
+        const detail=await response.json().catch(()=>null);
+        throw new Error(response.status===404?'Chức năng ghim chưa sẵn sàng ở máy chủ. Cần cập nhật dịch vụ rồi thử lại.':detail?.message||'Chưa lưu được sản phẩm ghim. Hãy thử lại.');
+      }
+      room.pinnedProductId = pinned;
+      room.session.productRefs={...room.session.productRefs,pinnedProductId:pinned};
       live.to(room.id).emit('product_pinned_changed', { productIndex, productId: room.pinnedProductId });
     });
-    on('send_reaction', ({ sessionId, emoji }) => {
+    on('send_reaction', ({ sessionId, emoji, clientReactionId }) => {
       const room = roomFor(socket);
-      if (sessionId !== room.id || !emojis.has(emoji)) throw new Error('Biểu cảm không hợp lệ.');
-      live.to(room.id).emit('reaction_broadcast', { emoji });
+      if (sessionId !== room.id || !emojis.has(emoji)||room.session.status!=='LIVE') throw new Error('Biểu cảm hoặc trạng thái phiên không hợp lệ.');
+      if(clientReactionId!=null&&!idPattern.test(clientReactionId))throw new Error('Mã biểu cảm không hợp lệ.');
+      const state=reactionsFor(room.id,room.session,socket.data.token),now=Date.now();
+      const key=`${socket.data.claims.sub}:${clientReactionId||randomUUID()}`;
+      const previous=state.events.get(key);if(previous)return {reaction:previous};
+      if(emoji==='❤️'&&state.count<Number.MAX_SAFE_INTEGER)state.count++;
+      const reaction={id:randomUUID(),emoji,likesCount:state.count,fromSocketId:socket.id};
+      state.events.set(key,reaction);state.updatedAt=now;
+      while(state.events.size>2000)state.events.delete(state.events.keys().next().value);
+      if(emoji==='❤️')scheduleReactionSave(state);
+      live.to(room.id).emit('reaction_broadcast', reaction);
+      return {reaction};
     });
     socket.on('disconnect', () => leave(socket));
   });
@@ -228,26 +338,37 @@ export function createLiveServer({
         const member = live.sockets.get(room.hostId) || live.sockets.get(room.members.values().next().value);
         if (!member) continue;
         try {
-          const session = await authorize(member, room.id, room.hostId === member.id ? 'host' : 'viewer');
+          const session = await authorize(member, room.id, member.data.role);
           room.session = session;
+          if(room.serviceUnavailable){room.serviceUnavailable=false;live.to(room.id).emit('live_service_ready');}
+          if(Object.hasOwn(session.productRefs || {},'pinnedProductId') && room.pinnedProductId!==session.productRefs.pinnedProductId){
+            room.pinnedProductId=session.productRefs.pinnedProductId;
+            live.to(room.id).emit('product_pinned_changed',{productId:room.pinnedProductId,productIndex:(session.productRefs.productIds || []).indexOf(room.pinnedProductId)});
+          }
           if(session.status==='LIVE')for(const id of room.members){
             const viewer=live.sockets.get(id);
-            if(viewer?.data.role==='viewer'&&viewer.data.viewQueuedSession!==room.id){
+            if(subscriber(viewer)&&viewer.data.viewQueuedSession!==room.id){
               pendingViews.set(`${room.id}:${id}`,{id:room.id,visitId:id,token:viewer.data.token,expiresAt:viewer.data.claims.exp});viewer.data.viewQueuedSession=room.id;
             }
           }
-          if(room.metricsPending)emitCounts(room);
-        } catch {
-          // Fail closed on changed permissions, a closed session, or an unavailable business API.
-          live.to(room.id).emit('live_session_ended');
-          for (const id of [...room.members]) live.sockets.get(id)?.disconnect(true);
-          rooms.delete(room.id);
+          await flushPeak(room);
+        } catch (error) {
+          if(error.closed){
+            live.to(room.id).emit('live_session_ended');
+            for (const id of [...room.members]) live.sockets.get(id)?.disconnect(true);
+            rooms.delete(room.id);
+          }else if([401,403,404].includes(error.status)){member.disconnect(true);}
+          else {room.serviceUnavailable=true;live.to(room.id).emit('live_stream_error',{message:'Đang kết nối lại dịch vụ phiên live. Nội dung chat chưa gửi vẫn được giữ lại.'});}
         }
+      }
+      for(const [id,state]of reactionStates){
+        await persistReactions(state);
+        if(!rooms.has(id)&&Date.now()-state.updatedAt>600000){clearTimeout(state.timer);reactionStates.delete(id);}
       }
     } finally { polling = false; }
   }, pollMs);
   timer.unref();
-  return { http, io, rooms, close: async () => { clearInterval(timer);await flushViews();await Promise.allSettled([...rooms.values()].map(room=>room.metricsChain));await new Promise(resolve => io.close(resolve)); } };
+  return { http, io, rooms, close: async () => { clearInterval(timer);for(const room of rooms.values())clearTimeout(room.countTimer);for(const state of reactionStates.values())clearTimeout(state.timer);await flushViews();await Promise.allSettled([...rooms.values()].map(flushPeak));await Promise.allSettled([...reactionStates.values()].map(persistReactions));await new Promise(resolve => io.close(resolve)); } };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

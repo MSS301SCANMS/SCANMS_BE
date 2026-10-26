@@ -15,11 +15,12 @@ import java.nio.charset.StandardCharsets;
 @Service @RequiredArgsConstructor
 public class LivestreamViewerServiceImpl implements LivestreamViewerService {
     private final LivestreamRepository repository;
+    private final com.scanms.product.service.LivestreamSchedulePolicy schedule;
     @Transactional
     public void record(String id,String visitId,Jwt viewer){
         if(viewer==null||viewer.getSubject()==null)throw new AppException(ErrorCode.UNAUTHORIZED);
         var live=repository.lockById(id).orElseThrow(()->new AppException(ErrorCode.RESOURCE_NOT_FOUND));
-        if(live.getStatus()!=LivestreamStatus.LIVE)throw new AppException(ErrorCode.CONFLICT,"Only live sessions accept views");
+        if(live.getStatus()!=LivestreamStatus.LIVE||schedule.hasElapsed(live))throw new AppException(ErrorCode.CONFLICT,"Only live sessions accept views");
         var stats=new LinkedHashMap<String,Object>(live.getStatistics()==null?Map.of():live.getStatistics());
         var visits=values(stats.get("visits"));var users=values(stats.get("viewers"));
         String visit=hash(visitId),user=hash(viewer.getIssuer()+"|"+viewer.getSubject());
