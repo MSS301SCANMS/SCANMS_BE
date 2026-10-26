@@ -19,6 +19,17 @@ public class PublicReviewServiceImpl implements PublicReviewService {
     private final FeedbackRepository feedbacks;
 
     @Override
+    public Map<String, Rating> ratings(Collection<String> productIds) {
+        if (productIds.isEmpty()) return Map.of();
+        var result = new HashMap<String, Rating>();
+        for (var row : feedbacks.summarizeProducts(productIds, FeedbackStatus.ACTIVE)) {
+            result.put(row.getProductId(), new Rating(
+                    BigDecimal.valueOf(row.getAverageRating()).setScale(2, RoundingMode.HALF_UP), row.getReviewCount()));
+        }
+        return result;
+    }
+
+    @Override
     public Map<String, Object> summary(String productId) {
         var active = feedbacks.findByProductIdInAndStatus(List.of(productId), FeedbackStatus.ACTIVE);
         var distribution = new TreeMap<Integer, Long>();

@@ -6,6 +6,11 @@ import java.util.Map;
 
 @FeignClient(name = "promotion-affiliate-service", url = "${clients.promotion.url:http://localhost:8085}")
 public interface PromotionClient {
+    @GetMapping("/api/v1/referrals/clicks/{id}/verify")
+    Map<String,Object> verifyClick(@RequestHeader("Authorization") String authorization,@PathVariable String id,
+                                   @RequestParam String productId,@RequestParam String customerId);
+    @GetMapping("/api/v1/referrals/livestream-attribution/{id}")
+    Map<String,Object> liveAttribution(@RequestHeader("Authorization") String authorization,@PathVariable String id,@RequestParam String productId);
     @GetMapping("/api/v1/vouchers/{id}")
     Map<String, Object> getVoucher(@PathVariable String id);
 }

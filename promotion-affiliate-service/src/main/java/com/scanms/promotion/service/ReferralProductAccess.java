@@ -27,10 +27,14 @@ public class ReferralProductAccess {
     }
 
     public void requireAvailable(String productId) {
-        product(productId);
+        availableProduct(productId);
     }
 
     public Map<?, ?> product(String productId) {
+        return availableProduct(productId);
+    }
+
+    public Map<?, ?> availableProduct(String productId) {
         if (productId == null || !productId.matches("[A-Za-z0-9_-]{1,100}"))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mã sản phẩm không hợp lệ.");
         var product = result("/api/v1/public/products/" + productId);
@@ -42,6 +46,11 @@ public class ReferralProductAccess {
         if (!"APPROVED".equals(store.get("approvalStatus")))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Gian hàng chưa được duyệt hoặc đã tạm ngừng.");
         return product;
+    }
+
+    public Map<?, ?> publicVideo(String id) {
+        if (id == null || !id.matches("[A-Za-z0-9_-]{1,100}")) throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        return result("/api/v1/public/short-videos/" + id);
     }
 
     private Map<?, ?> result(String path) {

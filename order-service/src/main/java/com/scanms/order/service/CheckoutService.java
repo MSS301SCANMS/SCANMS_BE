@@ -12,12 +12,16 @@ public interface CheckoutService {
                                @NotBlank @Size(max=150) String ward, @NotBlank @Size(min=5,max=500) String detail) {}
     record Line(@NotBlank String productId, String variantId, @Min(1) @Max(1000) int quantity,
                 @Pattern(regexp = "[A-Za-z0-9_-]{1,100}") String sourceLivestreamId,
-                @Pattern(regexp = "[A-Za-z0-9_-]{1,100}") String referralLinkId) {
-        public Line(String productId, String variantId, int quantity, String sourceLivestreamId) {
-            this(productId, variantId, quantity, sourceLivestreamId, null);
+                @Size(max = 100) String referralLinkId,
+                @Pattern(regexp = "[A-Za-z0-9_-]{1,100}") String referralClickId) {
+        public Line(String productId, String variantId, int quantity, String sourceLivestreamId, String referralLinkId) {
+            this(productId, variantId, quantity, sourceLivestreamId, referralLinkId, null);
+        }
+        public Line(String productId, String variantId, int quantity, String liveId) {
+            this(productId, variantId, quantity, liveId, null, null);
         }
         public Line(String productId, String variantId, int quantity) {
-            this(productId, variantId, quantity, null, null);
+            this(productId, variantId, quantity, null, null, null);
         }
     }
 

@@ -22,7 +22,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/swagger-ui/**", "/swagger-ui.html",
                                 "/v3/api-docs/**", "/v3/api-docs.yaml",
-                                "/webjars/**", "/actuator/health", "/error", "/api/v1/payments/webhooks/payos", "/api/v1/payouts/webhooks/payos")
+                                "/webjars/**", "/actuator/health", "/error", "/api/v1/payments/webhooks/payos", "/api/v1/payouts/webhooks/payos",
+                                "/api/v1/finance/capabilities")
                         .permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/payments", "/api/v1/bank-accounts", "/api/v1/withdrawals", "/api/v1/settlements", "/api/v1/fee-configs").denyAll()

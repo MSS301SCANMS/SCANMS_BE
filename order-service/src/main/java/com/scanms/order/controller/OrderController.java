@@ -27,6 +27,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 public class OrderController {
     private final OrderService service;
     private final SellerOrderRepository sellerOrders;
+    private final com.scanms.order.service.OrderCancellationPolicy cancellationPolicy;
 
     @Value("${clients.user.url:http://localhost:8081}")
     private String userUrl;
@@ -121,12 +122,7 @@ public class OrderController {
     @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @GetMapping("/{id}/voucher-restoration-eligibility")
     public ApiResponse<Map<String, Boolean>> voucherRestorationEligibility(@PathVariable String id) {
-        var order = service.getById(id);
-        boolean beforeDelivery = sellerOrders.findAll().stream()
-                .filter(seller -> id.equals(seller.getOrderId()))
-                .noneMatch(seller -> Set.of(SellerOrderStatus.DELIVERED,
-                        SellerOrderStatus.COMPLETED).contains(seller.getStatus()));
-        return ApiResponse.success(Map.of("eligible", order.status() == OrderStatus.CANCELLED && beforeDelivery));
+        return ApiResponse.success(Map.of("eligible", cancellationPolicy.canRestoreResources(id)));
     }
 
     @GetMapping

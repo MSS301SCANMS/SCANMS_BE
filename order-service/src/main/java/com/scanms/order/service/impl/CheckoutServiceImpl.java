@@ -46,6 +46,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final PlatformTransactionManager transactions;
     private final CheckoutShippingPolicy shippingPolicy;
     private final com.scanms.order.service.CheckoutShippingQuotes shippingQuotes;
+    private final com.scanms.order.service.CheckoutAttribution attribution;
     @Value("${clients.product.url:http://localhost:8082}")
     private String productUrl;
     @Value("${clients.promotion.url:http://localhost:8085}")
@@ -118,30 +119,6 @@ public class CheckoutServiceImpl implements CheckoutService {
         return input;
     }
 
-    private String verifiedReferral(Line line, String customer, String token) {
-        if (line.referralLinkId() == null && line.sourceLivestreamId() == null) return null;
-        String path = line.referralLinkId() != null ? "/api/v1/referrals/attribution/" : "/api/v1/referrals/livestream-attribution/";
-        String reference = line.referralLinkId() != null ? line.referralLinkId() : line.sourceLivestreamId();
-        Map<String, Object> verified;
-        try {
-            verified = result(http.get().uri(promotionUrl + path + "{id}?productId={productId}", reference, line.productId())
-                    .headers(headers -> headers.setBearerAuth(token)).retrieve().body(Map.class));
-        } catch (RestClientResponseException ex) {
-            if (Set.of(404, 409, 410).contains(ex.getStatusCode().value()))
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Liên kết KOL không còn hợp lệ. Vui lòng mở lại liên kết giới thiệu mới.");
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa xác minh được liên kết KOL. Vui lòng thử lại sau.");
-        } catch (RestClientException ex) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ hoa hồng. Vui lòng thử lại sau.");
-        }
-        if (verified.isEmpty() && line.referralLinkId() == null) return null;
-        if (!line.productId().equals(verified.get("productId")) || verified.get("collaboratorId") == null || verified.get("referralLinkId") == null
-                || (line.referralLinkId() != null && !line.referralLinkId().equals(verified.get("referralLinkId"))))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Không xác minh được KOL giới thiệu sản phẩm.");
-        if (customer.equals(verified.get("userId")))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Không tính hoa hồng cho đơn tự mua qua liên kết của mình.");
-        return verified.get("referralLinkId").toString();
-    }
-
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, Object> checkout(Input input, Jwt jwt) {
@@ -185,10 +162,11 @@ public class CheckoutServiceImpl implements CheckoutService {
             if ("READY".equals(order.getSagaState().get("checkoutState"))) return view(order);
             if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.EXPIRED || !order.getExpiresAt().isAfter(LocalDateTime.now(ZoneOffset.UTC)))
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Checkout expired; use a new checkout key");
-            Map<Line, String> referrals = new HashMap<>();
-            for (Line requested : input.items()) {
-                String referral = verifiedReferral(requested, customer, token);
-                if (referral != null) referrals.put(requested, referral);
+            Map<String,Map<String,Object>> attributed=new HashMap<>();
+            for(var requested:input.items()) {
+                var verified=attribution.verify(requested,token,customer);
+                var previous=attributed.putIfAbsent(requested.productId(),verified);
+                if(previous!=null&&!previous.equals(verified)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Sản phẩm có nhiều nguồn giới thiệu khác nhau.");
             }
             Map<String, Object> reserved = post(productUrl + "/api/v1/inventory/reservations/" + order.getOrderId(), token, Map.of("items", input.items()));
             List<Map<String, Object>> lines = (List<Map<String, Object>>) reserved.get("lines");
@@ -212,7 +190,8 @@ public class CheckoutServiceImpl implements CheckoutService {
                 for (var d : ds) discount = Math.addExact(discount, number(d, "allocatedAmountVnd"));
                 if (discount < 0 || discount > gross)
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid allocated discount");
-                OrderItem item = items.saveAndFlush(OrderItem.builder().sellerOrderId(seller.getSellerOrderId()).productId(line.get("productId").toString()).variantId(line.get("variantId").toString()).sourceLivestreamId(requested.sourceLivestreamId()).referralLinkId(referrals.get(requested)).quantity(((Number) line.get("quantity")).intValue()).unitPrice(number(line, "unitPriceVnd")).grossAmountVnd(gross).discountAmountVnd(discount).netPaidAmountVnd(gross - discount).productSnapshot(line).selectedSize(Objects.toString(line.get("size"), null)).build());
+                var source=attributed.getOrDefault(line.get("productId").toString(),Map.of());
+                OrderItem item = items.saveAndFlush(OrderItem.builder().sellerOrderId(seller.getSellerOrderId()).productId(line.get("productId").toString()).variantId(line.get("variantId").toString()).sourceLivestreamId(requested.sourceLivestreamId() != null ? requested.sourceLivestreamId() : Objects.toString(line.get("sourceLivestreamId"), null)).referralLinkId(Objects.toString(source.get("referralLinkId"),null)).ruleSnapshot(source.isEmpty()?null:source).quantity(((Number) line.get("quantity")).intValue()).unitPrice(number(line, "unitPriceVnd")).grossAmountVnd(gross).discountAmountVnd(discount).netPaidAmountVnd(gross - discount).productSnapshot(line).selectedSize(Objects.toString(line.get("size"), null)).build());
                 for (var d : ds)
                     if (number(d, "allocatedAmountVnd") > 0)
                         allocations.save(DiscountAllocation.builder().orderItemId(item.getOrderItemId()).voucherId(d.get("voucherId").toString()).sourceType(DiscountSourceType.VOUCHER).fundedBy(DiscountFundingType.valueOf(d.get("fundedBy").toString())).allocatedAmountVnd(number(d, "allocatedAmountVnd")).ruleSnapshotJson(JsonMapper.builder().build().writeValueAsString(d)).build());

@@ -45,7 +45,25 @@ public class VoucherAccess {
     }
 
     public boolean isManager() {
-        return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER")::contains);
+        return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER", "SYSTEM_ADMIN", "SYSTEM_MANAGER")::contains);
+    }
+
+    public boolean canReadAllVouchers() {
+        if(roles().stream().anyMatch(Set.of("ORDER_INTERNAL","PAYMENT_INTERNAL","AFFILIATE_INTERNAL")::contains))return true;
+        if(isManager()){requireManager();return true;}return false;
+    }
+
+    public Set<String> ownedStoreIds() {
+        userId();
+        try {
+            Map<?,?> response=http.get().uri(productUrl+"/api/v1/stores/mine").headers(h->h.setBearerAuth(bearerToken())).retrieve().body(Map.class);
+            if(response!=null&&response.get("result") instanceof List<?> rows){
+                var ids=new HashSet<String>();
+                for(Object row:rows)if(row instanceof Map<?,?> store&&store.get("storeId") instanceof String id)ids.add(id);
+                return ids;
+            }
+        }catch(RestClientException ex){throw new AppException(ErrorCode.CONFLICT,"Cannot verify seller stores");}
+        throw new AppException(ErrorCode.CONFLICT,"Invalid seller store response");
     }
 
     public String bearerToken() {
@@ -54,7 +72,7 @@ public class VoucherAccess {
 
     public boolean ownsStore(String storeId) {
         if (storeId == null) return false;
-        return userId().equals(result(productUrl + "/api/v1/stores/" + storeId).get("ownerUserId"));
+        return ownedStoreIds().contains(storeId);
     }
 
     public void requireStoreOwner(String storeId) {
@@ -64,7 +82,8 @@ public class VoucherAccess {
     }
 
     public void requireApprovedStore(String storeId) {
-        approvedStore(storeId);
+        var store=result(productUrl+"/api/v1/stores/public/id/"+storeId);
+        if(!"APPROVED".equals(store.get("approvalStatus")))throw new AppException(ErrorCode.CONFLICT,"Store is not approved");
     }
 
     public List<Map<?, ?>> storeProducts(String storeId) {

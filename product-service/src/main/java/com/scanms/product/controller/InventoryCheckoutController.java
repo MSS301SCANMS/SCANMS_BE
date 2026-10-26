@@ -23,6 +23,7 @@ import java.util.*;
 @Transactional
 public class InventoryCheckoutController {
     private final EntityManager em;
+    private final com.scanms.product.client.OrderCancellationClient cancellations;
 
     public record Line(
             @NotBlank String productId, String variantId, @Min(1) @Max(1000) int quantity, String sourceLivestreamId) {
@@ -192,6 +193,31 @@ public class InventoryCheckoutController {
         }
         r.setStatus("RELEASED");
         return ApiResponse.success(Map.of("released", true));
+    }
+
+    @PostMapping("/{orderId}/cancel")
+    public ApiResponse<Map<String,Object>> cancel(@PathVariable String orderId,@AuthenticationPrincipal Jwt jwt) {
+        internal(jwt);
+        CheckoutReservation reservation=em.find(CheckoutReservation.class,orderId);
+        if(reservation==null||"RELEASED".equals(reservation.getStatus()))return ApiResponse.success(Map.of("cancelled",true));
+        // Keep the product -> reservation lock order used by reserve/release.
+        for(String id:reservation.getLines().stream().map(l->l.get("productId").toString()).distinct().sorted().toList())
+            em.find(Product.class,id,LockModeType.PESSIMISTIC_WRITE);
+        em.refresh(reservation,LockModeType.PESSIMISTIC_WRITE);
+        if("RELEASED".equals(reservation.getStatus()))return ApiResponse.success(Map.of("cancelled",true));
+        if("COMMITTED".equals(reservation.getStatus())) {
+            try {
+                var response=cancellations.eligibility("Bearer "+jwt.getTokenValue(),orderId);
+                if(response==null||!(response.get("result") instanceof Map<?,?> result)||!Boolean.TRUE.equals(result.get("eligible")))
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,"Committed stock can only be restored before delivery cancellation");
+            }catch(feign.FeignException ex){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Cannot verify cancellation");}
+        }else if(!"RESERVED".equals(reservation.getStatus()))throw new ResponseStatusException(HttpStatus.CONFLICT,"Unknown reservation state");
+        for(var line:reservation.getLines().stream().sorted(Comparator.comparing(l->l.get("variantId").toString())).toList()){
+            var variant=em.find(ProductVariant.class,line.get("variantId").toString(),LockModeType.PESSIMISTIC_WRITE);
+            variant.setStockQuantity(Math.addExact(variant.getStockQuantity(),((Number)line.get("quantity")).intValue()));
+        }
+        reservation.setStatus("RELEASED");
+        return ApiResponse.success(Map.of("cancelled",true));
     }
 
     @PostMapping("/{orderId}/commit")

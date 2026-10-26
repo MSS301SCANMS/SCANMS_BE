@@ -43,14 +43,15 @@ public class StoreServiceImpl implements StoreService {
 
     @Transactional(readOnly = true)
     public StoreResponse getById(String id) {
+        access.requireReadableStore(id);
         return repository.findById(id).map(mapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Store not found: " + id));
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(CacheNames.STORES_ALL)
     public List<StoreResponse> findAll() {
-        return repository.findAll().stream().map(mapper::toResponse).toList();
+        var rows=access.canReadAllCatalog()?repository.findAll():repository.findByOwnerUserId(access.userId());
+        return rows.stream().map(mapper::toResponse).toList();
     }
 
     @Transactional(readOnly = true)

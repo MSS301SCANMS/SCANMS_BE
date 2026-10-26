@@ -62,6 +62,7 @@ class CheckoutVoucherIntegrationTest {
     static final java.util.concurrent.atomic.AtomicReference<String> referralId=new java.util.concurrent.atomic.AtomicReference<>("link");
     static final java.util.concurrent.atomic.AtomicBoolean attributed=new java.util.concurrent.atomic.AtomicBoolean();
     static final java.util.concurrent.atomic.AtomicLong retained=new java.util.concurrent.atomic.AtomicLong(900);
+    static final java.util.concurrent.atomic.AtomicBoolean restorationAllowed=new java.util.concurrent.atomic.AtomicBoolean(true);
     static final com.sun.net.httpserver.HttpServer source=source();
     static com.sun.net.httpserver.HttpServer source() {
         try {
@@ -70,7 +71,7 @@ class CheckoutVoucherIntegrationTest {
             s.createContext("/api/v1/finance/commission-adjustment-item/item",exchange -> { byte[] body=("{\"result\":{\"basisAmountVnd\":"+retained.get()+",\"refundedAmountVnd\":"+(1000-retained.get())+"}}").getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             s.createContext("/api/v1/order-items/item",exchange -> { byte[] body=("{\"result\":{\"referralLinkId\":\""+referralId.get()+"\",\"sellerOrderId\":\"seller\",\"netPaidAmountVnd\":1000,\"placedAt\":\""+orderPlacedAt.get()+"\",\"productSnapshot\":{\"name\":\"Test shirt\"}}}").getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             s.createContext("/api/v1/seller-orders/seller",exchange -> { byte[] body="{\"result\":{\"storeId\":\"store\"}}".getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
-            s.createContext("/api/v1/orders/restorable/voucher-restoration-eligibility",exchange -> { byte[] body="{\"result\":{\"eligible\":true}}".getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            s.createContext("/api/v1/orders/restorable/voucher-restoration-eligibility",exchange -> { byte[] body=("{\"result\":{\"eligible\":"+restorationAllowed.get()+"}}").getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             s.start(); return s;
         } catch(Exception ex) { throw new IllegalStateException(ex); }
     }
@@ -208,12 +209,30 @@ class CheckoutVoucherIntegrationTest {
         assertEquals(10L,checkout.quote(new CheckoutVoucherController.Input("LIVE","customer",attributed),jwt).result().get("discountAmountVnd"));
     }
     @Test void committedVoucherCanOnlyBeRestoredAfterOrderConfirmsPreDeliveryCancellation() {
+        restorationAllowed.set(true);
         checkout.reserve("restorable",input(),jwt);
         checkout.commit("restorable",jwt);
         checkout.restore("restorable",jwt);
         assertEquals(VoucherRedemptionStatus.RESTORED,redemptions.findByOrderId("restorable").orElseThrow().getStatus());
         assertDoesNotThrow(() -> checkout.restore("restorable",jwt));
         assertDoesNotThrow(() -> checkout.reserve("next",input(),jwt));
+    }
+    @Test void cancellationRestoresOnlyTheStillValidVoucherInAPairAndIsIdempotent(){
+        restorationAllowed.set(true);
+        var ship=vouchers.saveAndFlush(Voucher.builder().code("SHIP-PAIR").issuerType(VoucherIssuerType.PLATFORM).scopeType(VoucherScopeType.PLATFORM)
+                .discountType(VoucherDiscountType.FIXED).value(BigDecimal.valueOf(50)).scope(Map.of("benefitType","SHIPPING"))
+                .validFrom(LocalDateTime.now(ZoneOffset.UTC).minusDays(1)).validUntil(LocalDateTime.now(ZoneOffset.UTC).plusDays(1)).build());
+        var pair=new CheckoutVoucherController.Input("SAVE","customer",input().lines(),"SHIP-PAIR");
+        checkout.reserve("restorable",pair,jwt,30000L);checkout.commit("restorable",jwt);
+        restorationAllowed.set(false);assertThrows(ResponseStatusException.class,()->checkout.cancel("restorable",jwt));
+        assertTrue(redemptions.findAllByOrderId("restorable").stream().allMatch(r->r.getStatus()==VoucherRedemptionStatus.USED));
+        restorationAllowed.set(true);ship.setValidUntil(LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1));vouchers.saveAndFlush(ship);
+        checkout.cancel("restorable",jwt);checkout.cancel("restorable",jwt);
+        var rows=redemptions.findAllByOrderId("restorable");assertEquals(2,rows.size());
+        assertEquals(VoucherRedemptionStatus.CANCELLED,rows.stream().filter(r->r.getVoucherId().equals(ship.getVoucherId())).findFirst().orElseThrow().getStatus());
+        assertEquals(1,rows.stream().filter(r->r.getStatus()==VoucherRedemptionStatus.RESTORED).count());
+        assertDoesNotThrow(()->checkout.reserve("next-valid-code",input(),jwt));
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("expired-ship",pair,jwt,30000L));
     }
     @Test void missingCommissionIsUnknownUntilSourceExplicitlyFinalizesZero() {
         assertThrows(ResponseStatusException.class,() -> finance.total("item",jwt));
