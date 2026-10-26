@@ -21,6 +21,8 @@ public class WalletTransactionController {
     @PreAuthorize("hasAnyRole('ADMIN', 'PAYMENT_INTERNAL')")
     public ResponseEntity<ApiResponse<WalletTransactionResponse>> create(
             @Valid @RequestBody CreateWalletTransactionRequest request) {
+        if(request.type()==com.scanms.payment.constant.WalletTransactionType.COMMISSION_REVERSAL)
+            throw new com.scanms.payment.exception.AppException(com.scanms.payment.exception.ErrorCode.FORBIDDEN,"Use source-verified commission reconciliation");
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 

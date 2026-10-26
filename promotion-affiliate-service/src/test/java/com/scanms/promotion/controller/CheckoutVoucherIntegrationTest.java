@@ -49,17 +49,25 @@ class CheckoutVoucherIntegrationTest {
     @Autowired FinanceContractController finance;
     @Autowired CommissionRepository commissions;
     @Autowired CommissionFinalizationRepository finalizations;
+    @Autowired CollaboratorProfileRepository profiles;
+    @Autowired ReferralLinkRepository links;
+    @Autowired CommissionPolicyRepository policies;
     @Autowired com.scanms.promotion.service.CommissionService commissionService;
     @Autowired EntityManager em;
     @Autowired PlatformTransactionManager transactions;
     @MockitoBean JwtDecoder decoder;
     final Jwt jwt=Jwt.withTokenValue("internal").header("alg","RS256").subject("order-service").claim("realm_access",Map.of("roles",List.of("ORDER_INTERNAL","PAYMENT_INTERNAL"))).build();
+    static final java.util.concurrent.atomic.AtomicReference<String> referralId=new java.util.concurrent.atomic.AtomicReference<>("link");
     static final java.util.concurrent.atomic.AtomicBoolean attributed=new java.util.concurrent.atomic.AtomicBoolean();
+    static final java.util.concurrent.atomic.AtomicLong retained=new java.util.concurrent.atomic.AtomicLong(900);
     static final com.sun.net.httpserver.HttpServer source=source();
     static com.sun.net.httpserver.HttpServer source() {
         try {
             var s=com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1",0),0);
-            s.createContext("/api/v1/finance/commission-order-item/item",exchange -> { byte[] body=("{\"result\":{\"basisAmountVnd\":900,\"commissionApplicable\":"+attributed.get()+"}}").getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            s.createContext("/api/v1/finance/commission-order-item/item",exchange -> { byte[] body=("{\"result\":{\"basisAmountVnd\":"+retained.get()+",\"refundedAmountVnd\":"+(1000-retained.get())+",\"commissionApplicable\":"+attributed.get()+"}}").getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            s.createContext("/api/v1/finance/commission-adjustment-item/item",exchange -> { byte[] body=("{\"result\":{\"basisAmountVnd\":"+retained.get()+",\"refundedAmountVnd\":"+(1000-retained.get())+"}}").getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            s.createContext("/api/v1/order-items/item",exchange -> { byte[] body=("{\"result\":{\"referralLinkId\":\""+referralId.get()+"\",\"sellerOrderId\":\"seller\",\"netPaidAmountVnd\":1000,\"productSnapshot\":{\"name\":\"Test shirt\"}}}").getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            s.createContext("/api/v1/seller-orders/seller",exchange -> { byte[] body="{\"result\":{\"storeId\":\"store\"}}".getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             s.createContext("/api/v1/orders/restorable/voucher-restoration-eligibility",exchange -> { byte[] body="{\"result\":{\"eligible\":true}}".getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             s.start(); return s;
         } catch(Exception ex) { throw new IllegalStateException(ex); }
@@ -67,7 +75,7 @@ class CheckoutVoucherIntegrationTest {
     @DynamicPropertySource static void sources(DynamicPropertyRegistry r) { r.add("clients.order.url",() -> "http://127.0.0.1:"+source.getAddress().getPort()); }
     @AfterAll static void close() { source.stop(0); }
     @BeforeEach void setup() {
-        new TransactionTemplate(transactions).executeWithoutResult(s -> em.createQuery("delete from CheckoutVoucher").executeUpdate()); redemptions.deleteAll(); vouchers.deleteAll(); commissions.deleteAll(); finalizations.deleteAll(); attributed.set(false);
+        new TransactionTemplate(transactions).executeWithoutResult(s -> em.createQuery("delete from CheckoutVoucher").executeUpdate()); redemptions.deleteAll(); vouchers.deleteAll(); commissions.deleteAll(); finalizations.deleteAll(); links.deleteAll(); profiles.deleteAll(); policies.deleteAll(); attributed.set(false); retained.set(900);
         vouchers.saveAndFlush(Voucher.builder().code("SAVE").issuerType(VoucherIssuerType.PLATFORM).scopeType(VoucherScopeType.PLATFORM).discountType(VoucherDiscountType.FIXED).value(BigDecimal.valueOf(99)).validFrom(LocalDateTime.now(ZoneOffset.UTC).minusDays(1)).validUntil(LocalDateTime.now(ZoneOffset.UTC).plusDays(1)).limits(Map.of("perCustomerLimit",1)).build());
     }
     CheckoutVoucherController.Input input() {
@@ -139,5 +147,52 @@ class CheckoutVoucherIntegrationTest {
         assertEquals(90L,((Number)finance.total("item",jwt).result().get("amountVnd")).longValue());
         assertEquals(CommissionStatus.ELIGIBLE,commissions.findAll().getFirst().getStatus());
         assertThrows(com.scanms.promotion.exception.AppException.class,() -> commissionService.create(new com.scanms.promotion.dto.request.CreateCommissionRequest("item","owner",null,null,1000L,BigDecimal.TEN,100L,CommissionStatus.PENDING,null,null,null)));
+    }
+    @Test void finalizationKeepsOriginalAndRefundSnapshotWhenAdjustmentWorkerWasDelayed() {
+        commissions.saveAndFlush(Commission.builder().orderItemId("item").collaboratorId("owner").rateSnapshot(BigDecimal.TEN).basisAmountVnd(1000L).commissionAmountVnd(100L).status(CommissionStatus.PENDING).build());
+        retained.set(0);
+        finance.finalizeItem("item",new FinanceContractController.FinalizeInput("Refund completed before delayed adjustment"),jwt);
+        var row=commissions.findAll().getFirst();
+        assertEquals(CommissionStatus.CANCELLED,row.getStatus()); assertEquals(0L,row.getCommissionAmountVnd());
+        assertEquals(100L,((Number)row.getAdjustmentHistory().get("originalAmountVnd")).longValue());
+        assertEquals(1000L,((Number)row.getAdjustmentHistory().get("refundedAmountVnd")).longValue());
+        finance.adjustCommission("item",new FinanceContractController.AdjustInput("Delayed retry"),jwt);
+        assertEquals(0L,finance.total("item",jwt).result().get("amountVnd"));
+    }
+    @Test void referralPaymentInitializesPendingAmountAndFullRefundCancelsIt() {
+        var profile=profiles.saveAndFlush(CollaboratorProfile.builder().userId("creator").approvalStatus(CollaboratorStatus.APPROVED).build());
+        var link=links.saveAndFlush(ReferralLink.builder().collaboratorId(profile.getCollaboratorId()).productId("product").token("ref").status(ReferralLinkStatus.ACTIVE).build());
+        referralId.set(link.getReferralLinkId());
+        policies.saveAndFlush(CommissionPolicy.builder().policyName("Platform 10%").scopeType(CommissionPolicyScope.PLATFORM).commissionRate(BigDecimal.TEN).status(CommissionPolicyStatus.ACTIVE).validFrom(Instant.now().minusSeconds(60)).returnWindowDays(14).priority(0).build());
+        finance.initializeCommission("item",new FinanceContractController.InitInput("Payment confirmed"),jwt);
+        finance.initializeCommission("item",new FinanceContractController.InitInput("Retry"),jwt);
+        assertEquals(1,commissions.count()); var row=commissions.findAll().getFirst();
+        assertEquals(100L,row.getCommissionAmountVnd()); assertEquals(CommissionStatus.PENDING,row.getStatus());
+        String commissionId = row.getCommissionId();
+        assertThrows(ResponseStatusException.class,()->finance.basis(commissionId,jwt));
+        retained.set(0); finance.adjustCommission("item",new FinanceContractController.AdjustInput("Full return refunded"),jwt);
+        row=commissions.findAll().getFirst(); assertEquals(0L,row.getCommissionAmountVnd()); assertEquals(CommissionStatus.CANCELLED,row.getStatus());
+        attributed.set(true); finance.finalizeItem("item",new FinanceContractController.FinalizeInput("Return window closed"),jwt);
+        assertEquals(0L,finance.total("item",jwt).result().get("amountVnd"));
+    }
+    @Test void duplicateCreditAcknowledgementKeepsOriginalDateAndNoOpReconciliationHasNoReversal() {
+        var paidAt=java.time.LocalDateTime.now(ZoneOffset.UTC).minusDays(2).withNano(0);
+        var row=commissions.saveAndFlush(Commission.builder().orderItemId("item").collaboratorId("kol").rateSnapshot(BigDecimal.TEN).basisAmountVnd(1000L).commissionAmountVnd(100L).status(CommissionStatus.CREDITED).transferReference("original-ledger").paidAt(paidAt).build());
+        finance.reconciled(row.getCommissionId(),new FinanceContractController.CreditInput("original-ledger",100L),jwt);
+        finance.credited(row.getCommissionId(),new FinanceContractController.CreditInput("original-ledger",100L),jwt);
+        row=commissions.findById(row.getCommissionId()).orElseThrow();
+        assertFalse(row.getAdjustmentHistory().containsKey("reversalTransactionId"));
+        assertEquals(paidAt,row.getPaidAt());
+    }
+    @Test void creditedFullRefundHasZeroTargetAndDelayedAcknowledgementsNeverRestoreCommission() {
+        var row=commissions.saveAndFlush(Commission.builder().orderItemId("item").collaboratorId("kol").rateSnapshot(BigDecimal.TEN).basisAmountVnd(1000L).commissionAmountVnd(100L).status(CommissionStatus.CREDITED).transferReference("original-ledger").adjustmentHistory(Map.of("ledgerReconciledAmountVnd",100)).build());
+        retained.set(0); finance.adjustCommission("item",new FinanceContractController.AdjustInput("Full return"),jwt);
+        assertEquals(0L,finance.reconciliationBasis(row.getCommissionId(),jwt).result().get("amountVnd"));
+        finance.reconciled(row.getCommissionId(),new FinanceContractController.CreditInput("reversal-ledger",0L),jwt);
+        assertEquals("CANCELLED",finance.credited(row.getCommissionId(),new FinanceContractController.CreditInput("original-ledger",100L),jwt).result().get("status"));
+        finance.reconciled(row.getCommissionId(),new FinanceContractController.CreditInput("older-reversal",40L),jwt);
+        row=commissions.findById(row.getCommissionId()).orElseThrow();
+        assertEquals(CommissionStatus.CANCELLED,row.getStatus()); assertEquals(0L,((Number)row.getAdjustmentHistory().get("ledgerReconciledAmountVnd")).longValue());
+        assertEquals("reversal-ledger",row.getAdjustmentHistory().get("reversalTransactionId"));
     }
 }

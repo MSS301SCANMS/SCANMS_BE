@@ -14,5 +14,8 @@ public interface CommissionMapper {
     @Mapping(target = "commissionAmountVnd", source = "amountVnd")
     Commission toEntity(CreateCommissionRequest request);
 
+    @Mapping(target = "basisVnd", source = "basisAmountVnd")
+    @Mapping(target = "rate", source = "rateSnapshot")
+    @Mapping(target = "amountVnd", source = "commissionAmountVnd")
     CommissionResponse toResponse(Commission entity);
 }

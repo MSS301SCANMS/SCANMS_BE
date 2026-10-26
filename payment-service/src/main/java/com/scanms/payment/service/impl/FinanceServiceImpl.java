@@ -429,6 +429,39 @@ public class FinanceServiceImpl implements FinanceService {
     }
 
     @Override
+    public Map<String,Object> reconcileCommission(String id) {
+        if (!access.role("AFFILIATE_INTERNAL")) access.trustedOnly();
+        Map<String,Object> source=access.get(promotionUrl+"/api/v1/finance/commission-reconciliation-basis/"+id);
+        long target=number(source,"amountVnd");
+        if(target<0 || !id.equals(source.get("commissionId"))) throw new AppException(ErrorCode.CONFLICT,"Invalid commission reconciliation source");
+        var original=entries.findByIdempotencyKey("commission:"+id).orElseThrow(()->new AppException(ErrorCode.CONFLICT,"Original commission credit is missing"));
+        Wallet wallet=lockedWallet(original.getWalletId());
+        if(wallet.getOwnerType()!=WalletOwnerType.COLLABORATOR || !wallet.getOwnerRefId().equals(source.get("collaboratorId"))
+                || !original.getTransactionId().equals(source.get("originalTransactionId")) || original.getType()!=WalletTransactionType.KOL_COMMISSION)
+            throw new AppException(ErrorCode.CONFLICT,"Commission owner or original credit mismatch");
+        long net=0;
+        for(var entry:entries.findByWalletIdAndReferenceTypeAndReferenceId(wallet.getWalletId(),"COMMISSION",id)) {
+            if(entry.getStatus()!=WalletTransactionStatus.SUCCESS) continue;
+            if(entry.getType()!=WalletTransactionType.KOL_COMMISSION && entry.getType()!=WalletTransactionType.COMMISSION_REVERSAL)
+                throw new AppException(ErrorCode.CONFLICT,"Unknown commission ledger adjustment");
+            net=entry.getDirection()==WalletTransactionDirection.CREDIT?Math.addExact(net,entry.getAmountVnd()):Math.subtractExact(net,entry.getAmountVnd());
+        }
+        if(target>net) throw new AppException(ErrorCode.CONFLICT,"Reconciliation cannot increase an already credited commission");
+        String transactionId=original.getTransactionId();
+        if(net>target) {
+            var reversal=post(wallet.getWalletId(),WalletTransactionType.COMMISSION_REVERSAL,WalletTransactionDirection.DEBIT,
+                    Math.subtractExact(net,target),"COMMISSION",id,"commission-reversal:"+id+":"+target);
+            transactionId=reversal.transactionId();
+        } else {
+            var reversal=entries.findByIdempotencyKey("commission-reversal:"+id+":"+target);
+            if(reversal.isPresent()) transactionId=reversal.get().getTransactionId();
+        }
+        outbox.enqueue("commission-reconcile:"+id+":"+target,promotionUrl+"/api/v1/finance/commissions/"+id+"/reconciled",
+                Map.of("transactionId",transactionId,"amountVnd",target));
+        return Map.of("commissionId",id,"amountVnd",target,"transactionId",transactionId);
+    }
+
+    @Override
     public SettlementView computeSettlement(String sellerOrderId) {
         return computeSettlement(sellerOrderId, false);
     }
