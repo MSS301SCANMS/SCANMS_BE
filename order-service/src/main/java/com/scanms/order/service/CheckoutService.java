@@ -9,9 +9,12 @@ import java.util.Map;
 
 public interface CheckoutService {
     record Line(@NotBlank String productId, String variantId, @Min(1) @Max(1000) int quantity,
-                String sourceLivestreamId) {
+                String sourceLivestreamId, @Size(max=100) String referralLinkId, @Pattern(regexp="[A-Za-z0-9_-]{1,100}") String referralClickId) {
+        public Line(String productId, String variantId, int quantity, String liveId) {
+            this(productId,variantId,quantity,liveId,null,null);
+        }
         public Line(String productId, String variantId, int quantity) {
-            this(productId, variantId, quantity, null);
+            this(productId, variantId, quantity, null,null,null);
         }
     }
 

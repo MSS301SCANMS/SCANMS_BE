@@ -44,6 +44,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final DiscountAllocationRepository allocations;
     private final PlatformTransactionManager transactions;
     private final CheckoutShippingPolicy shippingPolicy;
+    private final com.scanms.order.service.CheckoutAttribution attribution;
     @Value("${clients.product.url:http://localhost:8082}")
     private String productUrl;
     @Value("${clients.promotion.url:http://localhost:8085}")
@@ -151,6 +152,12 @@ public class CheckoutServiceImpl implements CheckoutService {
             if ("READY".equals(order.getSagaState().get("checkoutState"))) return view(order);
             if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.EXPIRED || !order.getExpiresAt().isAfter(LocalDateTime.now(ZoneOffset.UTC)))
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Checkout expired; use a new checkout key");
+            Map<String,Map<String,Object>> attributed=new HashMap<>();
+            for(var requested:input.items()) {
+                var verified=attribution.verify(requested,token,customer);
+                var previous=attributed.putIfAbsent(requested.productId(),verified);
+                if(previous!=null&&!previous.equals(verified)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Sản phẩm có nhiều nguồn giới thiệu khác nhau.");
+            }
             Map<String, Object> reserved = post(productUrl + "/api/v1/inventory/reservations/" + order.getOrderId(), token, Map.of("items", input.items()));
             List<Map<String, Object>> lines = (List<Map<String, Object>>) reserved.get("lines");
             List<Map<String, Object>> discounts = List.of();
@@ -166,7 +173,8 @@ public class CheckoutServiceImpl implements CheckoutService {
                 for (var d : ds) discount = Math.addExact(discount, number(d, "allocatedAmountVnd"));
                 if (discount < 0 || discount > gross)
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid allocated discount");
-                OrderItem item = items.saveAndFlush(OrderItem.builder().sellerOrderId(seller.getSellerOrderId()).productId(line.get("productId").toString()).variantId(line.get("variantId").toString()).sourceLivestreamId(Objects.toString(line.get("sourceLivestreamId"), null)).quantity(((Number) line.get("quantity")).intValue()).unitPrice(number(line, "unitPriceVnd")).grossAmountVnd(gross).discountAmountVnd(discount).netPaidAmountVnd(gross - discount).productSnapshot(line).selectedSize(Objects.toString(line.get("size"), null)).build());
+                var source=attributed.getOrDefault(line.get("productId").toString(),Map.of());
+                OrderItem item = items.saveAndFlush(OrderItem.builder().sellerOrderId(seller.getSellerOrderId()).productId(line.get("productId").toString()).variantId(line.get("variantId").toString()).sourceLivestreamId(Objects.toString(line.get("sourceLivestreamId"), null)).referralLinkId(Objects.toString(source.get("referralLinkId"),null)).ruleSnapshot(source.isEmpty()?null:source).quantity(((Number) line.get("quantity")).intValue()).unitPrice(number(line, "unitPriceVnd")).grossAmountVnd(gross).discountAmountVnd(discount).netPaidAmountVnd(gross - discount).productSnapshot(line).selectedSize(Objects.toString(line.get("size"), null)).build());
                 for (var d : ds)
                     if (number(d, "allocatedAmountVnd") > 0)
                         allocations.save(DiscountAllocation.builder().orderItemId(item.getOrderItemId()).voucherId(d.get("voucherId").toString()).sourceType(DiscountSourceType.VOUCHER).fundedBy(DiscountFundingType.valueOf(d.get("fundedBy").toString())).allocatedAmountVnd(number(d, "allocatedAmountVnd")).ruleSnapshotJson(JsonMapper.builder().build().writeValueAsString(d)).build());

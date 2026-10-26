@@ -86,6 +86,15 @@ class CheckoutIntegrationTest {
                 exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,bytes.length);
                 exchange.getResponseBody().write(bytes); exchange.close();
             });
+            server.createContext("/promotion/api/v1/referrals/clicks/",exchange->{
+                assertEquals("Bearer order-service-token",exchange.getRequestHeaders().getFirst("Authorization"));
+                assertTrue(exchange.getRequestURI().getQuery().contains("productId=product"));
+                assertTrue(exchange.getRequestURI().getQuery().contains("customerId=customer"));
+                boolean expired=exchange.getRequestURI().getPath().contains("expired"), invalid=exchange.getRequestURI().getPath().contains("invalid");
+                String result=expired?"{}":"{\"referralLinkId\":\"ref\",\"referralClickId\":\"click\",\"sourceVideoId\":\"video\",\"collaboratorId\":\"kol\"}";
+                byte[] body=(invalid?"{\"message\":\"Wrong product\"}":"{\"result\":"+result+"}").getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type","application/json");exchange.sendResponseHeaders(invalid?409:200,body.length);exchange.getResponseBody().write(body);exchange.close();
+            });
             server.start(); return server;
         } catch(Exception ex) { throw new IllegalStateException(ex); }
     }
@@ -109,6 +118,21 @@ class CheckoutIntegrationTest {
         assertEquals(0L,items.findAll().getFirst().getDiscountAmountVnd()); assertEquals(0,allocations.count());
         assertEquals(result.get("orderId"),checkout.checkout(input,jwt).get("orderId"));
         assertEquals(1,items.count());
+    }
+    @Test void verifiedVideoClickIsPersistedOnceAndExpiredClicksDoNotBlockPurchase(){
+        var input=new CheckoutService.Input("video-attribution","Customer","0900000000","Delivery address","PAYOS",true,null,null,
+                List.of(new CheckoutService.Line("product","variant",2,null,"client-forged-ref","click")));
+        var order=checkout.checkout(input,jwt);var item=items.findAll().getFirst();
+        assertEquals("ref",item.getReferralLinkId());assertEquals("video",item.getRuleSnapshot().get("sourceVideoId"));assertEquals(30000,item.getNetPaidAmountVnd());
+        assertEquals(order.get("orderId"),checkout.checkout(input,jwt).get("orderId"));assertEquals(1,items.count());
+        checkout.checkout(new CheckoutService.Input("expired-click","Customer","0900000000","Delivery address","PAYOS",true,null,null,
+                List.of(new CheckoutService.Line("product","variant",2,null,"ref","expired"))),jwt);
+        assertEquals(1,items.findAll().stream().filter(i->i.getReferralLinkId()!=null).count());
+    }
+    @Test void invalidAttributionCannotReserveStockOrCreateAttributedItems(){
+        assertEquals(409,assertThrows(ResponseStatusException.class,()->checkout.checkout(new CheckoutService.Input("invalid-click","Customer","0900000000","Delivery address","PAYOS",true,null,null,
+                List.of(new CheckoutService.Line("product","variant",2,null,"ref","invalid"))),jwt)).getStatusCode().value());
+        assertEquals(0,items.count());assertEquals(0,reserves.get());
     }
     @Test void pairDiscountsGoodsAndShippingSeparatelyAndDispatchesShippingOnlyRedemption() {
         org.springframework.test.util.ReflectionTestUtils.setField(shippingPolicy,"fee",30000L);
