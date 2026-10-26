@@ -23,19 +23,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.util.StringUtils;
 
-import java.util.Collection;
-import java.util.EnumSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
-
-import java.util.ArrayList;
-import java.util.List;
 
 
 @Slf4j
@@ -74,8 +68,9 @@ public class UserServiceImpl implements UserService {
         if (realmAccess instanceof Map<?, ?> realm && realm.get("roles") instanceof Collection<?> roles) {
             for (Object role : roles) {
                 if (role instanceof String name) {
-                    try { names.add(RoleName.valueOf(name)); }
-                    catch (IllegalArgumentException ignored) { /* Keycloak built-in roles are not business roles. */ }
+                    try {
+                        names.add(RoleName.valueOf(name));
+                    } catch (IllegalArgumentException ignored) { /* Keycloak built-in roles are not business roles. */ }
                 }
             }
         }
@@ -110,7 +105,7 @@ public class UserServiceImpl implements UserService {
 
     @Transactional(readOnly = true)
     @Override
-    public PageResponse<UserResponse> getAllUsersForAdmin(int page, int size, String search, RoleName role, UserStatus status) {
+    public PageResponse<UserResponse> getAllUsers(int page, int size, String search, RoleName role, UserStatus status) {
         int safePage = Math.max(page, 0);
         int safeSize = size <= 0 ? 20 : Math.min(size, 100);
 
@@ -122,12 +117,12 @@ public class UserServiceImpl implements UserService {
 
     @Transactional(readOnly = true)
     @Override
-    public UserResponse getUserByIdForAdmin(String userId) {
+    public UserResponse getUserById(String userId) {
         return mapper.toResponse(findById(userId));
     }
 
     @Override
-    public UserResponse updateUserStatusForAdmin(String userId, UpdateUserStatusRequest request) {
+    public UserResponse updateUserStatus(String userId, UpdateUserStatusRequest request) {
         User user = findById(userId);
 
         boolean isAdminAccount = user.getRoles() != null && user.getRoles().stream()

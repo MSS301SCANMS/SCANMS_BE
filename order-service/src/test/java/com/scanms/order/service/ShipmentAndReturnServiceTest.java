@@ -233,8 +233,8 @@ class ShipmentAndReturnServiceTest {
     }
 
     @Test
-    @DisplayName("Approving ReturnRequest triggers Payment wallet refund orchestration")
-    void testApproveReturnTriggersPaymentRefund() {
+    @DisplayName("Approval records decision without claiming that money was credited")
+    void testApproveReturnDoesNotFakeWalletRefund() {
         ReturnRequestServiceImpl returnService = new ReturnRequestServiceImpl(
                 returnRequestRepository, returnRequestMapper, orderItemRepository, sellerOrderRepository, paymentClient
         );
@@ -250,19 +250,12 @@ class ShipmentAndReturnServiceTest {
         when(returnRequestRepository.lockById("ret-123")).thenReturn(Optional.of(rr));
         when(returnRequestRepository.save(any(ReturnRequest.class))).thenAnswer(i -> i.getArgument(0));
 
-        ReturnDecisionRequest decision = new ReturnDecisionRequest(ReturnRequestStatus.APPROVED, "Hang dung loi", 90000L, null);
+        ReturnDecisionRequest decision = new ReturnDecisionRequest(ReturnRequestStatus.APPROVED, "Evidence confirms the product was damaged", 90000L, null);
 
         returnService.processDecision("ret-123", decision);
 
-        // Verify paymentClient was called with idempotency key
-        verify(paymentClient).createWalletTransaction(argThat(map ->
-                "REFUND".equals(map.get("type")) &&
-                "CREDIT".equals(map.get("direction")) &&
-                Long.valueOf(90000L).equals(map.get("amountVnd")) &&
-                "REFUND_ret-123".equals(map.get("idempotencyKey"))
-        ));
-
-        assertEquals(ReturnRequestStatus.REFUNDED, rr.getStatus());
-        assertNotNull(rr.getRefundReference());
+        verifyNoInteractions(paymentClient);
+        assertEquals(ReturnRequestStatus.APPROVED, rr.getStatus());
+        assertNull(rr.getRefundReference());
     }
 }

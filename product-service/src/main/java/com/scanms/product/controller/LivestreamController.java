@@ -1,9 +1,7 @@
 package com.scanms.product.controller;
 
-import com.scanms.product.constant.LivestreamStatus;
 import com.scanms.product.dto.ApiResponse;
 import com.scanms.product.dto.request.CreateLivestreamRequest;
-import com.scanms.product.dto.request.UpdateLivestreamRequest;
 import com.scanms.product.dto.response.LivestreamResponse;
 import com.scanms.product.service.LivestreamService;
 import jakarta.validation.Valid;
@@ -11,15 +9,16 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PatchMapping;
+import com.scanms.product.constant.LivestreamStatus;
+import com.scanms.product.dto.request.UpdateLivestreamRequest;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 @RestController
 @RequestMapping("/api/v1/livestreams")
@@ -28,56 +27,50 @@ public class LivestreamController {
     private final LivestreamService service;
 
     @PostMapping
-    ResponseEntity<ApiResponse<LivestreamResponse>> create(@Valid @RequestBody CreateLivestreamRequest request) {
+    public ResponseEntity<ApiResponse<LivestreamResponse>> create(@Valid @RequestBody CreateLivestreamRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<LivestreamResponse> getById(@PathVariable String id) {
+    public ApiResponse<LivestreamResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<LivestreamResponse>> findAll() {
+    public ApiResponse<List<LivestreamResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 
     @PatchMapping("/{id}")
-    ApiResponse<LivestreamResponse> update(
-            @PathVariable String id, @Valid @RequestBody UpdateLivestreamRequest request) {
+    public ApiResponse<LivestreamResponse> update(@PathVariable String id, @Valid @RequestBody UpdateLivestreamRequest request) {
         return ApiResponse.success(service.update(id, request));
     }
 
     @PostMapping("/{id}/start")
-    ApiResponse<LivestreamResponse> start(@PathVariable String id) {
+    public ApiResponse<LivestreamResponse> start(@PathVariable String id) {
         return ApiResponse.success(service.transition(id, LivestreamStatus.LIVE));
     }
 
     @PostMapping("/{id}/end")
-    ApiResponse<LivestreamResponse> end(@PathVariable String id) {
+    public ApiResponse<LivestreamResponse> end(@PathVariable String id) {
         return ApiResponse.success(service.transition(id, LivestreamStatus.ENDED));
     }
 
-    public record StatsRequest(long viewerCount, long uniqueViewerCount, long concurrentViewerCount) {}
+    record StatsRequest(long viewerCount, long uniqueViewerCount, long concurrentViewerCount) {}
 
     @PatchMapping("/{id}/stats")
-    ApiResponse<LivestreamResponse> stats(@PathVariable String id, @RequestBody StatsRequest request) {
-        return ApiResponse.success(
-                service.updateStats(
-                        id, request.viewerCount(), request.uniqueViewerCount(), request.concurrentViewerCount()));
+    public ApiResponse<LivestreamResponse> stats(@PathVariable String id, @RequestBody StatsRequest request) {
+        return ApiResponse.success(service.updateStats(id, request.viewerCount(), request.uniqueViewerCount(), request.concurrentViewerCount()));
     }
 
-    /** Body: { "accepted": true|false } */
-    public record RespondRequest(Boolean accepted) {}
+    public record RespondRequest(boolean accepted) {}
 
     /** KOL chấp nhận / từ chối lời mời live (lưu trong participantRefs.inviteStatus). */
     @PatchMapping("/{id}/respond")
-    ApiResponse<LivestreamResponse> respond(
+    public ApiResponse<LivestreamResponse> respond(
             @PathVariable String id,
             @RequestBody RespondRequest request,
-            @AuthenticationPrincipal Jwt jwt) {
-        boolean accepted = Boolean.TRUE.equals(request != null ? request.accepted() : null);
-        String subject = jwt != null ? jwt.getSubject() : null;
-        return ApiResponse.success(service.respondInvite(id, accepted, subject));
+                    Jwt jwt) {
+        return ApiResponse.success(service.respondInvite(id, request.accepted(), jwt));
     }
 }

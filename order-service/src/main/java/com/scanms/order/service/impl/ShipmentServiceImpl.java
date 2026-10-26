@@ -4,9 +4,9 @@ import com.scanms.order.constant.SellerOrderStatus;
 import com.scanms.order.constant.ShipmentStatus;
 import com.scanms.order.dto.request.CreateShipmentRequest;
 import com.scanms.order.dto.response.ShipmentResponse;
-import com.scanms.order.entity.SellerOrder;
 import com.scanms.order.entity.Shipment;
-import com.scanms.order.exception.*;
+import com.scanms.order.exception.AppException;
+import com.scanms.order.exception.ErrorCode;
 import com.scanms.order.mapper.ShipmentMapper;
 import com.scanms.order.repository.SellerOrderRepository;
 import com.scanms.order.repository.ShipmentRepository;
@@ -18,7 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.time.ZoneOffset;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -66,7 +67,7 @@ public class ShipmentServiceImpl implements ShipmentService {
         if (trackingCode != null && !trackingCode.isBlank()) shipment.setTrackingCode(trackingCode);
 
         Instant nowInstant = Instant.now();
-        LocalDateTime nowLocal = LocalDateTime.now();
+        LocalDateTime nowLocal = LocalDateTime.now(ZoneOffset.UTC);
 
         if (status == ShipmentStatus.SHIPPED) {
             shipment.setShippedAt(nowInstant);
@@ -78,13 +79,15 @@ public class ShipmentServiceImpl implements ShipmentService {
             shipment.setFailedAt(nowInstant);
             shipment.setFailureReason(failureReason);
         } else if (status == ShipmentStatus.DELIVERED) {
-            shipment.setDeliveredAt(nowInstant);
+            if (shipment.getDeliveredAt() == null) shipment.setDeliveredAt(nowInstant);
 
             // Crucial: Update SellerOrder and compute 14-day return deadline!
             sellerOrderRepository.findById(shipment.getSellerOrderId()).ifPresent(so -> {
-                so.setStatus(SellerOrderStatus.DELIVERED);
-                so.setDeliveredAt(nowLocal);
-                so.setReturnDeadline(nowLocal.plusDays(14));
+                if (so.getStatus() != SellerOrderStatus.COMPLETED) so.setStatus(SellerOrderStatus.DELIVERED);
+                if (so.getDeliveredAt() == null) {
+                    so.setDeliveredAt(nowLocal);
+                    so.setReturnDeadline(nowLocal.plusDays(14));
+                }
                 sellerOrderRepository.save(so);
                 log.info("SellerOrder {} marked DELIVERED, return deadline set to: {}",
                         so.getSellerOrderId(), so.getReturnDeadline());

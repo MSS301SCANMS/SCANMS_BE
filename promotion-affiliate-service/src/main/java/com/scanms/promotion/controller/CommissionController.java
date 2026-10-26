@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/commissions")
@@ -16,19 +17,19 @@ import java.util.*;
 public class CommissionController {
     private final CommissionService service;
 
-    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
-    ResponseEntity<ApiResponse<CommissionResponse>> create(@Valid @RequestBody CreateCommissionRequest request) {
+    public ResponseEntity<ApiResponse<CommissionResponse>> create(@Valid @RequestBody CreateCommissionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<CommissionResponse> getById(@PathVariable String id) {
+    public ApiResponse<CommissionResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<CommissionResponse>> findAll() {
+    public ApiResponse<List<CommissionResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 }

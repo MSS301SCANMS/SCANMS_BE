@@ -3,6 +3,12 @@ package com.scanms.user.service.impl;
 import com.scanms.user.exception.AppException;
 import com.scanms.user.exception.ErrorCode;
 import com.scanms.user.service.OtpService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.stereotype.Service;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -11,11 +17,6 @@ import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.function.Supplier;
-import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.stereotype.Service;
 
 /**
  * Mã OTP (6 số) cho luồng quên mật khẩu, lưu trong Redis để mọi instance user-service dùng chung.
@@ -36,7 +37,9 @@ public class OtpServiceImpl implements OtpService {
     private static final String ATTEMPTS_PREFIX = "scanms:user:otp:attempts:";
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    /** Xoá mã + bộ đếm nếu mã khớp; trả 1 khi thành công, 0 khi sai/hết hạn. */
+    /**
+     * Xoá mã + bộ đếm nếu mã khớp; trả 1 khi thành công, 0 khi sai/hết hạn.
+     */
     private static final DefaultRedisScript<Long> CONSUME_SCRIPT = new DefaultRedisScript<>(
             "if redis.call('GET', KEYS[1]) == ARGV[1] then "
                     + "redis.call('DEL', KEYS[1], KEYS[2]) return 1 end "
@@ -81,7 +84,9 @@ public class OtpServiceImpl implements OtpService {
         return false;
     }
 
-    /** Đếm lần nhập sai trong thời hạn của mã; quá giới hạn thì huỷ mã để chống dò 6 chữ số. */
+    /**
+     * Đếm lần nhập sai trong thời hạn của mã; quá giới hạn thì huỷ mã để chống dò 6 chữ số.
+     */
     private void registerFailedAttempt(String id) {
         redisCall(() -> {
             String attemptsKey = ATTEMPTS_PREFIX + id;

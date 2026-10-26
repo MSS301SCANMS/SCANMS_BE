@@ -24,6 +24,10 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.scanms.product.entity.Livestream;
+import java.time.Instant;
+import org.springframework.security.oauth2.jwt.Jwt;
+import java.util.LinkedHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -108,23 +112,23 @@ public class LivestreamServiceImpl implements LivestreamService {
     }
 
     @Override
-    public LivestreamResponse respondInvite(String id, boolean accepted, String respondedBySubject) {
+    public LivestreamResponse respondInvite(String id, boolean accepted, Jwt jwt) {
         var livestream = repository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Livestream not found: " + id));
         if (livestream.getStatus() == LivestreamStatus.ENDED || livestream.getStatus() == LivestreamStatus.CANCELLED)
             throw new AppException(ErrorCode.CONFLICT, "Livestream is closed");
-        java.util.Map<String, Object> participants = new java.util.LinkedHashMap<>(
-                livestream.getParticipantRefs() == null ? java.util.Map.of() : livestream.getParticipantRefs());
+        Map<String, Object> participants = new LinkedHashMap<>(
+                livestream.getParticipantRefs() == null ? Map.of() : livestream.getParticipantRefs());
         participants.put("inviteStatus", accepted ? "ACCEPTED" : "REJECTED");
-        if (respondedBySubject != null && !respondedBySubject.isBlank()) {
-            participants.put("respondedBySubject", respondedBySubject);
+        if (jwt != null) {
+            participants.put("respondedBySubject", jwt.getSubject());
+            participants.put("respondedAt", Instant.now().toString());
         }
-        participants.put("respondedAt", java.time.Instant.now().toString());
         livestream.setParticipantRefs(participants);
         return mapper.toResponse(repository.save(livestream));
     }
 
-    private com.scanms.product.entity.Livestream owned(String id) {
+    private Livestream owned(String id) {
         var livestream = repository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Livestream not found: " + id));
         access.requireApprovedStore(livestream.getStoreId());

@@ -15,18 +15,19 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mapstruct.factory.Mappers;
 
 class LivestreamReferenceUpdateTest {
     private final LivestreamRepository livestreams = mock(LivestreamRepository.class);
     private final ProductAccess access = mock(ProductAccess.class);
     private final ProductRepository products = mock(ProductRepository.class);
     private final LivestreamServiceImpl service = new LivestreamServiceImpl(livestreams,
-            new LivestreamMapper(), access, products);
+            Mappers.getMapper(LivestreamMapper.class), access, products);
 
     @Test void sellerCanUpdateParticipantsAndApprovedCollaboratorReferences() {
         var live = Livestream.builder().livestreamId("live-1").storeId("store-1")
                 .status(LivestreamStatus.SCHEDULED).build();
-        when(livestreams.findById("live-1")).thenReturn(Optional.of(live));
+        when(livestreams.lockById("live-1")).thenReturn(Optional.of(live));
         when(livestreams.save(any())).thenAnswer(call -> call.getArgument(0));
         var participants = Map.<String, Object>of("hostIds", List.of("host-1"));
         var collaborators = Map.<String, Object>of("collaboratorIds", List.of());

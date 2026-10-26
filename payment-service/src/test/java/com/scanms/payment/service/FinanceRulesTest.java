@@ -1,5 +1,6 @@
 package com.scanms.payment.service;
 
+import com.scanms.payment.service.impl.PayosProviderImpl;
 import com.scanms.payment.constant.*;
 import com.scanms.payment.entity.FeeConfig;
 import com.scanms.payment.exception.AppException;
@@ -37,7 +38,7 @@ class FinanceRulesTest {
         assertThrows(AppException.class,() -> cipher.decrypt(first.substring(0,first.length()-4)+"AAAA"));
     }
     @Test void webhookSigningIsSortedAndTamperingRejected() throws Exception {
-        var provider=new PayosProvider(); ReflectionTestUtils.setField(provider,"clientId","client"); ReflectionTestUtils.setField(provider,"apiKey","api"); ReflectionTestUtils.setField(provider,"checksum","secret");
+        var provider=new PayosProviderImpl(); ReflectionTestUtils.setField(provider,"clientId","client"); ReflectionTestUtils.setField(provider,"apiKey","api"); ReflectionTestUtils.setField(provider,"checksum","secret");
         Map<String,Object> body=Map.of("amount",10000,"code","00","currency","VND","orderCode",123);
         Mac independent=Mac.getInstance("HmacSHA256"); independent.init(new SecretKeySpec("secret".getBytes(StandardCharsets.UTF_8),"HmacSHA256"));
         String expected=HexFormat.of().formatHex(independent.doFinal("amount=10000&code=00&currency=VND&orderCode=123".getBytes(StandardCharsets.UTF_8)));
@@ -49,7 +50,7 @@ class FinanceRulesTest {
         assertEquals(Instant.parse("2026-10-06T02:00:00Z"),calendar.nextProcessingAt(saturday));
     }
     @Test void payoutNotificationSignatureUsesItsOwnKeyAndNestedCanonicalData() throws Exception {
-        var provider=new PayosProvider(); ReflectionTestUtils.setField(provider,"payoutClient","client"); ReflectionTestUtils.setField(provider,"payoutApiKey","api"); ReflectionTestUtils.setField(provider,"payoutChecksum","payout-secret");
+        var provider=new PayosProviderImpl(); ReflectionTestUtils.setField(provider,"payoutClient","client"); ReflectionTestUtils.setField(provider,"payoutApiKey","api"); ReflectionTestUtils.setField(provider,"payoutChecksum","payout-secret");
         Map<String,Object> body=Map.of("referenceId","withdrawal", "transactions",List.of(Map.of("toBin","970422","amount",1000)));
         String canonical="referenceId=withdrawal&transactions=%5B%7B%22amount%22:1000,%22toBin%22:%22970422%22%7D%5D";
         Mac independent=Mac.getInstance("HmacSHA256");independent.init(new SecretKeySpec("payout-secret".getBytes(StandardCharsets.UTF_8),"HmacSHA256"));

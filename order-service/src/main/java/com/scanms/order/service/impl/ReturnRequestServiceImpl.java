@@ -22,7 +22,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -101,37 +105,20 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         ReturnRequest rr = repository.lockById(returnRequestId)
                 .orElseThrow(() -> new AppException(ErrorCode.RETURN_REQUEST_NOT_FOUND, "ReturnRequest not found: " + returnRequestId));
 
-        if (decision.status() == ReturnRequestStatus.APPROVED) {
-            rr.setStatus(ReturnRequestStatus.APPROVED);
-            rr.setDecisionReason(decision.decisionReason());
-            rr.setResolvedAt(LocalDateTime.now());
-
-            // Orchestrate Refund to Customer Wallet via Payment Service
-            String idempotencyKey = "REFUND_" + rr.getReturnRequestId();
-            try {
-                Map<String, Object> refundPayload = new HashMap<>();
-                refundPayload.put("type", "REFUND");
-                refundPayload.put("direction", "CREDIT");
-                refundPayload.put("amountVnd", rr.getRefundAmountVnd());
-                refundPayload.put("status", "SUCCESS");
-                refundPayload.put("referenceType", "RETURN_REQUEST");
-                refundPayload.put("referenceId", rr.getReturnRequestId());
-                refundPayload.put("idempotencyKey", idempotencyKey);
-                refundPayload.put("description", "Refund for ReturnRequest #" + rr.getReturnRequestId());
-
-                paymentClient.createWalletTransaction(refundPayload);
-                log.info("Successfully called payment-service to refund wallet for request: {}", returnRequestId);
-                rr.setStatus(ReturnRequestStatus.REFUNDED);
-                rr.setRefundReference("REFUND_TX_" + rr.getReturnRequestId().substring(0, Math.min(8, rr.getReturnRequestId().length())));
-            } catch (Exception e) {
-                log.warn("Payment client call failed or payment-service is offline for refund: {}. Setting status to APPROVED.", e.getMessage());
-                rr.setRefundReference("REFUND_OFFLINE_SYNC");
-            }
-        } else if (decision.status() == ReturnRequestStatus.REJECTED) {
-            rr.setStatus(ReturnRequestStatus.REJECTED);
-            rr.setDecisionReason(decision.decisionReason());
-            rr.setResolvedAt(LocalDateTime.now());
+        if (decision.status() == null || !Set.of(ReturnRequestStatus.APPROVED, ReturnRequestStatus.REJECTED).contains(decision.status())
+                || decision.decisionReason() == null || decision.decisionReason().trim().length() < 20) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Choose APPROVED or REJECTED with at least 20 characters of reasoning");
         }
+        if (rr.getStatus() != ReturnRequestStatus.REQUESTED || rr.getRefundReference() != null) {
+            if (rr.getStatus() == decision.status() && Objects.equals(rr.getDecisionReason(), decision.decisionReason().trim()))
+                return mapper.toResponse(rr);
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Return already decided; reload the record");
+        }
+        rr.setStatus(decision.status());
+        rr.setDecisionReason(decision.decisionReason().trim());
+        rr.setResolvedAt(LocalDateTime.now(ZoneOffset.UTC));
+        // Approval is not a credit. Receive goods, then Finance uses the persisted
+        // paid basis, an idempotent ledger entry and a durable acknowledgement.
 
         return mapper.toResponse(repository.save(rr));
     }

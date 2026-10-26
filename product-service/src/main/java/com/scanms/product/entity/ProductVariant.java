@@ -5,9 +5,11 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.*;
 import java.time.Instant;
+import com.scanms.product.config.CatalogEntityListener;
 
 @Entity
 @Table(name = "product_variants", uniqueConstraints = @UniqueConstraint(name = "uk_product_variant_sku", columnNames = "sku"))
+@EntityListeners(CatalogEntityListener.class)
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class ProductVariant {
     @Id @GeneratedValue(strategy = GenerationType.UUID)

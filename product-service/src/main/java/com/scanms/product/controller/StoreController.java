@@ -9,53 +9,64 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import com.scanms.product.dto.request.UpdateStoreRequest;
+import com.scanms.product.dto.response.StoreDashboardResponse;
+import com.scanms.product.repository.StoreRepository;
+import java.net.http.HttpClient;
+import java.time.Duration;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/stores")
 @RequiredArgsConstructor
 public class StoreController {
     private final StoreService service;
-    private final com.scanms.product.repository.StoreRepository stores;
-    @org.springframework.beans.factory.annotation.Value("${clients.user.url:http://localhost:8081}") private String userUrl;
-    @GetMapping("/mine") ApiResponse<List<Map<String,Object>>> mine(@org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.oauth2.jwt.Jwt jwt) {
-        var factory=new org.springframework.http.client.JdkClientHttpRequestFactory(java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(5)).build()); factory.setReadTimeout(java.time.Duration.ofSeconds(10));
-        Map<?,?> response=org.springframework.web.client.RestClient.builder().requestFactory(factory).build().get().uri(userUrl+"/api/v1/users/me").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
-        if(response==null || !(response.get("result") instanceof Map<?,?> user) || !"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject"))) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN);
+    private final StoreRepository stores;
+    @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
+    @GetMapping("/mine") public ApiResponse<List<Map<String,Object>>> mine(@AuthenticationPrincipal Jwt jwt) {
+        var factory=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()); factory.setReadTimeout(Duration.ofSeconds(10));
+        Map<?,?> response=RestClient.builder().requestFactory(factory).build().get().uri(userUrl+"/api/v1/users").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
+        if(response==null || !(response.get("result") instanceof Map<?,?> user) || !"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject"))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         return ApiResponse.success(stores.findByOwnerUserId(user.get("userId").toString()).stream().map(s -> Map.<String,Object>of("storeId",s.getStoreId(),"name",s.getName(),"approvalStatus",s.getApprovalStatus())).toList());
     }
 
     @PostMapping
-    ResponseEntity<ApiResponse<StoreResponse>> create(@Valid @RequestBody CreateStoreRequest request) {
+    public ResponseEntity<ApiResponse<StoreResponse>> create(@Valid @RequestBody CreateStoreRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<StoreResponse> getById(@PathVariable String id) {
+    public ApiResponse<StoreResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping("/{id}/dashboard")
-    ApiResponse<com.scanms.product.dto.response.StoreDashboardResponse> dashboard(@PathVariable String id) {
+    public ApiResponse<StoreDashboardResponse> dashboard(@PathVariable String id) {
         return ApiResponse.success(service.dashboard(id));
     }
 
     @PostMapping("/{id}/suspend")
-    ApiResponse<StoreResponse> suspend(@PathVariable String id) {
+    public ApiResponse<StoreResponse> suspend(@PathVariable String id) {
         return ApiResponse.success(service.setSuspended(id, true));
     }
 
     @PostMapping("/{id}/activate")
-    ApiResponse<StoreResponse> activate(@PathVariable String id) {
+    public ApiResponse<StoreResponse> activate(@PathVariable String id) {
         return ApiResponse.success(service.setSuspended(id, false));
     }
 
     @PatchMapping("/{id}")
-    ApiResponse<StoreResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateStoreRequest request) {
+    public ApiResponse<StoreResponse> update(@PathVariable String id, @Valid @RequestBody UpdateStoreRequest request) {
         return ApiResponse.success(service.update(id, request));
     }
 
     @GetMapping
-    ApiResponse<List<StoreResponse>> findAll() {
+    public ApiResponse<List<StoreResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 }

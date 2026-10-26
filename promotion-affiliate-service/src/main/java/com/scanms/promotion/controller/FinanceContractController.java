@@ -20,6 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
 import java.util.*;
+import java.net.http.HttpClient;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Slf4j
 @RestController @RequestMapping("/api/v1/finance") @RequiredArgsConstructor @Transactional
@@ -33,7 +37,7 @@ public class FinanceContractController {
     @Value("${clients.order.url:http://localhost:8083}") private String orderUrl;
     private final RestClient http=http();
     private static RestClient http() {
-        var factory=new org.springframework.http.client.JdkClientHttpRequestFactory(java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
+        var factory=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
         factory.setReadTimeout(Duration.ofSeconds(15)); return RestClient.builder().requestFactory(factory).build();
     }
     private void trusted(Jwt jwt,boolean operator) {
@@ -41,7 +45,7 @@ public class FinanceContractController {
         if(realm instanceof Map<?,?> map && map.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString()));
         Object resources=jwt.getClaim("resource_access");
         if(resources instanceof Map<?,?> map) map.values().forEach(v -> { if(v instanceof Map<?,?> m && m.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString())); });
-        if(!roles.contains("PAYMENT_INTERNAL") && !(operator && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if(!roles.contains("PAYMENT_INTERNAL") && !(operator && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER","ORDER_INTERNAL","AFFILIATE_INTERNAL")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
     private Commission find(String id) {
         Commission c=em.find(Commission.class,id,LockModeType.PESSIMISTIC_WRITE); if(c==null) throw new ResponseStatusException(HttpStatus.NOT_FOUND); return c;
@@ -51,7 +55,7 @@ public class FinanceContractController {
         if(response==null || !(response.get("result") instanceof Map<?,?>)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Order contract unavailable");
         return (Map<String,Object>)response.get("result");
     }
-    @GetMapping("/commission-basis/{id}") ApiResponse<Map<String,Object>> basis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
+    @GetMapping("/commission-basis/{id}") public ApiResponse<Map<String,Object>> basis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true); Commission c=find(id);
         if(!Set.of(CommissionStatus.ELIGIBLE,CommissionStatus.ADJUSTED,CommissionStatus.CREDITED,CommissionStatus.PAID).contains(c.getStatus()) || c.getCommissionAmountVnd()==null || c.getCommissionAmountVnd()<=0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission is not eligible");
         CollaboratorProfile profile=collaborators.findById(c.getCollaboratorId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -64,7 +68,7 @@ public class FinanceContractController {
         return ApiResponse.success(Map.of("commissionId",id,"collaboratorId",c.getCollaboratorId(),"amountVnd",c.getCommissionAmountVnd(),"orderItemId",c.getOrderItemId(),"currency","VND"));
     }
     public record CreditInput(String transactionId,Long amountVnd) {}
-    @PostMapping("/commissions/{id}/credited") ApiResponse<Map<String,Object>> credited(@PathVariable String id,@RequestBody CreditInput input,@AuthenticationPrincipal Jwt jwt) {
+    @PostMapping("/commissions/{id}/credited") public ApiResponse<Map<String,Object>> credited(@PathVariable String id,@RequestBody CreditInput input,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,false); Commission c=find(id);
         if(input.transactionId()==null || !Objects.equals(input.amountVnd(),c.getCommissionAmountVnd())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission credit mismatch");
         if(c.getTransferReference()!=null && !c.getTransferReference().equals(input.transactionId())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Another credit already exists");
@@ -72,7 +76,7 @@ public class FinanceContractController {
         c.setTransferReference(input.transactionId()); c.setStatus(CommissionStatus.CREDITED); c.setPaidAt(LocalDateTime.now(ZoneOffset.UTC)); commissions.save(c);
         return ApiResponse.success(Map.of("commissionId",id,"status","CREDITED"));
     }
-    @GetMapping("/commissions-total") ApiResponse<Map<String,Object>> total(@RequestParam String orderItemIds,@AuthenticationPrincipal Jwt jwt) {
+    @GetMapping("/commissions-total") public ApiResponse<Map<String,Object>> total(@RequestParam String orderItemIds,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true); Set<String> ids=new HashSet<>(Arrays.asList(orderItemIds.split(","))); long total=0;
         if(ids.isEmpty() || ids.contains("")) throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         long finalizedTotal=0;
@@ -101,7 +105,7 @@ public class FinanceContractController {
      * Idempotent: gọi nhiều lần với cùng itemId đều trả kết quả nhất quán.
      */
     @PostMapping("/commission-initializations/{itemId}")
-    ApiResponse<Map<String,Object>> initializeCommission(
+    public ApiResponse<Map<String,Object>> initializeCommission(
             @PathVariable String itemId,
             @RequestBody(required = false) InitInput input,
             @AuthenticationPrincipal Jwt jwt) {
@@ -195,13 +199,13 @@ public class FinanceContractController {
      * PENDING rows stay PENDING (finalize sẽ tính lại). ELIGIBLE/CREDITED/PAID → ADJUSTED.
      */
     @PostMapping("/commission-adjustments/{itemId}")
-    ApiResponse<Map<String,Object>> adjustCommission(
+    public ApiResponse<Map<String,Object>> adjustCommission(
             @PathVariable String itemId,
             @RequestBody(required = false) AdjustInput input,
             @AuthenticationPrincipal Jwt jwt) {
         trusted(jwt, true);
         Map<String,Object> basis = order("/api/v1/finance/commission-order-item/" + itemId, jwt);
-        long retained = new java.math.BigDecimal(basis.get("basisAmountVnd").toString()).longValueExact();
+        long retained = new BigDecimal(basis.get("basisAmountVnd").toString()).longValueExact();
         String reason = input != null && input.reason() != null && !input.reason().isBlank()
                 ? input.reason() : "Return/refund adjustment";
         int adjusted = 0;
@@ -209,9 +213,9 @@ public class FinanceContractController {
             Commission c = find(candidate.getCommissionId());
             if (c.getStatus() == CommissionStatus.PENDING || c.getStatus() == CommissionStatus.CANCELLED) continue;
             if (c.getRateSnapshot() == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "Missing rate snapshot");
-            long amount = java.math.BigDecimal.valueOf(retained)
+            long amount = BigDecimal.valueOf(retained)
                     .multiply(c.getRateSnapshot())
-                    .divide(java.math.BigDecimal.valueOf(100), 0, java.math.RoundingMode.HALF_UP)
+                    .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
                     .longValueExact();
             if (Objects.equals(c.getCommissionAmountVnd(), amount) && Objects.equals(c.getBasisAmountVnd(), retained))
                 continue;
@@ -245,14 +249,14 @@ public class FinanceContractController {
     // ─── Commission Finalization (14-day rule) ────────────────────────────────────
 
     public record FinalizeInput(String reason) {}
-    @PostMapping("/commission-finalizations/{itemId}") ApiResponse<Map<String,Object>> finalizeItem(@PathVariable String itemId,@RequestBody FinalizeInput input,@AuthenticationPrincipal Jwt jwt) {
+    @PostMapping("/commission-finalizations/{itemId}") public ApiResponse<Map<String,Object>> finalizeItem(@PathVariable String itemId,@RequestBody FinalizeInput input,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true);
         if(input.reason()==null || input.reason().isBlank() || input.reason().length()>500) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Finalization reason required");
         CommissionFinalization anchor=em.find(CommissionFinalization.class,itemId,LockModeType.PESSIMISTIC_WRITE);
         if(anchor==null) { anchor=new CommissionFinalization(); anchor.setOrderItemId(itemId); em.persist(anchor); em.flush(); }
         Map<String,Object> basis=order("/api/v1/finance/commission-order-item/"+itemId,jwt);
         if(anchor.getFinalizedAt()!=null) return ApiResponse.success(Map.of("orderItemId",itemId,"finalized",true));
-        long retained=new java.math.BigDecimal(basis.get("basisAmountVnd").toString()).longValueExact(), total=0;
+        long retained=new BigDecimal(basis.get("basisAmountVnd").toString()).longValueExact(), total=0;
         // Dùng findByOrderItemId thay vì findAll().filter() để hiệu quả hơn
         List<Commission> rows=commissions.findByOrderItemId(itemId).stream().sorted(Comparator.comparing(Commission::getCommissionId)).toList();
         // Auto-init nếu thiếu Commission row — trường hợp commission-initializations chưa được gọi trước đó
@@ -264,8 +268,8 @@ public class FinanceContractController {
         }
         for(Commission candidate:rows) {
             Commission c=find(candidate.getCommissionId());
-            if(c.getRateSnapshot()==null || c.getRateSnapshot().signum()<0 || c.getRateSnapshot().compareTo(java.math.BigDecimal.valueOf(100))>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission policy snapshot is missing or invalid");
-            long amount=c.getStatus()==CommissionStatus.CANCELLED?0:java.math.BigDecimal.valueOf(retained).multiply(c.getRateSnapshot()).divide(java.math.BigDecimal.valueOf(100),0,java.math.RoundingMode.HALF_UP).longValueExact();
+            if(c.getRateSnapshot()==null || c.getRateSnapshot().signum()<0 || c.getRateSnapshot().compareTo(BigDecimal.valueOf(100))>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission policy snapshot is missing or invalid");
+            long amount=c.getStatus()==CommissionStatus.CANCELLED?0:BigDecimal.valueOf(retained).multiply(c.getRateSnapshot()).divide(BigDecimal.valueOf(100),0,RoundingMode.HALF_UP).longValueExact();
             if(c.getStatus()==CommissionStatus.CREDITED || c.getStatus()==CommissionStatus.PAID) {
                 if(!Objects.equals(c.getCommissionAmountVnd(),amount)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Already credited commission requires a ledger adjustment");
             } else {

@@ -12,6 +12,7 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
+import com.scanms.product.dto.request.UpdateProductRequest;
 
 @RestController
 @RequestMapping("/api/v1/products")
@@ -21,32 +22,32 @@ public class ProductController {
     private final AiAnalysisService aiAnalysisService;
 
     @PostMapping
-    ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody CreateProductRequest request) {
+    public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody CreateProductRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<ProductResponse> getById(@PathVariable String id) {
+    public ApiResponse<ProductResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<ProductResponse>> findAll() {
+    public ApiResponse<List<ProductResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 
     @PatchMapping("/{id}")
-    ApiResponse<ProductResponse> update(@PathVariable String id, @Valid @RequestBody com.scanms.product.dto.request.UpdateProductRequest request) {
+    public ApiResponse<ProductResponse> update(@PathVariable String id, @Valid @RequestBody UpdateProductRequest request) {
         return ApiResponse.success(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    ApiResponse<ProductResponse> deactivate(@PathVariable String id) {
+    public ApiResponse<ProductResponse> deactivate(@PathVariable String id) {
         return ApiResponse.success(service.deactivate(id));
     }
 
     @PostMapping(value = "/ai-analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    ApiResponse<AiDetectionResponse> analyzeImage(@RequestPart("image") MultipartFile image) {
+    public ApiResponse<AiDetectionResponse> analyzeImage(@RequestPart("image") MultipartFile image) {
         return ApiResponse.success(aiAnalysisService.analyze(image));
     }
 }

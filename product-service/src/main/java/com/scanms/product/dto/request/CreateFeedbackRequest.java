@@ -5,12 +5,12 @@ import jakarta.validation.constraints.*;
 import java.util.*;
 
 public record CreateFeedbackRequest(
-        @NotNull String productId,
-        @NotNull String orderItemId,
+        @NotBlank String productId,
+        @NotBlank String orderItemId,
         String customerId,
         @NotNull @Min(1) @Max(5) Integer rating,
-        String comment,
-        List<String> imageRefs,
+        @Size(max=1000) String comment,
+        @Size(max=5) List<@NotBlank @Size(max=2048) String> imageRefs,
         FeedbackStatus status
 ) {}
 

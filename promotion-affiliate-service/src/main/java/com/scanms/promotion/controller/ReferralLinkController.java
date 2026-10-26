@@ -17,22 +17,22 @@ public class ReferralLinkController {
     private final ReferralLinkService service;
 
     @PostMapping
-    ResponseEntity<ApiResponse<ReferralLinkResponse>> create(@Valid @RequestBody CreateReferralLinkRequest request) {
+    public ResponseEntity<ApiResponse<ReferralLinkResponse>> create(@Valid @RequestBody CreateReferralLinkRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
     }
 
     @GetMapping("/{id}")
-    ApiResponse<ReferralLinkResponse> getById(@PathVariable String id) {
+    public ApiResponse<ReferralLinkResponse> getById(@PathVariable String id) {
         return ApiResponse.success(service.getById(id));
     }
 
     @GetMapping
-    ApiResponse<List<ReferralLinkResponse>> findAll() {
+    public ApiResponse<List<ReferralLinkResponse>> findAll() {
         return ApiResponse.success(service.findAll());
     }
 
     @GetMapping("/store/{storeId}")
-    ApiResponse<List<Map<String, Object>>> findStoreLinks(@PathVariable String storeId) {
+    public ApiResponse<List<Map<String, Object>>> findStoreLinks(@PathVariable String storeId) {
         return ApiResponse.success(service.findStoreLinks(storeId));
     }
 }

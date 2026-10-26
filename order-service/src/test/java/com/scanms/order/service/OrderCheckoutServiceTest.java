@@ -29,6 +29,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mapstruct.factory.Mappers;
 
 @ExtendWith(MockitoExtension.class)
 class OrderCheckoutServiceTest {
@@ -48,7 +49,7 @@ class OrderCheckoutServiceTest {
     @Mock
     private ProductClient productClient;
 
-    private OrderItemMapper orderItemMapper = new OrderItemMapper();
+    private OrderItemMapper orderItemMapper = Mappers.getMapper(OrderItemMapper.class);
     private OrderServiceImpl orderService;
 
     @BeforeEach

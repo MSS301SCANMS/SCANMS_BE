@@ -4,6 +4,7 @@ import com.scanms.order.constant.*;
 import com.scanms.order.dto.request.CreateDiscountAllocationRequest;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import org.mapstruct.factory.Mappers;
 
 class DiscountAllocationMapperTest {
     @Test
@@ -13,7 +14,7 @@ class DiscountAllocationMapperTest {
         var request = new CreateDiscountAllocationRequest(
                 orderItemId, voucherId, DiscountSourceType.VOUCHER,
                 DiscountFundingType.PLATFORM, 20_000L, "{\"rule\":\"WELCOME\"}");
-        var entity = new DiscountAllocationMapper().toEntity(request);
+        var entity = Mappers.getMapper(DiscountAllocationMapper.class).toEntity(request);
         assertEquals(orderItemId, entity.getOrderItemId());
         assertEquals(voucherId, entity.getVoucherId());
         assertEquals(20_000L, entity.getAllocatedAmountVnd());

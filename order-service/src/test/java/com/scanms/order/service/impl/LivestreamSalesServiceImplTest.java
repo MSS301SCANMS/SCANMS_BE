@@ -1,4 +1,4 @@
-package com.scanms.order.service;
+package com.scanms.order.service.impl;
 
 import com.scanms.order.constant.OrderStatus;
 import com.scanms.order.constant.SellerOrderStatus;
@@ -28,13 +28,13 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest;
 
-class LivestreamSalesServiceTest {
+class LivestreamSalesServiceImplTest {
     private final OrderItemRepository items = mock(OrderItemRepository.class);
     private final SellerOrderRepository sellers = mock(SellerOrderRepository.class);
     private final OrderRepository orders = mock(OrderRepository.class);
     private final RestClient.Builder builder = RestClient.builder();
     private final MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-    private final LivestreamSalesService service = new LivestreamSalesService(items, sellers, orders, builder);
+    private final LivestreamSalesServiceImpl service = new LivestreamSalesServiceImpl(items, sellers, orders, builder);
     private final Jwt owner = Jwt.withTokenValue("owner-token").header("alg", "none")
             .subject("subject-1").claim("realm_access", Map.of("roles", List.of("SHOP_OWNER"))).build();
 

@@ -15,6 +15,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import com.scanms.product.config.CacheNames;
+import com.scanms.product.entity.ProductCategory;
+import org.springframework.cache.annotation.Cacheable;
 
 @Service
 @RequiredArgsConstructor
@@ -27,7 +30,7 @@ public class ProductServiceImpl implements ProductService {
 
     public ProductResponse create(CreateProductRequest request) {
         access.requireApprovedStore(request.storeId());
-        if (request.categoryId() != null && !categories.findById(request.categoryId()).map(com.scanms.product.entity.ProductCategory::isActive).orElse(false))
+        if (request.categoryId() != null && !categories.findById(request.categoryId()).map(ProductCategory::isActive).orElse(false))
             throw new AppException(ErrorCode.INVALID_REQUEST, "Active product category required");
         var product = mapper.toEntity(request);
         product.setStatus(request.status() == null ? ProductStatus.INACTIVE : request.status());
@@ -43,7 +46,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Transactional(readOnly = true)
-    @org.springframework.cache.annotation.Cacheable(com.scanms.product.config.CacheNames.PRODUCTS_ALL)
+    @Cacheable(CacheNames.PRODUCTS_ALL)
     public List<ProductResponse> findAll() {
         return repository.findAll().stream().map(mapper::toResponse).toList();
     }
@@ -58,9 +61,10 @@ public class ProductServiceImpl implements ProductService {
         }
         if (request.description() != null) product.setDescription(request.description());
         if (request.material() != null) product.setMaterial(request.material());
+        if (request.category() != null) product.setCategory(request.category());
         if (request.attributes() != null) product.setAttributes(request.attributes());
         if (request.categoryId() != null) {
-            if (!categories.findById(request.categoryId()).map(com.scanms.product.entity.ProductCategory::isActive).orElse(false))
+            if (!categories.findById(request.categoryId()).map(ProductCategory::isActive).orElse(false))
                 throw new AppException(ErrorCode.INVALID_REQUEST, "Active product category required");
             product.setCategoryId(request.categoryId());
         }

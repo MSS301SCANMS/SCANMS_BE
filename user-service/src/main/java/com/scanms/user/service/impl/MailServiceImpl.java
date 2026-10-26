@@ -18,7 +18,7 @@ public class MailServiceImpl implements MailService {
         message.setSubject("SCANMS - Mã xác thực khôi phục mật khẩu");
         message.setText(
                 "Mã OTP của bạn là: " + otp + "\n\n" +
-                "Mã có hiệu lực trong 5 phút. Nếu không phải bạn yêu cầu khôi phục mật khẩu, vui lòng bỏ qua email này."
+                        "Mã có hiệu lực trong 5 phút. Nếu không phải bạn yêu cầu khôi phục mật khẩu, vui lòng bỏ qua email này."
         );
         mailSender.send(message);
     }

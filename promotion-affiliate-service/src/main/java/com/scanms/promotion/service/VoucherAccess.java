@@ -2,13 +2,8 @@ package com.scanms.promotion.service;
 
 import com.scanms.promotion.exception.AppException;
 import com.scanms.promotion.exception.ErrorCode;
-import java.net.http.HttpClient;
-import java.time.Duration;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -16,11 +11,18 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.*;
 
 @Component
 public class VoucherAccess {
-    @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
-    @Value("${clients.product.url:http://localhost:8082}") private String productUrl;
+    @Value("${clients.user.url:http://localhost:8081}")
+    private String userUrl;
+    @Value("${clients.product.url:http://localhost:8082}")
+    private String productUrl;
     private final RestClient http;
 
     public VoucherAccess() {
@@ -30,7 +32,7 @@ public class VoucherAccess {
     }
 
     public String userId() {
-        var user = result(userUrl + "/api/v1/users/me");
+        var user = result(userUrl + "/api/v1/users");
         if (!"ACTIVE".equals(user.get("status")) || !jwt().getSubject().equals(user.get("identitySubject")))
             throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
         return user.get("userId").toString();
@@ -42,9 +44,13 @@ public class VoucherAccess {
         userId();
     }
 
-    public boolean isManager() { return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER")::contains); }
+    public boolean isManager() {
+        return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER")::contains);
+    }
 
-    public String bearerToken() { return jwt().getTokenValue(); }
+    public String bearerToken() {
+        return jwt().getTokenValue();
+    }
 
     public boolean ownsStore(String storeId) {
         if (storeId == null) return false;
@@ -57,26 +63,28 @@ public class VoucherAccess {
             throw new AppException(ErrorCode.FORBIDDEN, "Store owner required");
     }
 
-    public void requireApprovedStore(String storeId) { approvedStore(storeId); }
+    public void requireApprovedStore(String storeId) {
+        approvedStore(storeId);
+    }
 
-    public java.util.List<Map<?, ?>> storeProducts(String storeId) {
+    public List<Map<?, ?>> storeProducts(String storeId) {
         if (storeId == null || !storeId.matches("[A-Za-z0-9_-]{1,100}"))
             throw new AppException(ErrorCode.INVALID_REQUEST, "Mã gian hàng không hợp lệ.");
         requireStoreOwner(storeId);
         try {
             Map<?, ?> response = http.get().uri(productUrl + "/api/v1/products")
                     .headers(h -> h.setBearerAuth(jwt().getTokenValue())).retrieve().body(Map.class);
-            if (response != null && response.get("result") instanceof java.util.List<?> rows) {
+            if (response != null && response.get("result") instanceof List<?> rows) {
                 if (rows.stream().anyMatch(row -> !(row instanceof Map<?, ?> product)
                         || product.get("productId") == null || product.get("storeId") == null))
-                    throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Dữ liệu sản phẩm chưa hợp lệ.");
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dữ liệu sản phẩm chưa hợp lệ.");
                 return rows.stream().<Map<?, ?>>map(row -> (Map<?, ?>) row)
                         .filter(product -> storeId.equals(product.get("storeId"))).toList();
             }
         } catch (RestClientException ex) {
-            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Chưa tải được sản phẩm của gian hàng.");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa tải được sản phẩm của gian hàng.");
         }
-        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Chưa tải được sản phẩm của gian hàng.");
+        throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa tải được sản phẩm của gian hàng.");
     }
 
     private Map<?, ?> approvedStore(String storeId) {

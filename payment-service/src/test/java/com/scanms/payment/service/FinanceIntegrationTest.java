@@ -208,6 +208,19 @@ class FinanceIntegrationTest {
         assertEquals(818_750,wallets.findByOwnerTypeAndOwnerRefIdAndCurrency(WalletOwnerType.STORE,"owner","VND").orElseThrow().getAvailableBalanceVnd());
         assertEquals(21_250,wallets.findByOwnerTypeAndOwnerRefIdAndCurrency(WalletOwnerType.PLATFORM,"SCANMS","VND").orElseThrow().getAvailableBalanceVnd()); assertEquals(2,entries.count());
     }
+    @Test void internalDispatchersHaveOnlyTheirSourceCommandsWithoutOperatorPrivileges() {
+        doThrow(new AppException(com.scanms.payment.exception.ErrorCode.FORBIDDEN)).when(access).trustedOnly();
+        when(access.role("ORDER_INTERNAL")).thenReturn(true);
+        when(access.get(contains("settlement-basis"))).thenReturn(Map.of("storeId","owner","orderItemIds","line","grossRevenueVnd",100000,"refundVnd",0,"sellerDiscountVnd",0,"platformSubsidyVnd",0,"feeBasisVnd",100000));
+        when(access.get(contains("commissions-total"))).thenReturn(Map.of("amountVnd",0,"finalized",true));
+        assertEquals(100000,finance.computeSettlement("internal-seller").netAmountVnd());
+        assertThrows(AppException.class,()->finance.commission("kol-commission"));
+        when(access.role("ORDER_INTERNAL")).thenReturn(false);when(access.role("AFFILIATE_INTERNAL")).thenReturn(true);
+        when(access.get(contains("commission-basis"))).thenReturn(Map.of("collaboratorId","kol","amountVnd",10000));
+        var first=finance.commission("kol-commission");assertEquals(first.transactionId(),finance.commission("kol-commission").transactionId());
+        assertEquals(10000,wallets.findByOwnerTypeAndOwnerRefIdAndCurrency(WalletOwnerType.COLLABORATOR,"kol","VND").orElseThrow().getAvailableBalanceVnd());
+        assertThrows(AppException.class,()->finance.computeSettlement("foreign-seller"));
+    }
     @Test void providerReceivingAccountSurvivesCreateResumeAndStatusRefresh() {
         Wallet w=wallet(WalletOwnerType.CUSTOMER,0);
         when(provider.createLink(any())).thenAnswer(call -> {

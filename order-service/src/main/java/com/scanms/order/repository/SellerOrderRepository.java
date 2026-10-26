@@ -5,9 +5,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.scanms.order.constant.SellerOrderStatus;
 import java.util.List;
+import java.util.Collection;
 
 public interface SellerOrderRepository extends JpaRepository<SellerOrder, String> {
-    List<SellerOrder> findByOrderIdIn(java.util.Collection<String> orderIds);
+    List<SellerOrder> findByOrderIdIn(Collection<String> orderIds);
     List<SellerOrder> findByOrderId(String orderId);
     List<SellerOrder> findByStoreIdOrderByCreatedAtDesc(String storeId);
     List<SellerOrder> findByStoreIdAndStatusOrderByCreatedAtDesc(String storeId, SellerOrderStatus status);

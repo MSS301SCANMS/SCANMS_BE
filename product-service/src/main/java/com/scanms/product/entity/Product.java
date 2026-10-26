@@ -9,11 +9,12 @@ import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
+import com.scanms.product.config.CatalogEntityListener;
 
 @Entity
 @Table(name = "products")
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
-@jakarta.persistence.EntityListeners(com.scanms.product.config.CatalogEntityListener.class)
+@EntityListeners(CatalogEntityListener.class)
 public class Product {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -25,6 +26,7 @@ public class Product {
 
     private String name;
 
+    @Column(columnDefinition = "text")
     private String description;
 
     @Deprecated(forRemoval = false)

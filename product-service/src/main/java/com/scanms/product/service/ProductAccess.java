@@ -5,12 +5,6 @@ import com.scanms.product.entity.Store;
 import com.scanms.product.exception.AppException;
 import com.scanms.product.exception.ErrorCode;
 import com.scanms.product.repository.StoreRepository;
-import java.net.http.HttpClient;
-import java.time.Duration;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -21,11 +15,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.*;
+
 @Component
 @RequiredArgsConstructor
 public class ProductAccess {
     private final StoreRepository stores;
-    @Value("${clients.user.url:http://localhost:8081}") private String userUrl;
+    @Value("${clients.user.url:http://localhost:8081}")
+    private String userUrl;
 
     public String userId() {
         Jwt jwt = jwt();
@@ -33,7 +32,7 @@ public class ProductAccess {
             var factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
             factory.setReadTimeout(Duration.ofSeconds(10));
             Map<?, ?> response = RestClient.builder().requestFactory(factory).build().get()
-                    .uri(userUrl + "/api/v1/users/me")
+                    .uri(userUrl + "/api/v1/users")
                     .headers(headers -> headers.setBearerAuth(jwt.getTokenValue()))
                     .retrieve().body(Map.class);
             if (response != null && response.get("result") instanceof Map<?, ?> user
@@ -46,7 +45,9 @@ public class ProductAccess {
         throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
     }
 
-    public String bearerToken() { return jwt().getTokenValue(); }
+    public String bearerToken() {
+        return jwt().getTokenValue();
+    }
 
     public void requireManager() {
         if (!isManager())
@@ -54,7 +55,9 @@ public class ProductAccess {
         userId();
     }
 
-    public boolean isManager() { return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER")::contains); }
+    public boolean isManager() {
+        return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER")::contains);
+    }
 
     public Store requireApprovedStore(String storeId) {
         Store store = requireOwnedStore(storeId);
@@ -66,7 +69,7 @@ public class ProductAccess {
     public Store requireOwnedStore(String storeId) {
         Store store = stores.findById(storeId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Store not found: " + storeId));
-        if (!java.util.Objects.equals(store.getOwnerUserId(), userId()) && !roles().contains("ADMIN"))
+        if (!Objects.equals(store.getOwnerUserId(), userId()) && !roles().contains("ADMIN"))
             throw new AppException(ErrorCode.FORBIDDEN, "Store owner required");
         return store;
     }

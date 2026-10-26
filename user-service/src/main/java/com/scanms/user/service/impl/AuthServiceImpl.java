@@ -1,7 +1,12 @@
 package com.scanms.user.service.impl;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
 import com.scanms.user.constant.RoleName;
 import com.scanms.user.constant.UserStatus;
+import com.scanms.user.dto.request.GoogleLoginRequest;
 import com.scanms.user.dto.request.LoginRequest;
 import com.scanms.user.dto.request.RegisterRequest;
 import com.scanms.user.dto.response.AuthResponse;
@@ -17,6 +22,7 @@ import com.scanms.user.service.OtpService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,18 +31,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
-import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.client.json.gson.GsonFactory;
-import com.scanms.user.dto.request.GoogleLoginRequest;
-import java.util.Collections;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -84,7 +84,7 @@ public class AuthServiceImpl implements AuthService {
                 "enabled", true,
                 "emailVerified", !emailVerificationEnabled,
                 "firstName", request.firstName(),
-                "lastName",request.lastName(),
+                "lastName", request.lastName(),
                 "requiredActions", emailVerificationEnabled ? List.of("VERIFY_EMAIL") : List.of(),
                 "credentials", List.of(Map.of(
                         "type", "password",
@@ -108,7 +108,8 @@ public class AuthServiceImpl implements AuthService {
                         getUserIdUrl,
                         HttpMethod.GET,
                         new HttpEntity<>(headers),
-                        new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {}
+                        new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                        }
                 );
 
                 if (userSearchResponse.getBody() != null && !userSearchResponse.getBody().isEmpty()) {
@@ -129,7 +130,7 @@ public class AuthServiceImpl implements AuthService {
                             .identitySubject(identitySubject)
                             .username(request.username())
                             .email(request.email())
-                            .fullName(request.lastName()+" "+request.firstName())
+                            .fullName(request.lastName() + " " + request.firstName())
                             .status(UserStatus.ACTIVE)
                             .roles(roles)
                             .build();
@@ -140,6 +141,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đăng ký thất bại: " + e.getMessage());
         }
     }
+
     @Override
     public AuthResponse login(LoginRequest request) {
         String tokenUrl = serverUrl + "/realms/" + realm + "/protocol/openid-connect/token";
@@ -168,7 +170,7 @@ public class AuthServiceImpl implements AuthService {
                         (String) tokenData.get("token_type")
                 );
             }
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
+        } catch (HttpClientErrorException e) {
             String detail = e.getResponseBodyAsString();
             log.warn("Identity provider rejected login, status={}", e.getStatusCode().value());
             if (detail.contains("Account is not fully set up")) {
@@ -176,15 +178,15 @@ public class AuthServiceImpl implements AuthService {
                         "Tài khoản chưa hoàn tất thiết lập trên Keycloak (cần đổi mật khẩu / xác minh email). Liên hệ admin.");
             }
             if (detail.contains("invalid_client") || detail.contains("unauthorized_client") || e.getStatusCode().value() == 401) {
-                throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                         "Dịch vụ đăng nhập chưa sẵn sàng do cấu hình xác thực. Vui lòng liên hệ quản trị viên.");
             }
             if (detail.contains("invalid_grant")) {
                 throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai tên đăng nhập hoặc mật khẩu!");
             }
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ đăng nhập chưa sẵn sàng. Vui lòng thử lại.");
-        } catch (org.springframework.web.client.RestClientException e) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ đăng nhập chưa sẵn sàng. Vui lòng thử lại.");
+        } catch (RestClientException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
         }
         throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đăng nhập thất bại");
     }
@@ -228,7 +230,7 @@ public class AuthServiceImpl implements AuthService {
         if (firstName == null && lastName == null) {
             String[] nameParts = rawFullName != null ? rawFullName.trim().split("\\s+") : new String[0];
             if (nameParts.length >= 2) {
-                lastName = sanitizePersonName(String.join(" ", java.util.Arrays.copyOf(nameParts, nameParts.length - 1)));
+                lastName = sanitizePersonName(String.join(" ", Arrays.copyOf(nameParts, nameParts.length - 1)));
                 firstName = sanitizePersonName(nameParts[nameParts.length - 1]);
             } else if (nameParts.length == 1) {
                 firstName = sanitizePersonName(nameParts[0]);
@@ -257,7 +259,7 @@ public class AuthServiceImpl implements AuthService {
         // 3. Tao user tren Keycloak (ap dung cho ca user hoan toan moi, lan user bi "mo coi" o buoc tren)
         try {
             String adminToken = getAdminAccessToken();
-            String tempPassword = java.util.UUID.randomUUID().toString();
+            String tempPassword = UUID.randomUUID().toString();
 
             String createUserUrl = serverUrl + "/admin/realms/" + realm + "/users";
             HttpHeaders headers = new HttpHeaders();
@@ -287,7 +289,8 @@ public class AuthServiceImpl implements AuthService {
             String getUserIdUrl = serverUrl + "/admin/realms/" + realm + "/users?email=" + email;
             ResponseEntity<List<Map<String, Object>>> userSearchResponse = restTemplate.exchange(
                     getUserIdUrl, HttpMethod.GET, new HttpEntity<>(headers),
-                    new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {});
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                    });
 
             if (userSearchResponse.getBody() == null || userSearchResponse.getBody().isEmpty()) {
                 throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không tìm thấy user vừa tạo trên Keycloak");
@@ -346,7 +349,8 @@ public class AuthServiceImpl implements AuthService {
         body.add("client_secret", clientSecret);
         body.add("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
         body.add("subject_token", adminToken);
-        body.add("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+        // Request both tokens so Google sessions can renew after the access token expires.
+        body.add("requested_token_type", "urn:ietf:params:oauth:token-type:refresh_token");
         body.add("requested_subject", userId);
 
         HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(body, headers);
@@ -503,110 +507,7 @@ public class AuthServiceImpl implements AuthService {
             System.err.println("Không thể gán role [" + roleName + "] cho user trên Keycloak: " + e.getMessage());
         }
     }
-    @Override
-    @Transactional
-    public void grantShopOwnerRole(String userId) {
-        User user = repository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "User not found"));
-        if (user.getStatus() != UserStatus.ACTIVE)
-            throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
-        Role role = roleRepository.findAllByNameIn(List.of(RoleName.SHOP_OWNER)).stream().findFirst()
-                .orElseThrow(() -> new AppException(ErrorCode.CONFLICT, "SHOP_OWNER role is not initialized"));
-        try {
-            String adminToken = getAdminAccessToken();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(adminToken);
-            String base = serverUrl + "/admin/realms/" + realm;
-            Map<?, ?> keycloakRole = restTemplate.exchange(base + "/roles/SHOP_OWNER", HttpMethod.GET,
-                    new HttpEntity<>(headers), Map.class).getBody();
-            if (keycloakRole == null || keycloakRole.get("id") == null)
-                throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "SHOP_OWNER role is missing in Keycloak");
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            restTemplate.postForEntity(base + "/users/" + user.getIdentitySubject() + "/role-mappings/realm",
-                    new HttpEntity<>(List.of(keycloakRole), headers), Void.class);
-            user.getRoles().add(role);
-            repository.save(user);
-        } catch (org.springframework.web.client.RestClientException ex) {
-            throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "Cannot grant SHOP_OWNER role in Keycloak");
-        }
-    }
 
-    @Transactional
-    @Override
-    public void grantKolRole(String userId) {
-        User user = repository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "User not found"));
-        if (user.getStatus() != UserStatus.ACTIVE)
-            throw new AppException(ErrorCode.FORBIDDEN, "Active account required");
-        Role role = roleRepository.findAllByNameIn(List.of(RoleName.KOL_CTV)).stream().findFirst()
-                .orElseThrow(() -> new AppException(ErrorCode.CONFLICT, "KOL_CTV role is not initialized"));
-        try {
-            String adminToken = getAdminAccessToken();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(adminToken);
-            String base = serverUrl + "/admin/realms/" + realm;
-            Map<?, ?> keycloakRole = restTemplate.exchange(base + "/roles/KOL_CTV", HttpMethod.GET,
-                    new HttpEntity<>(headers), Map.class).getBody();
-            if (keycloakRole == null || keycloakRole.get("id") == null)
-                throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "KOL_CTV role is missing in Keycloak");
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            restTemplate.postForEntity(base + "/users/" + user.getIdentitySubject() + "/role-mappings/realm",
-                    new HttpEntity<>(List.of(keycloakRole), headers), Void.class);
-            user.getRoles().add(role);
-            repository.save(user);
-        } catch (org.springframework.web.client.RestClientException ex) {
-            throw new AppException(ErrorCode.KEYCLOAK_COMMUNICATION_ERROR, "Cannot grant KOL_CTV role in Keycloak");
-        }
-    }
-    @Override
-    public void removeRoleFromUser(String userId, String roleName) {
-        String adminToken = getAdminAccessToken();
-
-        try {
-            // 1. Lấy thông tin role
-            String getRoleUrl = serverUrl + "/admin/realms/" + realm + "/roles/" + roleName;
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(adminToken);
-
-            ResponseEntity<Map> roleResponse = restTemplate.exchange(
-                    getRoleUrl, HttpMethod.GET, new HttpEntity<>(headers), Map.class
-            );
-
-            if (roleResponse.getBody() != null) {
-                Map<String, Object> roleData = roleResponse.getBody();
-
-                // 2. Đường dẫn DELETE mapping role của Keycloak
-                String removeRoleUrl = serverUrl + "/admin/realms/" + realm + "/users/" + userId + "/role-mappings/realm";
-                headers.setContentType(MediaType.APPLICATION_JSON);
-
-                List<Map<String, Object>> rolePayload = List.of(roleData);
-
-                // Dùng HttpEntity kết hợp HttpMethod.DELETE vì RestTemplate không hỗ trợ trực tiếp body trong delete()
-                HttpEntity<List<Map<String, Object>>> requestEntity = new HttpEntity<>(rolePayload, headers);
-                restTemplate.exchange(removeRoleUrl, HttpMethod.DELETE, requestEntity, Void.class);
-            }
-        } catch (Exception e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Xóa role thất bại: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public void createNewRole(String roleName) {
-        String adminToken = getAdminAccessToken();
-        String createRoleUrl = serverUrl + "/admin/realms/" + realm + "/roles";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
-
-        Map<String, Object> rolePayload = Map.of(
-                "name", roleName,
-                "description", "Created via Admin API"
-        );
-
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(rolePayload, headers);
-        restTemplate.postForEntity(createRoleUrl, entity, Void.class);
-    }
     @Override
     public void changePassword(String oldPassword, String newPassword) {
         // 1. Lấy thông tin Authentication hiện tại từ SecurityContext
@@ -643,6 +544,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đổi mật khẩu thất bại: " + e.getMessage());
         }
     }
+
     @Override
     public void logout(String refreshToken) {
         String logoutUrl = serverUrl + "/realms/" + realm + "/protocol/openid-connect/logout";
@@ -663,6 +565,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đăng xuất thất bại: " + e.getMessage());
         }
     }
+
     @Override
     public AuthResponse refreshToken(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank())
@@ -693,14 +596,14 @@ public class AuthServiceImpl implements AuthService {
                         .build();
             }
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không thể làm mới token");
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
+        } catch (HttpClientErrorException e) {
             // Only invalid_grant is a rejected session. A bad client configuration
             // or provider outage must not erase the user's local session.
             if (e.getResponseBodyAsString().contains("\"invalid_grant\""))
                 throw new AppException(ErrorCode.UNAUTHENTICATED, "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa thể gia hạn đăng nhập. Vui lòng thử lại.");
-        } catch (org.springframework.web.client.RestClientException e) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa thể gia hạn đăng nhập. Vui lòng thử lại.");
+        } catch (RestClientException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa kết nối được dịch vụ đăng nhập. Vui lòng thử lại.");
         }
     }
 }

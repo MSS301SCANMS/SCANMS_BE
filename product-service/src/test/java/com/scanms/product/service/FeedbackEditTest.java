@@ -19,13 +19,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mapstruct.factory.Mappers;
 
 class FeedbackEditTest {
     private final FeedbackRepository feedbacks = mock(FeedbackRepository.class);
     private final ProductRepository products = mock(ProductRepository.class);
     private final StoreRepository stores = mock(StoreRepository.class);
     private final ProductAccess access = mock(ProductAccess.class);
-    private final FeedbackServiceImpl service = new FeedbackServiceImpl(feedbacks, new FeedbackMapper(), access, products, stores);
+    private final FeedbackServiceImpl service = new FeedbackServiceImpl(feedbacks, Mappers.getMapper(FeedbackMapper.class), access, products, stores);
     private final Feedback review = Feedback.builder().feedbackId("review-1").customerId("buyer-1")
             .productId("product-1").orderItemId("item-1").rating(4).status(FeedbackStatus.ACTIVE).build();
     private final Product product = Product.builder().productId("product-1").storeId("store-1").build();

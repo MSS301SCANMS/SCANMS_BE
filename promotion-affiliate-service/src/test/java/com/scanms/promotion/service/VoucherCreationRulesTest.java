@@ -18,11 +18,12 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mapstruct.factory.Mappers;
 
 class VoucherCreationRulesTest {
     private final VoucherRepository vouchers = mock(VoucherRepository.class);
     private final VoucherAccess access = mock(VoucherAccess.class);
-    private final VoucherServiceImpl service = new VoucherServiceImpl(vouchers, new VoucherMapper(), access);
+    private final VoucherServiceImpl service = new VoucherServiceImpl(vouchers, Mappers.getMapper(VoucherMapper.class), access);
 
     private CreateVoucherRequest request(VoucherIssuerType issuer, VoucherScopeType scope, Map<String, Object> funding) {
         return new CreateVoucherRequest("save10", issuer, scope == VoucherScopeType.PLATFORM ? null : "store-1",

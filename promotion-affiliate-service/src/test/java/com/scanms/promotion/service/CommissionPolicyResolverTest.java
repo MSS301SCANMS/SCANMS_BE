@@ -16,6 +16,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import org.mapstruct.factory.Mappers;
 
 /**
  * DoD: priority COLLABORATOR → LIVESTREAM → PRODUCT → STORE → PLATFORM;
@@ -29,7 +30,7 @@ class CommissionPolicyResolverTest {
     @BeforeEach
     void setUp() {
         repository = mock(CommissionPolicyRepository.class);
-        service = new CommissionPolicyServiceImpl(repository, new CommissionPolicyMapper());
+        service = new CommissionPolicyServiceImpl(repository, Mappers.getMapper(CommissionPolicyMapper.class));
         when(repository.findByCollaboratorIdAndScopeTypeAndStatusOrderByPriorityDesc(any(), any(), any()))
                 .thenReturn(List.of());
         when(repository.findByLivestreamIdAndScopeTypeAndStatusOrderByPriorityDesc(any(), any(), any()))

@@ -2,10 +2,13 @@ package com.scanms.payment.service;
 
 import com.scanms.payment.dto.request.RegisterBankAccountRequest;
 import com.scanms.payment.dto.response.BankAccountResponse;
-import java.util.*;
+
+import java.util.List;
 
 public interface BankAccountService {
     BankAccountResponse create(RegisterBankAccountRequest request);
+
     BankAccountResponse getById(String id);
+
     List<BankAccountResponse> findAll();
 }

@@ -16,18 +16,22 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.*;
+import com.scanms.order.constant.OrderStatus;
+import com.scanms.order.constant.SellerOrderStatus;
+import com.scanms.order.repository.SellerOrderRepository;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
 public class OrderController {
     private final OrderService service;
-    private final com.scanms.order.repository.SellerOrderRepository sellerOrders;
+    private final SellerOrderRepository sellerOrders;
 
     @Value("${clients.user.url:http://localhost:8081}")
     private String userUrl;
 
-    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping("/checkout")
     public ResponseEntity<ApiResponse<CheckoutResponse>> checkout(
             @Valid @RequestBody CheckoutRequest request,
@@ -78,7 +82,7 @@ public class OrderController {
     private String resolveBusinessUserId(Jwt jwt) {
         try {
             Map<?, ?> envelope = RestClient.create().get()
-                    .uri(userUrl + "/api/v1/users/me")
+                    .uri(userUrl + "/api/v1/users")
                     .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
                     .retrieve()
                     .body(Map.class);
@@ -103,7 +107,7 @@ public class OrderController {
         return ApiResponse.success(service.getCheckoutDetails(id));
     }
 
-    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
     public ResponseEntity<ApiResponse<OrderResponse>> create(@Valid @RequestBody CreateOrderRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(service.create(request)));
@@ -114,15 +118,15 @@ public class OrderController {
         return ApiResponse.success(service.getById(id));
     }
 
-    @org.springframework.security.access.prepost.PreAuthorize("@financeBoundary.canWrite(authentication)")
+    @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @GetMapping("/{id}/voucher-restoration-eligibility")
     public ApiResponse<Map<String, Boolean>> voucherRestorationEligibility(@PathVariable String id) {
         var order = service.getById(id);
         boolean beforeDelivery = sellerOrders.findAll().stream()
                 .filter(seller -> id.equals(seller.getOrderId()))
-                .noneMatch(seller -> java.util.Set.of(com.scanms.order.constant.SellerOrderStatus.DELIVERED,
-                        com.scanms.order.constant.SellerOrderStatus.COMPLETED).contains(seller.getStatus()));
-        return ApiResponse.success(Map.of("eligible", order.status() == com.scanms.order.constant.OrderStatus.CANCELLED && beforeDelivery));
+                .noneMatch(seller -> Set.of(SellerOrderStatus.DELIVERED,
+                        SellerOrderStatus.COMPLETED).contains(seller.getStatus()));
+        return ApiResponse.success(Map.of("eligible", order.status() == OrderStatus.CANCELLED && beforeDelivery));
     }
 
     @GetMapping

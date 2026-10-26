@@ -4,6 +4,7 @@ import com.scanms.product.constant.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.io.Serializable;
 
 public record StoreResponse(
         String storeId,
@@ -17,4 +18,4 @@ public record StoreResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         Long version
-) implements java.io.Serializable {}
+) implements Serializable {}

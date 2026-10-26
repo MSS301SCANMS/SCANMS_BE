@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import com.scanms.promotion.entity.VoucherRedemption;
 
 @Service
 @RequiredArgsConstructor
@@ -37,7 +38,7 @@ public class VoucherRedemptionServiceImpl implements VoucherRedemptionService {
         return repository.findAll().stream().filter(this::canView).map(mapper::toResponse).toList();
     }
 
-    private boolean canView(com.scanms.promotion.entity.VoucherRedemption redemption) {
+    private boolean canView(VoucherRedemption redemption) {
         if (access.isManager() || redemption.getUserId().equals(access.userId())) return true;
         return vouchers.findById(redemption.getVoucherId())
                 .map(voucher -> access.ownsStore(voucher.getStoreId())).orElse(false);

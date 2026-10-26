@@ -27,7 +27,8 @@ public class CatalogCacheInvalidator {
     static final List<String> STORE_CACHES = List.of(
             CacheNames.STORES_ALL, CacheNames.PUBLIC_STORES, CacheNames.PUBLIC_PRODUCTS, CacheNames.ADMIN_STATS_STORES);
     static final List<String> PRODUCT_CACHES = List.of(
-            CacheNames.PRODUCTS_ALL, CacheNames.PUBLIC_PRODUCTS, CacheNames.PUBLIC_CATEGORIES, CacheNames.ADMIN_STATS_PRODUCTS);
+            CacheNames.PRODUCTS_ALL, CacheNames.PUBLIC_PRODUCTS, CacheNames.PUBLIC_CATEGORIES,
+            CacheNames.PUBLIC_STORES, CacheNames.ADMIN_STATS_PRODUCTS);
 
     /** Entity listener do Hibernate tạo nên truy cập bean qua tham chiếu tĩnh này. */
     private static volatile CatalogCacheInvalidator instance;

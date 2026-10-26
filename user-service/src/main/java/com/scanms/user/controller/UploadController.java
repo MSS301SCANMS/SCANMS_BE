@@ -4,7 +4,10 @@ import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
 import com.scanms.user.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -20,7 +23,8 @@ public class UploadController {
     @PostMapping("/image")
     public ApiResponse<Map<String, Object>> uploadImage(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "folder", defaultValue = "scanms/images") String folder) throws IOException {
+            @RequestParam(value = "folder", defaultValue = "scanms/images") String folder)
+            throws IOException {
 
         if (file.isEmpty()) {
             throw new IllegalArgumentException("File khong duoc de trong");
@@ -55,7 +59,8 @@ public class UploadController {
     @PostMapping("/video")
     public ApiResponse<Map<String, Object>> uploadVideo(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "folder", defaultValue = "scanms/videos") String folder) throws IOException {
+            @RequestParam(value = "folder", defaultValue = "scanms/videos") String folder)
+            throws IOException {
 
         if (file.isEmpty()) {
             throw new IllegalArgumentException("File khong duoc de trong");
