@@ -17,6 +17,21 @@ spring:
       # Timeout ngắn: Redis lỗi thì cache bị bỏ qua nhanh, request vẫn đọc DB.
       timeout: ${REDIS_TIMEOUT:500ms}
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    admin:
+      fail-fast: false
+      properties:
+        # Broker tắt thì KafkaAdmin bỏ cuộc nhanh, không chặn việc khởi động service.
+        request.timeout.ms: 2000
+        default.api.timeout.ms: 2000
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: ${KAFKA_MAX_BLOCK_MS:3000}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:${USER_DB_PORT:5433}/${USER_DB_NAME:user_db}}
     username: ${DB_USERNAME:${POSTGRES_USER:postgres}}
@@ -38,8 +53,8 @@ spring:
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
+    username: ${MAIL_USERNAME:demo@example.com}
+    password: ${MAIL_PASSWORD:demo}
     properties:
       mail:
         smtp:
@@ -66,6 +81,6 @@ google:
   client-id: ${GOOGLE_CLIENT_ID:281102364785-etm73id59t8qvrbgrd16gpqg12plr21b.apps.googleusercontent.com}
 
 cloudinary:
-  cloud-name: ${CLOUDINARY_CLOUD_NAME}
-  api-key: ${CLOUDINARY_API_KEY}
-  api-secret: ${CLOUDINARY_API_SECRET}
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}
+  api-key: ${CLOUDINARY_API_KEY:demo}
+  api-secret: ${CLOUDINARY_API_SECRET:demo}

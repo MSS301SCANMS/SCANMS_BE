@@ -1,6 +1,7 @@
 package com.scanms.product.dto.request;
 
 import jakarta.validation.constraints.*;
+
 import java.time.Instant;
 
 public record CreateLiveOfferRequest(
@@ -10,4 +11,5 @@ public record CreateLiveOfferRequest(
         @NotNull @Min(1) @Max(100000) Long quantityLimit,
         Instant startsAt,
         Instant endsAt
-) {}
+) {
+}

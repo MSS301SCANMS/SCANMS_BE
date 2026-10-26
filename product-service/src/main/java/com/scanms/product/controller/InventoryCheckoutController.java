@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.json.JsonMapper;
+
 import java.time.Instant;
 import java.util.*;
 
@@ -29,15 +30,20 @@ public class InventoryCheckoutController {
 
     public record Line(
             @NotBlank String productId, String variantId, @Min(1) @Max(1000) int quantity, String sourceLivestreamId,
-            @Size(max=3000) String livePurchaseToken) {
-        public Line(String productId,String variantId,int quantity,String liveId){this(productId,variantId,quantity,liveId,null);}
+            @Size(max = 3000) String livePurchaseToken) {
+        public Line(String productId, String variantId, int quantity, String liveId) {
+            this(productId, variantId, quantity, liveId, null);
+        }
+
         public Line(String productId, String variantId, int quantity) {
             this(productId, variantId, quantity, null, null);
         }
     }
 
     public record Input(@NotEmpty @Size(max = 100) List<@Valid Line> items, String buyerIdentitySubject) {
-        public Input(List<Line> items){this(items,null);}
+        public Input(List<Line> items) {
+            this(items, null);
+        }
     }
 
     private void internal(Jwt jwt) {
@@ -84,15 +90,19 @@ public class InventoryCheckoutController {
                 .sorted(Comparator.comparing(Line::productId).thenComparing(l -> Objects.toString(l.variantId(), "")))
                 .toList();
         if (requested.stream()
-                        .map(l -> l.productId() + ":" + Objects.toString(l.variantId(), ""))
-                        .distinct()
-                        .count()
+                .map(l -> l.productId() + ":" + Objects.toString(l.variantId(), ""))
+                .distinct()
+                .count()
                 != requested.size()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Merge duplicate cart lines before checkout");
         }
-        String hash = JsonMapper.builder().build().writeValueAsString(requested.stream().map(line->{
-            var fields=new LinkedHashMap<String,Object>();fields.put("productId",line.productId());fields.put("variantId",line.variantId());
-            fields.put("quantity",line.quantity());fields.put("sourceLivestreamId",line.sourceLivestreamId());return fields;
+        String hash = JsonMapper.builder().build().writeValueAsString(requested.stream().map(line -> {
+            var fields = new LinkedHashMap<String, Object>();
+            fields.put("productId", line.productId());
+            fields.put("variantId", line.variantId());
+            fields.put("quantity", line.quantity());
+            fields.put("sourceLivestreamId", line.sourceLivestreamId());
+            return fields;
         }).toList());
         CheckoutReservation existing =
                 preview ? null : em.find(CheckoutReservation.class, orderId, LockModeType.PESSIMISTIC_WRITE);
@@ -104,12 +114,13 @@ public class InventoryCheckoutController {
             return ApiResponse.success(Map.of("orderId", orderId, "lines", existing.getLines()));
         }
         List<Map<String, Object>> lines = new ArrayList<>();
-        Map<String,Livestream> sources=new HashMap<>();
-        for(String liveId:requested.stream().map(Line::sourceLivestreamId).filter(Objects::nonNull).distinct().sorted().toList())
-            sources.put(liveId,em.find(Livestream.class,liveId,LockModeType.PESSIMISTIC_WRITE));
+        Map<String, Livestream> sources = new HashMap<>();
+        for (String liveId : requested.stream().map(Line::sourceLivestreamId).filter(Objects::nonNull).distinct().sorted().toList())
+            sources.put(liveId, em.find(Livestream.class, liveId, LockModeType.PESSIMISTIC_WRITE));
         for (Line line : requested) {
             Product p = products.get(line.productId());
-            if(p.getStatus()!=ProductStatus.ACTIVE)throw new ResponseStatusException(HttpStatus.CONFLICT,"Product is not available");
+            if (p.getStatus() != ProductStatus.ACTIVE)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Product is not available");
             Store store = em.find(Store.class, p.getStoreId());
             if (store == null || store.getApprovalStatus() != StoreStatus.APPROVED) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Store is not approved");
@@ -149,18 +160,19 @@ public class InventoryCheckoutController {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Variant or stock is unavailable");
             }
             if (!preview) variant.setStockQuantity(variant.getStockQuantity() - line.quantity());
-            var liveOffer=line.sourceLivestreamId()==null?Map.<String,Object>of():livePricing.apply(sources.get(line.sourceLivestreamId()),variant.getVariantId(),line.quantity(),!preview,line.livePurchaseToken(),input.buyerIdentitySubject());
-            long unitPrice=liveOffer.isEmpty()?variant.getPriceVnd():((Number)liveOffer.get("unitPriceVnd")).longValue();
+            var liveOffer = line.sourceLivestreamId() == null ? Map.<String, Object>of() : livePricing.apply(sources.get(line.sourceLivestreamId()), variant.getVariantId(), line.quantity(), !preview, line.livePurchaseToken(), input.buyerIdentitySubject());
+            long unitPrice = liveOffer.isEmpty() ? variant.getPriceVnd() : ((Number) liveOffer.get("unitPriceVnd")).longValue();
             Map<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("productId", p.getProductId());
             snapshot.put("variantId", variant.getVariantId());
             snapshot.put("quantity", line.quantity());
             snapshot.put("unitPriceVnd", unitPrice);
             snapshot.put("grossAmountVnd", Math.multiplyExact(unitPrice, line.quantity()));
-            snapshot.put("sku",variant.getSku());
-            if(liveOffer.get("sourceLiveOfferId")!=null)snapshot.put("sourceLiveOfferId",liveOffer.get("sourceLiveOfferId"));
-            var images=em.createQuery("select i.imageUrl from ProductImage i where i.productId=:id order by i.primaryImage desc,i.sortOrder asc",String.class).setParameter("id",p.getProductId()).setMaxResults(1).getResultList();
-            if(!images.isEmpty())snapshot.put("imageUrl",images.getFirst());
+            snapshot.put("sku", variant.getSku());
+            if (liveOffer.get("sourceLiveOfferId") != null)
+                snapshot.put("sourceLiveOfferId", liveOffer.get("sourceLiveOfferId"));
+            var images = em.createQuery("select i.imageUrl from ProductImage i where i.productId=:id order by i.primaryImage desc,i.sortOrder asc", String.class).setParameter("id", p.getProductId()).setMaxResults(1).getResultList();
+            if (!images.isEmpty()) snapshot.put("imageUrl", images.getFirst());
             snapshot.put("storeId", p.getStoreId());
             snapshot.put("storeName", store.getName());
             snapshot.put("name", p.getName());
@@ -201,7 +213,8 @@ public class InventoryCheckoutController {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Committed stock cannot be released");
         }
         for (Map<String, Object> line : r.getLines().stream()
-                .sorted(Comparator.comparing(l -> Objects.toString(l.get("sourceLivestreamId"),""))).toList())livePricing.release(line);
+                .sorted(Comparator.comparing(l -> Objects.toString(l.get("sourceLivestreamId"), ""))).toList())
+            livePricing.release(line);
         for (Map<String, Object> line : r.getLines().stream()
                 .sorted(Comparator.comparing(l -> l.get("variantId").toString()))
                 .toList()) {
@@ -213,29 +226,34 @@ public class InventoryCheckoutController {
     }
 
     @PostMapping("/{orderId}/cancel")
-    public ApiResponse<Map<String,Object>> cancel(@PathVariable String orderId,@AuthenticationPrincipal Jwt jwt) {
+    public ApiResponse<Map<String, Object>> cancel(@PathVariable String orderId, @AuthenticationPrincipal Jwt jwt) {
         internal(jwt);
-        CheckoutReservation reservation=em.find(CheckoutReservation.class,orderId);
-        if(reservation==null||"RELEASED".equals(reservation.getStatus()))return ApiResponse.success(Map.of("cancelled",true));
+        CheckoutReservation reservation = em.find(CheckoutReservation.class, orderId);
+        if (reservation == null || "RELEASED".equals(reservation.getStatus()))
+            return ApiResponse.success(Map.of("cancelled", true));
         // Keep the product -> reservation lock order used by reserve/release.
-        for(String id:reservation.getLines().stream().map(l->l.get("productId").toString()).distinct().sorted().toList())
-            em.find(Product.class,id,LockModeType.PESSIMISTIC_WRITE);
-        em.refresh(reservation,LockModeType.PESSIMISTIC_WRITE);
-        if("RELEASED".equals(reservation.getStatus()))return ApiResponse.success(Map.of("cancelled",true));
-        if("COMMITTED".equals(reservation.getStatus())) {
+        for (String id : reservation.getLines().stream().map(l -> l.get("productId").toString()).distinct().sorted().toList())
+            em.find(Product.class, id, LockModeType.PESSIMISTIC_WRITE);
+        em.refresh(reservation, LockModeType.PESSIMISTIC_WRITE);
+        if ("RELEASED".equals(reservation.getStatus())) return ApiResponse.success(Map.of("cancelled", true));
+        if ("COMMITTED".equals(reservation.getStatus())) {
             try {
-                var response=cancellations.eligibility("Bearer "+jwt.getTokenValue(),orderId);
-                if(response==null||!(response.get("result") instanceof Map<?,?> result)||!Boolean.TRUE.equals(result.get("eligible")))
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,"Committed stock can only be restored before delivery cancellation");
-            }catch(feign.FeignException ex){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Cannot verify cancellation");}
-        }else if(!"RESERVED".equals(reservation.getStatus()))throw new ResponseStatusException(HttpStatus.CONFLICT,"Unknown reservation state");
-        for(var line:reservation.getLines().stream().sorted(Comparator.comparing(l->Objects.toString(l.get("sourceLivestreamId"),""))).toList())livePricing.release(line);
-        for(var line:reservation.getLines().stream().sorted(Comparator.comparing(l->l.get("variantId").toString())).toList()){
-            var variant=em.find(ProductVariant.class,line.get("variantId").toString(),LockModeType.PESSIMISTIC_WRITE);
-            variant.setStockQuantity(Math.addExact(variant.getStockQuantity(),((Number)line.get("quantity")).intValue()));
+                var response = cancellations.eligibility("Bearer " + jwt.getTokenValue(), orderId);
+                if (response == null || !(response.get("result") instanceof Map<?, ?> result) || !Boolean.TRUE.equals(result.get("eligible")))
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Committed stock can only be restored before delivery cancellation");
+            } catch (feign.FeignException ex) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cannot verify cancellation");
+            }
+        } else if (!"RESERVED".equals(reservation.getStatus()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Unknown reservation state");
+        for (var line : reservation.getLines().stream().sorted(Comparator.comparing(l -> Objects.toString(l.get("sourceLivestreamId"), ""))).toList())
+            livePricing.release(line);
+        for (var line : reservation.getLines().stream().sorted(Comparator.comparing(l -> l.get("variantId").toString())).toList()) {
+            var variant = em.find(ProductVariant.class, line.get("variantId").toString(), LockModeType.PESSIMISTIC_WRITE);
+            variant.setStockQuantity(Math.addExact(variant.getStockQuantity(), ((Number) line.get("quantity")).intValue()));
         }
         reservation.setStatus("RELEASED");
-        return ApiResponse.success(Map.of("cancelled",true));
+        return ApiResponse.success(Map.of("cancelled", true));
     }
 
     @PostMapping("/{orderId}/commit")

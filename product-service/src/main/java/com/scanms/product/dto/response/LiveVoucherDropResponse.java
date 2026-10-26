@@ -7,4 +7,5 @@ public record LiveVoucherDropResponse(
         String id, String voucherId, String code, String issuerType, String benefitType,
         String discountType, BigDecimal value, Long cap, Long minimumSubtotal,
         Long quantity, Instant releaseAt, Instant expiresAt, String status
-) {}
+) {
+}

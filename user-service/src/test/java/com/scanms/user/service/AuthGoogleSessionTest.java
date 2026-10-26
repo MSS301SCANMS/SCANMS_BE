@@ -19,7 +19,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 class AuthGoogleSessionTest {
     @Test void googleExchangeIssuesRefreshCredentialsThatCanRenewTheSession() {
-        var service = new AuthServiceImpl(mock(UserRepository.class), mock(RoleRepository.class), mock(OtpService.class), mock(MailService.class));
+        var service = new AuthServiceImpl(mock(UserRepository.class), mock(RoleRepository.class), mock(OtpService.class), mock(MailService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
         ReflectionTestUtils.setField(service, "serverUrl", "https://identity.example.test");
         ReflectionTestUtils.setField(service, "realm", "fixture");
         ReflectionTestUtils.setField(service, "clientId", "fixture-client");
