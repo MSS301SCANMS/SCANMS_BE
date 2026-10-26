@@ -55,6 +55,7 @@ class CheckoutIntegrationTest {
     static final AtomicInteger reserves=new AtomicInteger(); static final AtomicBoolean failNext=new AtomicBoolean();
     static final AtomicBoolean multiStore=new AtomicBoolean();
     static final AtomicInteger voucherCommits=new AtomicInteger();
+    static final AtomicInteger productCancels=new AtomicInteger(),voucherCancels=new AtomicInteger();
     static final HttpServer server=server();
     final Jwt jwt=Jwt.withTokenValue("customer-token").header("alg","RS256").subject("identity").build();
     static HttpServer server() {
@@ -63,6 +64,7 @@ class CheckoutIntegrationTest {
             server.createContext("/token",exchange -> { byte[] body="{\"access_token\":\"order-service-token\"}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             server.createContext("/user/api/v1/users",exchange -> { byte[] body="{\"result\":{\"userId\":\"customer\",\"identitySubject\":\"identity\",\"status\":\"ACTIVE\"}}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             server.createContext("/product/api/v1/inventory/reservations",exchange -> {
+                if(exchange.getRequestURI().getPath().endsWith("/cancel"))productCancels.incrementAndGet();
                 reserves.incrementAndGet(); boolean fail=failNext.getAndSet(false);
                 int status=fail?503:"Bearer order-service-token".equals(exchange.getRequestHeaders().getFirst("Authorization"))?200:403;
                 String second=multiStore.get()?",{\"productId\":\"product-b\",\"variantId\":\"variant-b\",\"storeId\":\"store-b\",\"storeName\":\"Shop B\",\"name\":\"Product B\",\"quantity\":1,\"unitPriceVnd\":25000,\"grossAmountVnd\":25000}":"";
@@ -72,6 +74,7 @@ class CheckoutIntegrationTest {
             server.createContext("/promotion/api/v1/checkout-vouchers",exchange -> {
                 assertEquals("Bearer order-service-token",exchange.getRequestHeaders().getFirst("Authorization"));
                 if(exchange.getRequestURI().getPath().endsWith("/commit")) voucherCommits.incrementAndGet();
+                else if(exchange.getRequestURI().getPath().endsWith("/cancel"))voucherCancels.incrementAndGet();
                 else assertEquals("30000",exchange.getRequestHeaders().getFirst("X-Shipping-Fee-Per-Store-Vnd"));
                 String request=new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8);
                 if(request.contains("INVALID")) {
@@ -118,6 +121,18 @@ class CheckoutIntegrationTest {
         assertEquals(0L,items.findAll().getFirst().getDiscountAmountVnd()); assertEquals(0,allocations.count());
         assertEquals(result.get("orderId"),checkout.checkout(input,jwt).get("orderId"));
         assertEquals(1,items.count());
+    }
+    @Test void paidOrderCancellationIsDispatchedEvenAfterResourcesWereCommitted(){
+        productCancels.set(0);voucherCancels.set(0);
+        org.springframework.test.util.ReflectionTestUtils.setField(shippingPolicy,"fee",30000L);
+        var input=new CheckoutService.Input("paid-cancel-dispatch","Customer","0900000000","Delivery address","WALLET",true,"SHIP",null,List.of(new CheckoutService.Line("product","variant",2)),30000L);
+        String id=checkout.checkout(input,jwt).get("orderId").toString();
+        var order=orders.findById(id).orElseThrow();order.setStatus(com.scanms.order.constant.OrderStatus.PAID);orders.saveAndFlush(order);
+        financeDispatch.dispatch();assertEquals("commit",orders.findById(id).orElseThrow().getSagaState().get("resourceOutcome"));
+        order=orders.findById(id).orElseThrow();order.setStatus(com.scanms.order.constant.OrderStatus.CANCELLED);orders.saveAndFlush(order);
+        for(var seller:sellers.findByOrderId(id)){seller.setStatus(com.scanms.order.constant.SellerOrderStatus.CANCELLED);sellers.saveAndFlush(seller);}
+        financeDispatch.dispatch();financeDispatch.dispatch();
+        assertEquals(1,productCancels.get());assertEquals(1,voucherCancels.get());assertEquals("cancel",orders.findById(id).orElseThrow().getSagaState().get("resourceOutcome"));
     }
     @Test void verifiedVideoClickIsPersistedOnceAndExpiredClicksDoNotBlockPurchase(){
         var input=new CheckoutService.Input("video-attribution","Customer","0900000000","Delivery address","PAYOS",true,null,null,

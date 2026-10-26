@@ -338,8 +338,8 @@ public class CheckoutVoucherController {
         CheckoutVoucher r = em.find(CheckoutVoucher.class, orderId, LockModeType.PESSIMISTIC_WRITE);
         if (r == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Voucher reservation not found");
         var rows = reservationRedemptions(r);
-        if ("RELEASED".equals(r.getStatus()) && rows.stream().allMatch(x -> x.getStatus() == VoucherRedemptionStatus.RESTORED)) {
-            return ApiResponse.success(Map.of("restored", true));
+        if ("RELEASED".equals(r.getStatus()) && rows.stream().allMatch(x -> Set.of(VoucherRedemptionStatus.RESTORED,VoucherRedemptionStatus.CANCELLED).contains(x.getStatus()))) {
+            return ApiResponse.success(Map.of("restored", rows.stream().anyMatch(x->x.getStatus()==VoucherRedemptionStatus.RESTORED)));
         }
         if (!"COMMITTED".equals(r.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only a used voucher can be restored");
@@ -361,7 +361,23 @@ public class CheckoutVoucherController {
         }
         r.setStatus("RELEASED");
         if(rows.stream().anyMatch(x->x.getStatus()!=VoucherRedemptionStatus.USED)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Only used vouchers can be restored");
-        rows.forEach(redemption -> { redemption.setStatus(VoucherRedemptionStatus.RESTORED); redemption.setCancelledAt(Instant.now()); });
-        return ApiResponse.success(Map.of("restored", true));
+        var now=LocalDateTime.now(ZoneOffset.UTC);
+        rows.forEach(redemption -> {
+            var voucher=em.find(Voucher.class,redemption.getVoucherId());
+            boolean valid=voucher!=null&&voucher.getValidFrom()!=null&&voucher.getValidUntil()!=null
+                    &&!now.isBefore(voucher.getValidFrom())&&now.isBefore(voucher.getValidUntil());
+            redemption.setStatus(valid?VoucherRedemptionStatus.RESTORED:VoucherRedemptionStatus.CANCELLED);
+            redemption.setCancelledAt(Instant.now());
+        });
+        return ApiResponse.success(Map.of("restored",rows.stream().anyMatch(x->x.getStatus()==VoucherRedemptionStatus.RESTORED)));
+    }
+
+    @PostMapping("/{orderId}/cancel")
+    public ApiResponse<Map<String,Object>> cancel(@PathVariable String orderId,@AuthenticationPrincipal Jwt jwt) {
+        internal(jwt);
+        var reservation=em.find(CheckoutVoucher.class,orderId,LockModeType.PESSIMISTIC_WRITE);
+        if(reservation==null||"RELEASED".equals(reservation.getStatus()))return ApiResponse.success(Map.of("cancelled",true));
+        if("RESERVED".equals(reservation.getStatus()))return release(orderId,jwt);
+        return restore(orderId,jwt);
     }
 }

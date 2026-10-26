@@ -41,14 +41,15 @@ public class ProductServiceImpl implements ProductService {
 
     @Transactional(readOnly = true)
     public ProductResponse getById(String id) {
-        return repository.findById(id).map(mapper::toResponse)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found: " + id));
+        var product=repository.findById(id).orElseThrow(()->new AppException(ErrorCode.RESOURCE_NOT_FOUND,"Product not found: "+id));
+        access.requireReadableStore(product.getStoreId());
+        return mapper.toResponse(product);
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(CacheNames.PRODUCTS_ALL)
     public List<ProductResponse> findAll() {
-        return repository.findAll().stream().map(mapper::toResponse).toList();
+        var rows=access.canReadAllCatalog()?repository.findAll():repository.findByStoreIdIn(access.readableStoreIds());
+        return rows.stream().map(mapper::toResponse).toList();
     }
 
     public ProductResponse update(String id, UpdateProductRequest request) {

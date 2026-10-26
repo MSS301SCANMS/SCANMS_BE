@@ -111,12 +111,14 @@ public class VoucherServiceImpl implements VoucherService {
 
     @Transactional(readOnly = true)
     public VoucherResponse getById(String id) {
-        return repository.findById(id).map(mapper::toResponse)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Voucher not found: " + id));
+        var voucher=repository.findById(id).orElseThrow(()->new AppException(ErrorCode.RESOURCE_NOT_FOUND,"Voucher not found: "+id));
+        if(!access.canReadAllVouchers()&&(voucher.getStoreId()==null||!access.ownedStoreIds().contains(voucher.getStoreId())))throw new AppException(ErrorCode.FORBIDDEN);
+        return mapper.toResponse(voucher);
     }
 
     @Transactional(readOnly = true)
     public List<VoucherResponse> findAll() {
-        return repository.findAll().stream().map(mapper::toResponse).toList();
+        boolean all=access.canReadAllVouchers();var owned=all?Set.<String>of():access.ownedStoreIds();
+        return repository.findAll().stream().filter(v->all||(v.getStoreId()!=null&&owned.contains(v.getStoreId()))).map(mapper::toResponse).toList();
     }
 }

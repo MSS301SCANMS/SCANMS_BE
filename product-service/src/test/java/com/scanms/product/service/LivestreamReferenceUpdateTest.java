@@ -22,7 +22,8 @@ class LivestreamReferenceUpdateTest {
     private final ProductAccess access = mock(ProductAccess.class);
     private final ProductRepository products = mock(ProductRepository.class);
     private final LivestreamServiceImpl service = new LivestreamServiceImpl(livestreams,
-            Mappers.getMapper(LivestreamMapper.class), access, products);
+            Mappers.getMapper(LivestreamMapper.class), access, products,
+            mock(com.scanms.product.client.LivestreamAffiliateClient.class));
 
     @Test void sellerCanUpdateParticipantsAndApprovedCollaboratorReferences() {
         var live = Livestream.builder().livestreamId("live-1").storeId("store-1")
@@ -36,7 +37,8 @@ class LivestreamReferenceUpdateTest {
 
         var result = service.update("live-1", request);
 
-        assertEquals(participants, result.participantRefs());
+        assertEquals(participants.get("hostIds"), result.participantRefs().get("hostIds"));
+        assertEquals("NOT_REQUIRED", result.participantRefs().get("inviteStatus"));
         assertEquals(collaborators, result.collaboratorRefs());
         assertEquals("New description", result.description());
         assertEquals(LivestreamStatus.SCHEDULED, result.status());

@@ -75,8 +75,9 @@ class PublicFashionCatalogTest {
         assertEquals(7L, live.get("stockQuantity"));
         assertEquals(3, ((List<?>) live.get("variants")).size());
         when(variants.findByProductIdIn(List.of("product"))).thenReturn(List.of());
-        // Legacy stock remains supported only when no canonical variants exist.
-        assertEquals(999L, controller.stock("product").result().get("stockQuantity"));
+        // Legacy JSON never advertises purchasable stock without a canonical variant.
+        assertEquals(0L, controller.stock("product").result().get("stockQuantity"));
+        assertEquals(false, catalog.productDetails(product,shop).get("canPurchase"));
     }
 
     @Test void unapprovedStoresCannotBePurchasedAndAreNotListedAsApproved() {
