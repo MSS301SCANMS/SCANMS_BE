@@ -11,5 +11,7 @@ public interface InventoryCheckoutService {
 
     Map<String, Object> release(String orderId, Jwt jwt);
 
+    Map<String, Object> cancel(String orderId, Jwt jwt);
+
     Map<String, Object> commit(String orderId, Jwt jwt);
 }

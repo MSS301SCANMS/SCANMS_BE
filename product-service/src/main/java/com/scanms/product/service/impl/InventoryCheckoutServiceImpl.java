@@ -1,5 +1,6 @@
 package com.scanms.product.service.impl;
 
+import com.scanms.product.client.OrderCancellationClient;
 import com.scanms.product.constant.*;
 import com.scanms.product.dto.request.InventoryReservationInput;
 import com.scanms.product.dto.request.InventoryReservationLine;
@@ -21,6 +22,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Transactional
 public class InventoryCheckoutServiceImpl implements InventoryCheckoutService {
     private final EntityManager em;
+    private final OrderCancellationClient cancellations;
 
     private void internal(Jwt jwt) {
         var roles = new HashSet<String>();
@@ -182,6 +184,45 @@ public class InventoryCheckoutServiceImpl implements InventoryCheckoutService {
         }
         r.setStatus("RELEASED");
         return Map.of("released", true);
+    }
+
+    @Override
+    public Map<String, Object> cancel(String orderId, Jwt jwt) {
+        internal(jwt);
+        CheckoutReservation reservation = em.find(CheckoutReservation.class, orderId);
+        if (reservation == null || "RELEASED".equals(reservation.getStatus()))
+            return Map.of("cancelled", true);
+        for (String id : reservation.getLines().stream()
+                .map(l -> l.get("productId").toString())
+                .distinct()
+                .sorted()
+                .toList())
+            em.find(Product.class, id, LockModeType.PESSIMISTIC_WRITE);
+        em.refresh(reservation, LockModeType.PESSIMISTIC_WRITE);
+        if ("RELEASED".equals(reservation.getStatus())) return Map.of("cancelled", true);
+        if ("COMMITTED".equals(reservation.getStatus())) {
+            try {
+                var response = cancellations.eligibility("Bearer " + jwt.getTokenValue(), orderId);
+                if (response == null || !(response.get("result") instanceof Map<?, ?> result)
+                        || !Boolean.TRUE.equals(result.get("eligible")))
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT, "Committed stock can only be restored before delivery cancellation");
+            } catch (feign.FeignException ex) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cannot verify cancellation");
+            }
+        } else if (!"RESERVED".equals(reservation.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Unknown reservation state");
+        }
+        for (var line : reservation.getLines().stream()
+                .sorted(Comparator.comparing(l -> l.get("variantId").toString()))
+                .toList()) {
+            var variant = em.find(
+                    ProductVariant.class, line.get("variantId").toString(), LockModeType.PESSIMISTIC_WRITE);
+            variant.setStockQuantity(
+                    Math.addExact(variant.getStockQuantity(), ((Number) line.get("quantity")).intValue()));
+        }
+        reservation.setStatus("RELEASED");
+        return Map.of("cancelled", true);
     }
 
     @Override

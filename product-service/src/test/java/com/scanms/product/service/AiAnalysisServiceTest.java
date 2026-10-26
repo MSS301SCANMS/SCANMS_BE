@@ -1,10 +1,10 @@
 package com.scanms.product.service;
 
 import com.scanms.product.client.AiServiceClient;
-import com.scanms.product.service.impl.AiAnalysisServiceImpl;
 import com.scanms.product.dto.ai.*;
 import com.scanms.product.exception.AppException;
 import com.scanms.product.exception.ErrorCode;
+import com.scanms.product.service.impl.AiAnalysisServiceImpl;
 import feign.FeignException;
 import feign.Request;
 import feign.RequestTemplate;
@@ -26,19 +26,22 @@ class AiAnalysisServiceTest {
     private final AiAnalysisService service = new AiAnalysisServiceImpl(client);
 
     @Test
-    void analyzeReturnsDetectionPayload() {
+    void analyzeReturnsDetectionPayloadWithGarmentHints() {
         var response = new AiDetectionResponse(
-                List.of(new AiDetectionItem(1, "shirt", 0.91, null)),
-                new AiTopPrediction("shirt", 0.91),
+                List.of(new AiDetectionItem(1, "short_sleeve_top", 0.91, null)),
+                new AiTopPrediction("short_sleeve_top", 0.91),
                 List.of(new AiDominantColor("white", 0.6)),
-                new AiStylePrediction("casual", 0.8),
+                new AiStylePrediction("CASUAL", 0.8),
                 false, true, 12.5);
         when(client.analyze(any())).thenReturn(response);
 
         var result = service.analyze(new MockMultipartFile("image", "a.jpg", "image/jpeg", new byte[]{1, 2, 3}));
 
-        assertEquals("shirt", result.topPrediction().className());
-        assertEquals(1, result.detections().size());
+        assertEquals("short_sleeve_top", result.topPrediction().className());
+        assertEquals("TOP", result.garmentType());
+        assertEquals("Áo tay ngắn", result.displayLabel());
+        assertEquals(ClothingGarmentMapper.SUGGESTED_CATEGORY, result.suggestedCategory());
+        assertTrue(result.clothingDetected());
         verify(client).analyze(any());
     }
 
