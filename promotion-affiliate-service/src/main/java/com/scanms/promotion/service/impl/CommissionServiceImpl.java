@@ -24,6 +24,8 @@ public class CommissionServiceImpl implements CommissionService {
     private final CommissionMapper mapper;
     private final CommissionFinalizationRepository finalizations;
     private final EntityManager em;
+    private final com.scanms.promotion.service.VoucherAccess access;
+    private final com.scanms.promotion.repository.CollaboratorProfileRepository profiles;
 
     public CommissionResponse create(CreateCommissionRequest request) {
         var anchor=em.find(CommissionFinalization.class,request.orderItemId(),LockModeType.PESSIMISTIC_WRITE);
@@ -34,12 +36,14 @@ public class CommissionServiceImpl implements CommissionService {
 
     @Transactional(readOnly = true)
     public CommissionResponse getById(String id) {
-        return repository.findById(id).map(mapper::toResponse)
+        return findAll().stream().filter(row -> id.equals(row.commissionId())).findFirst()
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Commission not found: " + id));
     }
 
     @Transactional(readOnly = true)
     public List<CommissionResponse> findAll() {
-        return repository.findAll().stream().map(mapper::toResponse).toList();
+        if(access.isManager()) { access.requireManager(); return repository.findAll().stream().sorted(java.util.Comparator.comparing(com.scanms.promotion.entity.Commission::getCreatedAt,java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))).map(mapper::toResponse).toList(); }
+        var profile=profiles.findByUserId(access.userId()).orElseThrow(()->new AppException(ErrorCode.FORBIDDEN,"Bạn chưa có hồ sơ KOL."));
+        return repository.findByCollaboratorIdOrderByCreatedAtDesc(profile.getCollaboratorId()).stream().map(mapper::toResponse).toList();
     }
 }

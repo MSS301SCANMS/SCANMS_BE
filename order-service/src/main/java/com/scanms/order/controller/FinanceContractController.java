@@ -46,7 +46,7 @@ public class FinanceContractController {
         if(realm instanceof Map<?,?> map && map.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString()));
         Object resources=jwt.getClaim("resource_access");
         if(resources instanceof Map<?,?> map) map.values().forEach(v -> { if(v instanceof Map<?,?> m && m.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString())); });
-        if(!roles.contains("PAYMENT_INTERNAL") && !(operatorAllowed && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if(!roles.contains("PAYMENT_INTERNAL") && !(operatorAllowed && roles.stream().anyMatch(Set.of("ADMIN","MANAGER","SYSTEM_ADMIN","SYSTEM_MANAGER","ORDER_INTERNAL","AFFILIATE_INTERNAL")::contains))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
     private <T> T find(Class<T> type,String id,boolean lock) {
         T result=lock?em.find(type,id,LockModeType.PESSIMISTIC_WRITE):em.find(type,id);
@@ -170,10 +170,21 @@ public class FinanceContractController {
     @GetMapping("/commission-order-item/{id}") public ApiResponse<Map<String,Object>> commissionItem(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true); OrderItem item=find(OrderItem.class,id,true);
         settlementBasis(item.getSellerOrderId(),jwt);
+        return retainedCommissionItem(item);
+    }
+    @GetMapping("/commission-adjustment-item/{id}") public ApiResponse<Map<String,Object>> commissionAdjustmentItem(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
+        trusted(jwt,true); OrderItem item=find(OrderItem.class,id,true);
+        SellerOrder seller=find(SellerOrder.class,item.getSellerOrderId(),false);
+        Order order=find(Order.class,seller.getOrderId(),false);
+        if(!Set.of(OrderStatus.PAID,OrderStatus.PROCESSING,OrderStatus.COMPLETED).contains(order.getStatus()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Order has not been paid");
+        return retainedCommissionItem(item);
+    }
+    private ApiResponse<Map<String,Object>> retainedCommissionItem(OrderItem item) {
         long refund=0;
-        for(ReturnRequest r:returns.findAll().stream().filter(r -> id.equals(r.getOrderItemId()) && r.getStatus()==ReturnRequestStatus.REFUNDED).toList()) refund=Math.addExact(refund,r.getRefundAmountVnd());
+        for(ReturnRequest r:returns.findByOrderItemId(item.getOrderItemId()).stream().filter(r -> r.getStatus()==ReturnRequestStatus.REFUNDED).toList()) refund=Math.addExact(refund,r.getRefundAmountVnd());
         long retained=Math.subtractExact(item.getNetPaidAmountVnd(),refund);
         if(retained<0) throw new ResponseStatusException(HttpStatus.CONFLICT,"Refund exceeds paid item value");
-        return ApiResponse.success(Map.of("orderItemId",id,"basisAmountVnd",retained,"currency","VND","commissionApplicable",item.getReferralLinkId()!=null || (item.getRuleSnapshot()!=null && item.getRuleSnapshot().get("commissionPolicyId")!=null)));
+        return ApiResponse.success(Map.of("orderItemId",item.getOrderItemId(),"basisAmountVnd",retained,"refundedAmountVnd",refund,"currency","VND","commissionApplicable",item.getReferralLinkId()!=null || (item.getRuleSnapshot()!=null && item.getRuleSnapshot().get("commissionPolicyId")!=null)));
     }
 }

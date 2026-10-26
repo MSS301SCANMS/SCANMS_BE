@@ -42,9 +42,13 @@ public class WalletTransactionServiceImpl implements WalletTransactionService {
                 throw new AppException(ErrorCode.CONFLICT, "Idempotency key belongs to another command");
             return mapper.toResponse(old);
         }
+        boolean commissionRecovery=request.type()==WalletTransactionType.COMMISSION_REVERSAL && wallet.getOwnerType()==WalletOwnerType.COLLABORATOR;
+        if(request.type()==WalletTransactionType.COMMISSION_REVERSAL && (!commissionRecovery || !"COMMISSION".equals(request.referenceType())))
+            throw new AppException(ErrorCode.INVALID_REQUEST,"Commission recovery is only supported for the attributed KOL wallet");
+        if(commissionRecovery && wallet.getStatus()==WalletStatus.CLOSED) wallet.setStatus(WalletStatus.FROZEN);
         if (wallet.getStatus() == WalletStatus.CLOSED || (wallet.getStatus() == WalletStatus.FROZEN
                 && request.direction() == WalletTransactionDirection.DEBIT
-                && request.type() != WalletTransactionType.WITHDRAWAL)) {
+                && request.type() != WalletTransactionType.WITHDRAWAL && !commissionRecovery)) {
             throw new AppException(ErrorCode.CONFLICT, "Wallet is not active");
         }
 
@@ -54,6 +58,7 @@ public class WalletTransactionServiceImpl implements WalletTransactionService {
         if(Set.of(WalletTransactionType.TOP_UP,WalletTransactionType.REFUND,WalletTransactionType.SELLER_SETTLEMENT,
                 WalletTransactionType.KOL_COMMISSION,WalletTransactionType.PLATFORM_FEE).contains(request.type())) requireDirection(request,WalletTransactionDirection.CREDIT);
         if(request.type()==WalletTransactionType.ORDER_PAYMENT) requireDirection(request,WalletTransactionDirection.DEBIT);
+        if(commissionRecovery) requireDirection(request,WalletTransactionDirection.DEBIT);
         try {
             switch (request.type()) {
                 case HOLD -> {
@@ -74,8 +79,12 @@ public class WalletTransactionServiceImpl implements WalletTransactionService {
         } catch (ArithmeticException ex) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Amount overflow");
         }
-        if (after < 0 || heldAfter < 0) throw new AppException(ErrorCode.CONFLICT, "Insufficient wallet balance");
-        if(after>9_007_199_254_740_991L || heldAfter>9_007_199_254_740_991L) throw new AppException(ErrorCode.CONFLICT,"Wallet exceeds the supported exact VND display range");
+        // Recovery of a commission already withdrawn becomes a visible debt, offset by future credits.
+        // Ordinary debits and withdrawal holds must still never create an overdraft.
+        boolean recoveringDebt=wallet.getOwnerType()==WalletOwnerType.COLLABORATOR
+                && (commissionRecovery || (before<0 && (request.direction()==WalletTransactionDirection.CREDIT || request.type()==WalletTransactionType.WITHDRAWAL)));
+        if ((after < 0 && !recoveringDebt) || heldAfter < 0) throw new AppException(ErrorCode.CONFLICT, "Insufficient wallet balance");
+        if(after>9_007_199_254_740_991L || after< -9_007_199_254_740_991L || heldAfter>9_007_199_254_740_991L) throw new AppException(ErrorCode.CONFLICT,"Wallet exceeds the supported exact VND display range");
         wallet.setAvailableBalanceVnd(after); wallet.setHeldBalanceVnd(heldAfter);
         walletRepository.save(wallet);
         WalletTransaction transaction = mapper.toEntity(request);

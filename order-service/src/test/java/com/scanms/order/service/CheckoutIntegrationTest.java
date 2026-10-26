@@ -62,6 +62,13 @@ class CheckoutIntegrationTest {
             var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
             server.createContext("/token",exchange -> { byte[] body="{\"access_token\":\"order-service-token\"}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             server.createContext("/user/api/v1/users",exchange -> { byte[] body="{\"result\":{\"userId\":\"customer\",\"identitySubject\":\"identity\",\"status\":\"ACTIVE\"}}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            server.createContext("/promotion/api/v1/referrals/attribution/",exchange -> {
+                String ref=exchange.getRequestURI().getPath().substring(exchange.getRequestURI().getPath().lastIndexOf('/')+1);
+                String product=ref.equals("ref-b") || ref.equals("wrong-product")?"product-b":"product";
+                String owner=ref.equals("self")?"customer":"creator-user";
+                byte[] body=("{\"result\":{\"referralLinkId\":\""+ref+"\",\"productId\":\""+product+"\",\"collaboratorId\":\"kol\",\"userId\":\""+owner+"\"}}").getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(ref.equals("expired")?410:200,body.length); exchange.getResponseBody().write(body); exchange.close();
+            });
             server.createContext("/product/api/v1/inventory/reservations",exchange -> {
                 reserves.incrementAndGet(); boolean fail=failNext.getAndSet(false);
                 int status=fail?503:"Bearer order-service-token".equals(exchange.getRequestHeaders().getFirst("Authorization"))?200:403;
@@ -129,6 +136,24 @@ class CheckoutIntegrationTest {
         order.setStatus(com.scanms.order.constant.OrderStatus.PAID); orders.saveAndFlush(order);
         int before=voucherCommits.get(); financeDispatch.dispatch(); assertEquals(before+1,voucherCommits.get());
         assertEquals(true,orders.findById(order.getOrderId()).orElseThrow().getSagaState().get("resourcesFinalized"));
+    }
+
+    @Test void verifiedReferralIsPersistedPerProductAndRetryNeverReattributesAnOrder() {
+        multiStore.set(true);
+        var input=new CheckoutService.Input("referrals","Customer","0900000000","Delivery address","PAYOS",true,null,null,List.of(
+            new CheckoutService.Line("product","variant",2,null,"ref-a"),new CheckoutService.Line("product-b","variant-b",1,null,"ref-b")));
+        var first=checkout.checkout(input,jwt); checkout.checkout(input,jwt);
+        assertEquals(2,items.count()); assertEquals(1,reserves.get());
+        for(var item:items.findAll()) assertEquals(item.getProductId().equals("product")?"ref-a":"ref-b",item.getReferralLinkId());
+        assertNotNull(first.get("orderId"));
+    }
+    @Test void invalidOrSelfReferralCannotCreateAttributedOrderItemsOrHoldInventory() {
+        for(String ref:List.of("wrong-product","self","expired")) {
+            var input=new CheckoutService.Input(ref,"Customer","0900000000","Delivery address","PAYOS",true,null,null,
+                List.of(new CheckoutService.Line("product","variant",2,null,ref)));
+            assertThrows(RuntimeException.class,()->checkout.checkout(input,jwt));
+        }
+        assertEquals(0,items.count()); assertEquals(0,reserves.get());
     }
     @Test void checkoutUsesServerPriceAndCreatesSellerItemsOnlyOnce() {
         var first=checkout.checkout(input("key",2),jwt); var second=checkout.checkout(input("key",2),jwt);
