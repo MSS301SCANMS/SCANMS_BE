@@ -8,7 +8,7 @@ scanms:
 
 spring:
   config:
-    import: optional:file:.env[.properties],optional:file:product-service/.env[.properties]
+    import: optional:file:../.env[.properties],optional:file:.env[.properties],optional:file:product-service/.env[.properties]
   application:
     name: product-service
   data:
@@ -22,12 +22,14 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:${PRODUCT_DB_PORT:5437}/${PRODUCT_DB_NAME:product_db}}
     username: ${DB_USERNAME:${POSTGRES_USER:postgres}}
     password: ${DB_PASSWORD:${POSTGRES_PASSWORD:postgres}}
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:update}
     open-in-view: false
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   security:
     oauth2:
