@@ -1,7 +1,10 @@
 package com.scanms.product.controller;
+import com.scanms.product.dto.request.InventoryReservationInput;
+import com.scanms.product.dto.request.InventoryReservationLine;
 import com.scanms.product.entity.*;
 import com.scanms.product.constant.*;
 import com.scanms.product.repository.*;
+import com.scanms.product.service.InventoryCheckoutService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +42,7 @@ class InventoryCheckoutIntegrationTest {
         r.add("spring.datasource.password",() -> System.getenv().getOrDefault("SCANMS_TEST_POSTGRES_PASSWORD",""));
     }
 
-    @Autowired InventoryCheckoutController inventory;
+    @Autowired InventoryCheckoutService inventory;
     @Autowired ProductRepository products;
     @Autowired StoreRepository stores;
     @Autowired ProductVariantRepository variants;
@@ -55,7 +58,9 @@ class InventoryCheckoutIntegrationTest {
         Product product=products.saveAndFlush(Product.builder().storeId(store.getStoreId()).name("Product").priceVnd(100L).status(ProductStatus.ACTIVE).build()); productId=product.getProductId();
         variantId=variants.saveAndFlush(ProductVariant.builder().productId(productId).sku("sku").priceVnd(100L).stockQuantity(3).status(ProductVariantStatus.ACTIVE).build()).getVariantId();
     }
-    InventoryCheckoutController.Input input(int quantity) { return new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId,variantId,quantity))); }
+    InventoryReservationInput input(int quantity) {
+        return new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, quantity)));
+    }
     int stock() { return variants.findById(variantId).orElseThrow().getStockQuantity(); }
     @Test void reserveAndReleaseAreIdempotentAndChangedPayloadIsRejected() {
         inventory.reserve("order",input(2),jwt); inventory.reserve("order",input(2),jwt); assertEquals(1,stock());

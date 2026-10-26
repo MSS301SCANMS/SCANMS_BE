@@ -28,8 +28,13 @@ import com.scanms.order.service.DiscountAllocationService;
 import com.scanms.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -47,6 +52,9 @@ public class OrderServiceImpl implements OrderService {
     private final DiscountAllocationService discountAllocationService;
     private final ProductClient productClient;
     private final OrderItemMapper orderItemMapper;
+
+    @Value("${clients.user.url:http://localhost:8081}")
+    private String userUrl;
 
     public OrderResponse create(CreateOrderRequest request) {
         return mapper.toResponse(repository.save(mapper.toEntity(request)));
@@ -264,6 +272,41 @@ public class OrderServiceImpl implements OrderService {
         }
         return repository.findByCustomerIdOrderByCreatedAtDesc(customerId)
                 .stream().map(mapper::toResponse).toList();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public String resolveBusinessUserId(Jwt jwt) {
+        try {
+            Map<?, ?> envelope = RestClient.create().get()
+                    .uri(userUrl + "/api/v1/users")
+                    .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
+                    .retrieve()
+                    .body(Map.class);
+            Object result = envelope == null ? null : envelope.get("result");
+            if (result instanceof Map<?, ?> user && user.get("userId") != null) {
+                Object identity = user.get("identitySubject");
+                if (identity != null && !jwt.getSubject().equals(String.valueOf(identity))) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Active customer profile required");
+                }
+                return String.valueOf(user.get("userId"));
+            }
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cannot resolve customer profile", ex);
+        }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Active customer profile required");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Boolean> voucherRestorationEligibility(String orderId) {
+        var order = getById(orderId);
+        boolean beforeDelivery = sellerOrderRepository.findAll().stream()
+                .filter(seller -> orderId.equals(seller.getOrderId()))
+                .noneMatch(seller -> Set.of(SellerOrderStatus.DELIVERED, SellerOrderStatus.COMPLETED).contains(seller.getStatus()));
+        return Map.of("eligible", order.status() == OrderStatus.CANCELLED && beforeDelivery);
     }
 
     @Override

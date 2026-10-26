@@ -1,5 +1,6 @@
 package com.scanms.order.controller;
 import com.scanms.order.constant.*;
+import com.scanms.order.dto.request.RefundInput;
 import com.scanms.order.entity.*;
 import com.scanms.order.entity.Order;
 import com.scanms.order.repository.*;
@@ -49,7 +50,7 @@ class RefundReservationIntegrationTest {
     @Test void cancellationBeforeAnAlreadyReservedRefundDoesNotShiftMoneyOrOverRefund() {
         var a=request(1,ReturnRequestStatus.REQUESTED,0); var b=request(2,ReturnRequestStatus.RECEIVED,1);
         long bAmount=basis(b.getReturnRequestId()); assertEquals(66,bAmount);
-        finance.refunded(b.getReturnRequestId(),new FinanceContractController.RefundInput("ledger-b",bAmount),jwt);
+        finance.refunded(b.getReturnRequestId(),new RefundInput("ledger-b",bAmount),jwt);
         a.setStatus(ReturnRequestStatus.CANCELLED); returns.saveAndFlush(a);
         assertEquals(bAmount,basis(b.getReturnRequestId()));
         var c=request(1,ReturnRequestStatus.RECEIVED,2); long cAmount=basis(c.getReturnRequestId());
@@ -59,7 +60,7 @@ class RefundReservationIntegrationTest {
         var a=request(1,ReturnRequestStatus.REQUESTED,0); var b=request(2,ReturnRequestStatus.RECEIVED,1);
         long amount=basis(b.getReturnRequestId()); a.setStatus(ReturnRequestStatus.REJECTED); returns.saveAndFlush(a);
         assertEquals(amount,basis(b.getReturnRequestId()));
-        finance.refunded(b.getReturnRequestId(),new FinanceContractController.RefundInput("ledger",amount),jwt);
+        finance.refunded(b.getReturnRequestId(),new RefundInput("ledger",amount),jwt);
         assertEquals(ReturnRequestStatus.REFUNDED,returns.findById(b.getReturnRequestId()).orElseThrow().getStatus());
     }
     @Test void simultaneousReservationsCannotExceedPurchasedQuantity() throws Exception {

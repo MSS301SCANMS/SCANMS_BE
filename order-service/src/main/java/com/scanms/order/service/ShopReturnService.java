@@ -2,6 +2,7 @@ package com.scanms.order.service;
 
 import com.scanms.order.constant.ReturnRequestStatus;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.oauth2.jwt.Jwt;
 
@@ -53,4 +54,12 @@ public interface ShopReturnService {
             ResponseInput input,
             Jwt jwt
     );
+
+    record ManagerDecision(
+            @NotNull ReturnRequestStatus status,
+            @NotBlank @Size(min = 20, max = 3000) String notes
+    ) {
+    }
+
+    Map<String, Object> managerDecide(String id, ManagerDecision input);
 }

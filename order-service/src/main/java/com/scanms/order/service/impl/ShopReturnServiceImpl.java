@@ -51,6 +51,27 @@ public class ShopReturnServiceImpl implements ShopReturnService {
 
     @Override
     @Transactional
+    public Map<String, Object> managerDecide(String id, ManagerDecision input) {
+        if (!Set.of(ReturnRequestStatus.APPROVED, ReturnRequestStatus.REJECTED).contains(input.status())
+                || input.notes().trim().length() < 20)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chọn duyệt hoặc từ chối và nhập lý do ít nhất 20 ký tự.");
+        var row = returns.lockById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu đổi trả."));
+        if (row.getStatus() != ReturnRequestStatus.REQUESTED) {
+            if (row.getStatus() == input.status() && Objects.equals(row.getDecisionReason(), input.notes().trim()))
+                return Map.of("returnRequestId", id, "status", row.getStatus());
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu đã được xử lý. Vui lòng tải lại danh sách.");
+        }
+        if (row.getRefundReference() != null)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu đã có tham chiếu hoàn tiền, cần đối soát trước khi xử lý.");
+        row.setStatus(input.status());
+        row.setDecisionReason(input.notes().trim());
+        row.setResolvedAt(LocalDateTime.now());
+        returns.saveAndFlush(row);
+        return Map.of("returnRequestId", id, "status", row.getStatus());
+    }
+
+    @Override
+    @Transactional
     public View respond(String id, ResponseInput input, Jwt jwt) {
         var stores = access.stores(jwt);
         ReturnRequest row = returns.lockById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu đổi trả."));
