@@ -87,7 +87,8 @@ public class FinanceDispatch {
         var request = JsonMapper.builder().build().readTree(checkoutRequest);
         var code = request.path("couponCode");
         if (code.isMissingNode() || code.isNull()) code = request.path("voucherCode");
-        return code.isTextual() && !code.asText().isBlank();
+        var shipping=request.path("shippingCouponCode");
+        return code.isTextual() && !code.asText().isBlank() || shipping.isTextual() && !shipping.asText().isBlank();
     }
 
     @Scheduled(fixedDelayString = "${scanms.finance.dispatch-delay-ms:60000}")
@@ -117,7 +118,10 @@ public class FinanceDispatch {
             } catch (Exception ex) { /* Ineligible/unresolved sources remain blocked; no money is invented. */ }
         }
         settlementCursor += 20;
-        for (var candidate : batch(orders.findAll().stream().filter(o -> o.getCheckoutRequest() != null && o.getSagaState() != null && !Boolean.TRUE.equals(o.getSagaState().get("resourcesFinalized"))).sorted(Comparator.comparing(Order::getOrderId)).toList(), checkoutCursor)) {
+        for (var candidate : batch(orders.findAll().stream().filter(o -> o.getCheckoutRequest() != null && o.getSagaState() != null
+                && (!Boolean.TRUE.equals(o.getSagaState().get("resourcesFinalized"))
+                || o.getStatus()==OrderStatus.CANCELLED&&!"cancel".equals(o.getSagaState().get("resourceOutcome"))))
+                .sorted(Comparator.comparing(Order::getOrderId)).toList(), checkoutCursor)) {
             try {
                 var order = new TransactionTemplate(transactions).execute(s -> {
                     var current = orders.lockById(candidate.getOrderId()).orElseThrow();
@@ -126,7 +130,7 @@ public class FinanceDispatch {
                     return orders.saveAndFlush(current);
                 });
                 if (order == null) continue;
-                String action = Set.of(OrderStatus.CANCELLED, OrderStatus.EXPIRED).contains(order.getStatus()) ? "release" : Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(order.getStatus()) ? "commit" : null;
+                String action = order.getStatus()==OrderStatus.CANCELLED?"cancel":order.getStatus()==OrderStatus.EXPIRED?"release": Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(order.getStatus()) ? "commit" : null;
                 if (action == null) continue;
                 post(productUrl + "/api/v1/inventory/reservations/" + order.getOrderId() + "/" + action, token, Map.of());
                 if (usesVoucher(order.getCheckoutRequest()))

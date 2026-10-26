@@ -8,6 +8,9 @@ import java.util.*;
 
 @Component("financeBoundary")
 public class FinanceBoundary {
+    public boolean isOrderService(Authentication authentication) {
+        return hasAnyRole(authentication, Set.of("ORDER_INTERNAL"));
+    }
 
     /** ADMIN / SYSTEM_ADMIN / AFFILIATE_INTERNAL — dùng cho các write operation nội bộ */
     public boolean canWrite(Authentication authentication) {

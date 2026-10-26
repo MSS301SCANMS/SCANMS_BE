@@ -20,7 +20,7 @@ class PaymentAccessTest {
     }
     PaymentAccess access() {
         PaymentAccess service=spy(new PaymentAccess());
-        doReturn(Map.of("userId","business-user-uuid","identitySubject","identity-sub","status","ACTIVE")).when(service).get(contains("/users/me"));
+        doReturn(Map.of("userId","business-user-uuid","identitySubject","identity-sub","status","ACTIVE")).when(service).get(contains("/users"));
         return service;
     }
     @Test void customerOwnerIsBusinessUserUuidNotJwtSubjectOrClientClaim() {
@@ -32,9 +32,9 @@ class PaymentAccessTest {
     }
     @Test void inactiveOrMismatchedIdentityCannotOwnCustomerWallet() {
         authenticate("USER"); var service=access();
-        doReturn(Map.of("userId","business-user-uuid","identitySubject","identity-sub","status","BLOCKED")).when(service).get(contains("/users/me"));
+        doReturn(Map.of("userId","business-user-uuid","identitySubject","identity-sub","status","BLOCKED")).when(service).get(contains("/users"));
         assertThrows(AppException.class,() -> service.owner(WalletOwnerType.CUSTOMER,"business-user-uuid"));
-        doReturn(Map.of("userId","business-user-uuid","identitySubject","another-sub","status","ACTIVE")).when(service).get(contains("/users/me"));
+        doReturn(Map.of("userId","business-user-uuid","identitySubject","another-sub","status","ACTIVE")).when(service).get(contains("/users"));
         assertThrows(AppException.class,() -> service.userId());
     }
     @Test void shopMustHaveRoleAndMatchingStoreOwner() {

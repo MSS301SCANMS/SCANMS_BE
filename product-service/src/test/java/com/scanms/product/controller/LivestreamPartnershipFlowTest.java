@@ -79,7 +79,7 @@ class LivestreamPartnershipFlowTest {
         assertEquals(0,lives.count());
     }
     @Test void pastSchedulesAndInvalidEndTimesAreRejectedOnCreateAndUpdate() throws Exception {
-        var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         var past = now.minusHours(1);
         var future = now.plusHours(1);
         for (String body : List.of(

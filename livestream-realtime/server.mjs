@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { Server } from 'socket.io';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createHmac } from 'node:crypto';
 
 const idPattern = /^[A-Za-z0-9_-]{1,100}$/;
 const emojis = new Set(['❤️','👍','😂','😮','😢','😡','🔥','🎁','🎉','💯','⭐']);
@@ -14,6 +15,7 @@ export function createLiveServer({
   pollMs = 10000,
   verifyToken,
   fetcher = fetch,
+  metricsSecret = process.env.LIVE_METRICS_SECRET || '',
 } = {}) {
   const jwks = createRemoteJWKSet(new URL(`${issuer}/protocol/openid-connect/certs`));
   const verify = verifyToken || (async token => (await jwtVerify(token, jwks, {
@@ -68,7 +70,38 @@ export function createLiveServer({
     if (!room || !room.members.has(socket.id)) throw new Error('Bạn chưa tham gia phòng live.');
     return room;
   };
-  const emitCounts = room => live.to(room.id).emit('live_viewer_count', { count: [...room.members].filter(id => live.sockets.get(id)?.data.role === 'viewer').length });
+  const pendingViews = new Map();
+  const metrics = async (method, id, token, body) => {
+    if (!metricsSecret) return false;
+    const time = String(Math.floor(Date.now()/1000));
+    const canonical = method === 'POST' ? `POST\n${id}\n${body.visitId}` : `PATCH\n${id}\n${body.viewerCount}\n${body.uniqueViewerCount}\n${body.concurrentViewerCount}`;
+    const signature = createHmac('sha256',metricsSecret).update(`${canonical}\n${time}`).digest('hex');
+    try {
+      const response = await fetcher(`${apiUrl}/livestreams/${encodeURIComponent(id)}/${method === 'POST' ? 'views' : 'stats'}`, {
+        method, headers: {Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-Live-Metrics-Time':time,'X-Live-Metrics-Signature':signature},
+        body:JSON.stringify(body), signal:AbortSignal.timeout(6000),
+      });
+      return response.ok;
+    } catch { return false; }
+  };
+  const flushViews = async () => {
+    for(const [key,event] of [...pendingViews]) {
+      if(event.expiresAt*1000<=Date.now()){pendingViews.delete(key);continue;}
+      if(await metrics('POST',event.id,event.token,{visitId:event.visitId}))pendingViews.delete(key);
+    }
+  };
+  const emitCounts = room => {
+    const count=[...room.members].filter(id => live.sockets.get(id)?.data.role === 'viewer').length;
+    live.to(room.id).emit('live_viewer_count',{count});
+    const host=live.sockets.get(room.hostId);
+    room.peak=Math.max(room.peak||0,count);
+    if(host&&room.session.status==='LIVE') {
+      room.metricsPending=true;
+      room.metricsChain=(room.metricsChain||Promise.resolve()).then(async()=>{
+        room.metricsPending=!(await metrics('PATCH',room.id,host.data.token,{viewerCount:0,uniqueViewerCount:0,concurrentViewerCount:room.peak}));
+      });
+    }
+  };
   const leave = socket => {
     const room = rooms.get(socket.data.sessionId);
     if (!room) return;
@@ -127,6 +160,11 @@ export function createLiveServer({
           for (const id of room.members) if (id !== socket.id) socket.emit('live_viewer_joined', { viewerSocketId: id });
         } else if (room.hostId) live.to(room.hostId).emit('live_viewer_joined', { viewerSocketId: socket.id });
         emitCounts(room);
+        if(requestedRole==='viewer'&&session.status==='LIVE'){
+          const key=`${sessionId}:${socket.id}`;
+          pendingViews.set(key,{id:sessionId,visitId:socket.id,token:socket.data.token,expiresAt:socket.data.claims.exp});
+          socket.data.viewQueuedSession=sessionId;void flushViews();
+        }
         if (room.pinnedProductId !== undefined) socket.emit('product_pinned_changed', { productIndex: (room.session.productRefs?.productIds || []).indexOf(room.pinnedProductId), productId: room.pinnedProductId });
         return { hostOnline: Boolean(room.hostId), streamActive: room.publishing };
       } finally { socket.data.joining = false; }
@@ -136,6 +174,7 @@ export function createLiveServer({
       const claims = await verify(token);
       if (claims.sub !== socket.data.claims.sub || !claims.exp || claims.exp * 1000 <= Date.now()) throw new Error('Tài khoản đã thay đổi. Hãy mở lại phòng live.');
       socket.data.token = token; socket.data.claims = claims;
+      const pending=pendingViews.get(`${socket.data.sessionId}:${socket.id}`);if(pending){pending.token=token;pending.expiresAt=claims.exp;}
     });
     for (const event of ['live_stream_started','live_stream_stopped']) on(event, async ({ sessionId }) => {
       const room = roomFor(socket);
@@ -180,6 +219,7 @@ export function createLiveServer({
   const timer = setInterval(async () => {
     if (polling) return;polling = true;
     try {
+      await flushViews();
       for (const room of rooms.values()) {
         for (const id of [...room.members]) {
           const socket = live.sockets.get(id);
@@ -190,6 +230,13 @@ export function createLiveServer({
         try {
           const session = await authorize(member, room.id, room.hostId === member.id ? 'host' : 'viewer');
           room.session = session;
+          if(session.status==='LIVE')for(const id of room.members){
+            const viewer=live.sockets.get(id);
+            if(viewer?.data.role==='viewer'&&viewer.data.viewQueuedSession!==room.id){
+              pendingViews.set(`${room.id}:${id}`,{id:room.id,visitId:id,token:viewer.data.token,expiresAt:viewer.data.claims.exp});viewer.data.viewQueuedSession=room.id;
+            }
+          }
+          if(room.metricsPending)emitCounts(room);
         } catch {
           // Fail closed on changed permissions, a closed session, or an unavailable business API.
           live.to(room.id).emit('live_session_ended');
@@ -200,7 +247,7 @@ export function createLiveServer({
     } finally { polling = false; }
   }, pollMs);
   timer.unref();
-  return { http, io, rooms, close: async () => { clearInterval(timer); await new Promise(resolve => io.close(resolve)); } };
+  return { http, io, rooms, close: async () => { clearInterval(timer);await flushViews();await Promise.allSettled([...rooms.values()].map(room=>room.metricsChain));await new Promise(resolve => io.close(resolve)); } };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

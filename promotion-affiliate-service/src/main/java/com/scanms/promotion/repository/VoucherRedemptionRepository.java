@@ -6,5 +6,6 @@ import java.util.Optional;
 
 public interface VoucherRedemptionRepository extends JpaRepository<VoucherRedemption, String> {
     Optional<VoucherRedemption> findByOrderId(String orderId);
+    java.util.List<VoucherRedemption> findAllByOrderId(String orderId);
 }
 

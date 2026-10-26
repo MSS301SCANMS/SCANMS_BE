@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $workspace = Split-Path $repo -Parent
 $settings = @{}
+$moduleSettings = @{}
 Get-Content -LiteralPath (Join-Path $repo '.env') | ForEach-Object {
     if ($_ -match '^([^#=]+)=(.*)$') {
         $key=$matches[1].Trim(); $value=$matches[2].Trim().Trim('"').Trim("'")
@@ -16,15 +17,30 @@ Get-Content -LiteralPath (Join-Path $repo '.env') | ForEach-Object {
         [Environment]::SetEnvironmentVariable($key,$value,'Process')
     }
 }
+$moduleEnv = Join-Path $repo "$Service\.env"
+if (Test-Path -LiteralPath $moduleEnv) {
+    Get-Content -LiteralPath $moduleEnv | ForEach-Object {
+        if ($_ -match '^([^#=]+)=(.*)$') {
+            $key=$matches[1].Trim(); $value=$matches[2].Trim().Trim('"').Trim("'")
+            $moduleSettings[$key]=$value
+            $settings[$key]=$value
+            [Environment]::SetEnvironmentVariable($key,$value,'Process')
+        }
+    }
+}
 $prefix = @{ 'user-service'='USER';'product-service'='PRODUCT';'order-service'='ORDER';'payment-service'='PAYMENT';'promotion-affiliate-service'='PROMOTION' }[$Service]
 if ($prefix) {
-    if (-not $DatabasePort) { $DatabasePort=[int]$settings["${prefix}_DB_PORT"] }
-    $database=$settings["${prefix}_DB_NAME"]
-    if (-not $database -or -not $DatabasePort) { throw 'Missing database name or port in .env.' }
-    $env:DB_URL="jdbc:postgresql://localhost:$DatabasePort/$database"
-    $env:DB_USERNAME=$settings['POSTGRES_USER']
-    $env:DB_PASSWORD=$settings['POSTGRES_PASSWORD']
-    Write-Output "$Service -> localhost:$DatabasePort/$database"
+    if ($moduleSettings['DB_URL'] -and -not $PSBoundParameters.ContainsKey('DatabasePort')) {
+        $env:DB_URL=$moduleSettings['DB_URL']
+    } else {
+        if (-not $DatabasePort) { $DatabasePort=[int]$settings["${prefix}_DB_PORT"] }
+        $database=$settings["${prefix}_DB_NAME"]
+        if (-not $database -or -not $DatabasePort) { throw 'Missing database name or port in .env.' }
+        $env:DB_URL="jdbc:postgresql://localhost:$DatabasePort/$database"
+    }
+    $env:DB_USERNAME=if($moduleSettings['DB_USERNAME']){$moduleSettings['DB_USERNAME']}else{$settings['POSTGRES_USER']}
+    $env:DB_PASSWORD=if($moduleSettings['DB_PASSWORD']){$moduleSettings['DB_PASSWORD']}else{$settings['POSTGRES_PASSWORD']}
+    Write-Output "$Service -> $env:DB_URL"
 }
 if (-not $Maven) {
     $command=Get-Command mvn.cmd -ErrorAction SilentlyContinue

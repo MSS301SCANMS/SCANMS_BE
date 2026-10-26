@@ -64,13 +64,10 @@ public class PublicCatalogServiceImpl implements PublicCatalogService {
     private static Map<String, Object> enrich(Product product, Store store, List<ProductVariant> productVariants, List<ProductImage> productImages) {
         Map<String, Object> row = toPublicProduct(product, store);
         List<String> gallery = productImages.stream().sorted(Comparator.comparing(ProductImage::isPrimaryImage).reversed().thenComparing(i -> i.getSortOrder() == null ? Integer.MAX_VALUE : i.getSortOrder()).thenComparing(ProductImage::getImageId, Comparator.nullsLast(Comparator.naturalOrder()))).map(ProductImage::getImageUrl).filter(Objects::nonNull).filter(url -> !url.isBlank()).distinct().toList();
-        if (gallery.isEmpty() && product.getImageRefs() != null) {
-            gallery = Stream.concat(Stream.of(firstImage(product.getImageRefs())), product.getImageRefs().values().stream()).filter(Objects::nonNull).map(Object::toString).filter(url -> !url.isBlank()).distinct().toList();
-        }
         String mainImage = gallery.isEmpty() ? null : gallery.getFirst();
         List<Map<String, Object>> variantRows = productVariants.stream().sorted(Comparator.comparing(ProductVariant::getSku, Comparator.nullsLast(Comparator.naturalOrder()))).map(v -> {
             Map<String, Object> variant = new LinkedHashMap<>();
-            boolean active = v.getStatus() == ProductVariantStatus.ACTIVE;
+            boolean active = v.getStatus() == ProductVariantStatus.ACTIVE && v.getPriceVnd()!=null && v.getPriceVnd()>0;
             variant.put("id", v.getVariantId());
             variant.put("sku", v.getSku());
             variant.put("name", Stream.of(v.getColor(), v.getSize()).filter(Objects::nonNull).filter(s -> !s.isBlank()).collect(Collectors.joining(" / ")));
@@ -87,9 +84,6 @@ public class PublicCatalogServiceImpl implements PublicCatalogService {
             return variant;
         }).toList();
         long stock = variantRows.stream().mapToLong(v -> ((Number) v.get("stockQuantity")).longValue()).sum();
-        if (productVariants.isEmpty() && product.getSizesStock() != null) {
-            stock = product.getSizesStock().values().stream().filter(Number.class::isInstance).mapToLong(v -> Math.max(0, ((Number) v).longValue())).sum();
-        }
         boolean active = product.getStatus() == ProductStatus.ACTIVE;
         row.put("sku", product.getProductId());
         row.put("images", gallery);

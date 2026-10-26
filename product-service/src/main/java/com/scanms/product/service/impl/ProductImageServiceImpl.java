@@ -36,13 +36,17 @@ public class ProductImageServiceImpl implements ProductImageService {
 
     @Transactional(readOnly = true)
     public ProductImageResponse getById(String id) {
-        return repository.findById(id).map(mapper::toResponse)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "ProductImage not found: " + id));
+        var image=repository.findById(id).orElseThrow(()->new AppException(ErrorCode.RESOURCE_NOT_FOUND,"ProductImage not found: "+id));
+        var product=products.findById(image.getProductId()).orElseThrow(()->new AppException(ErrorCode.RESOURCE_NOT_FOUND,"Product not found"));
+        access.requireReadableStore(product.getStoreId());
+        return mapper.toResponse(image);
     }
 
     @Transactional(readOnly = true)
     public List<ProductImageResponse> findAll() {
-        return repository.findAll().stream().map(mapper::toResponse).toList();
+        var rows=access.canReadAllCatalog()?repository.findAll():repository.findByProductIdIn(
+                products.findByStoreIdIn(access.readableStoreIds()).stream().map(com.scanms.product.entity.Product::getProductId).toList());
+        return rows.stream().map(mapper::toResponse).toList();
     }
 
     public ProductImageResponse update(String id, UpdateProductImageRequest request) {

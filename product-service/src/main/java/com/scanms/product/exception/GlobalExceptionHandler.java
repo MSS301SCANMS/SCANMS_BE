@@ -13,6 +13,10 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler({org.springframework.dao.DataIntegrityViolationException.class,org.springframework.dao.OptimisticLockingFailureException.class})
+    ResponseEntity<ApiResponse<Void>> handleConflictingData(Exception exception){
+        return ResponseEntity.status(409).body(ApiResponse.error(409,"Dữ liệu bị trùng, đang được sử dụng hoặc đã thay đổi. Vui lòng tải lại và thử lại."));
+    }
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<ApiResponse<Void>> handleUnreadableRequest(HttpMessageNotReadableException exception) {
         return ResponseEntity.badRequest().body(ApiResponse.error(400,"Dữ liệu gửi lên không đúng định dạng. Vui lòng kiểm tra và thử lại."));

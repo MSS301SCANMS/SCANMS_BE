@@ -22,6 +22,14 @@ Restart Vite nếu chưa nhận cấu hình. URL này riêng cho livestream, kh�
 
 Có thể copy `.env.example` thành `.env` để thay cổng, gateway, issuer và origin. Mặc định bind `127.0.0.1:8090`; `/health` chỉ xác nhận tiến trình Node đang chạy.
 
+## Lưu thống kê vào Product
+
+Chạy migration `product-service/src/main/resources/db/manual/20261026_livestream_statistics.sql` trước khi khởi động Product với `ddl-auto=validate`. Migration chỉ thêm cột JSONB và có thể chạy lại.
+
+Đặt cùng một `LIVE_METRICS_SECRET` ngẫu nhiên, dài ít nhất 32 ký tự, trong `product-service/.env` và `livestream-realtime/.env`; khởi động lại hai tiến trình sau khi đổi. Có thể tạo giá trị bằng `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. Không commit giá trị thật hoặc đưa vào biến `VITE_*`.
+
+Relay gửi sự kiện vào `/livestreams/{id}/views` và peak vào `/livestreams/{id}/stats` qua Gateway, kèm JWT và chữ ký HMAC có thời hạn. Product lưu lượt vào phòng theo visit ID, unique theo issuer/subject đã băm và peak concurrent. Gửi lại cùng visit ID không cộng trùng; người dùng kết nối lại tạo lượt mới nhưng không tăng unique. Khách chưa đăng nhập không được ghi view. Mất kết nối API thì relay thử lại trong khi token còn hiệu lực; hàng đợi này nằm trong bộ nhớ nên restart relay có thể mất sự kiện chưa gửi.
+
 ## Luồng sử dụng
 
 1. Shop và KOL đã được quản lý duyệt. Shop mời hợp tác, KOL chấp nhận.
@@ -39,7 +47,7 @@ Không bắt buộc nhập voucher để tạo phiên Spring. Tính năng tung v
 - Chỉ chủ shop hoặc KOL đã được duyệt, có trong phiên và chấp nhận lời mời mới có quyền host. UI hiện dành nút camera cho KOL.
 - Chỉ phát khi Spring trả trạng thái `LIVE`. Mỗi phòng một host kết nối, mặc định tối đa 20 người xem; đây là giới hạn cấu hình, chưa phải kết quả đo tải.
 - Ngăn gửi tín hiệu giữa phòng khác nhau hoặc giả vai trò host qua payload. Chat lấy danh tính từ JWT. Token được làm mới cùng phiên đăng nhập FE; đổi tài khoản đóng kết nối cũ.
-- Chat/ghim/biểu cảm/số người xem nằm trong bộ nhớ server, chưa lưu lịch sử hoặc ghi hình. Restart server làm mất các trạng thái realtime này; phiên và sản phẩm vẫn ở Spring/PostgreSQL.
+- Chat/ghim/biểu cảm và số người đang kết nối nằm trong bộ nhớ server, chưa lưu lịch sử hoặc ghi hình. Tổng lượt xem, unique và peak đã gửi thành công được lưu ở Product/PostgreSQL và giữ lại sau restart relay.
 
 ## Khi dùng ngoài máy local
 

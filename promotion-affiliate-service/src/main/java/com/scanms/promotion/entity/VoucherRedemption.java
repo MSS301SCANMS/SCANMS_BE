@@ -7,7 +7,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.Instant;
 
 @Entity
-@Table(name = "voucher_redemptions", uniqueConstraints = @UniqueConstraint(name = "uk_voucher_redemption_order", columnNames = "orderId"))
+@Table(name = "voucher_redemptions", uniqueConstraints = @UniqueConstraint(name = "uk_voucher_redemption_order_voucher", columnNames = {"orderId", "voucherId"}))
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class VoucherRedemption {
     @Id @GeneratedValue(strategy = GenerationType.UUID)

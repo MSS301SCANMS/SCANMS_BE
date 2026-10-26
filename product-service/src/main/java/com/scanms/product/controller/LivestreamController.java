@@ -25,6 +25,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 @RequiredArgsConstructor
 public class LivestreamController {
     private final LivestreamService service;
+    private final com.scanms.product.service.LiveMetricsSignature metricsSignature;
+    private final com.scanms.product.service.LivestreamViewerService viewers;
 
     @PostMapping
     public ResponseEntity<ApiResponse<LivestreamResponse>> create(@Valid @RequestBody CreateLivestreamRequest request) {
@@ -59,8 +61,21 @@ public class LivestreamController {
     record StatsRequest(long viewerCount, long uniqueViewerCount, long concurrentViewerCount) {}
 
     @PatchMapping("/{id}/stats")
-    public ApiResponse<LivestreamResponse> stats(@PathVariable String id, @RequestBody StatsRequest request) {
+    public ApiResponse<LivestreamResponse> stats(@PathVariable String id, @RequestBody StatsRequest request,
+            @org.springframework.web.bind.annotation.RequestHeader(value="X-Live-Metrics-Time",defaultValue="") String timestamp,
+            @org.springframework.web.bind.annotation.RequestHeader(value="X-Live-Metrics-Signature",defaultValue="") String signature) {
+        metricsSignature.require("PATCH\n"+id+"\n"+request.viewerCount()+"\n"+request.uniqueViewerCount()+"\n"+request.concurrentViewerCount(),timestamp,signature);
         return ApiResponse.success(service.updateStats(id, request.viewerCount(), request.uniqueViewerCount(), request.concurrentViewerCount()));
+    }
+
+    public record ViewRequest(@jakarta.validation.constraints.Pattern(regexp="[A-Za-z0-9_-]{1,100}") @jakarta.validation.constraints.NotBlank String visitId) {}
+    @PostMapping("/{id}/views")
+    public ApiResponse<Boolean> view(@PathVariable String id,@Valid @RequestBody ViewRequest request,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal Jwt jwt,
+            @org.springframework.web.bind.annotation.RequestHeader(value="X-Live-Metrics-Time",defaultValue="") String timestamp,
+            @org.springframework.web.bind.annotation.RequestHeader(value="X-Live-Metrics-Signature",defaultValue="") String signature){
+        metricsSignature.require("POST\n"+id+"\n"+request.visitId(),timestamp,signature);
+        viewers.record(id,request.visitId(),jwt);return ApiResponse.success(true);
     }
 
     public record RespondRequest(boolean accepted) {}
@@ -70,7 +85,7 @@ public class LivestreamController {
     public ApiResponse<LivestreamResponse> respond(
             @PathVariable String id,
             @RequestBody RespondRequest request,
-                    Jwt jwt) {
+            @org.springframework.security.core.annotation.AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.success(service.respondInvite(id, request.accepted(), jwt));
     }
 }
