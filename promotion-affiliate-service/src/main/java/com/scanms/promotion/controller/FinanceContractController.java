@@ -34,6 +34,7 @@ public class FinanceContractController {
     private final CommissionFinalizationRepository finalizations;
     private final ReferralLinkRepository referralLinks;
     private final CommissionPolicyService policyService;
+    private final com.scanms.promotion.service.ProductCommissionDealService productDeals;
     @Value("${clients.order.url:http://localhost:8083}") private String orderUrl;
     private final RestClient http=http();
     private static RestClient http() {
@@ -188,8 +189,11 @@ public class FinanceContractController {
                 Map<?,?> resp = http.get().uri(orderUrl + "/api/v1/seller-orders/" + sellerOrderId)
                         .headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
                 if (resp != null && resp.get("result") instanceof Map<?,?> r) storeId = Objects.toString(r.get("storeId"), null);
-            } catch(Exception ex) { log.debug("Could not fetch storeId for seller order {}: {}", sellerOrderId, ex.getMessage()); }
+            } catch(Exception ex) { throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cannot verify seller store for commission; retry required"); }
         }
+        if (storeId == null || storeId.isBlank()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Missing seller store for commission");
+        if (itemDetails.get("productId") != null && !referralLink.getProductId().equals(itemDetails.get("productId")))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order product does not match referral product");
         // Resolve CommissionPolicy: COLLABORATOR → LIVESTREAM → PRODUCT → STORE → PLATFORM
         CommissionPolicy policy = policyService.resolvePolicy(
                 collaboratorId, referralLink.getLivestreamId(), referralLink.getProductId(), storeId);
@@ -197,6 +201,15 @@ public class FinanceContractController {
             log.warn("No active policy for collaborator={} product={} store={}", collaboratorId, referralLink.getProductId(), storeId);
             return Map.of("orderItemId", itemId, "initialized", false, "reason", "No applicable active commission policy");
         }
+        Instant orderCreatedAt = null;
+        if (itemDetails.get("placedAt") != null) {
+            String date = itemDetails.get("placedAt").toString();
+            try { orderCreatedAt = Instant.parse(date); }
+            catch (java.time.format.DateTimeParseException ex) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid order placement instant for commission deal");
+            }
+        }
+        var agreedRate = productDeals.rate(collaboratorId, referralLink.getProductId(), storeId, orderCreatedAt, policy);
         // Tạo CommissionFinalization anchor nếu chưa có
         if (anchor == null) { anchor = new CommissionFinalization(); anchor.setOrderItemId(itemId); em.persist(anchor); em.flush(); }
         // Tạo Commission với rate snapshot tại thời điểm này (không thay đổi dù policy sau đổi)
@@ -204,17 +217,20 @@ public class FinanceContractController {
         commission.setOrderItemId(itemId);
         commission.setCollaboratorId(collaboratorId);
         commission.setReferralLinkId(referralLinkId);
-        commission.setCommissionPolicyId(policy.getPolicyId());
-        commission.setRateSnapshot(policy.getCommissionRate());
+        commission.setCommissionPolicyId(agreedRate.policyId());
+        commission.setRateSnapshot(agreedRate.totalRate());
         long initialBasis=new BigDecimal(itemDetails.get("netPaidAmountVnd").toString()).longValueExact();
-        long initialAmount=BigDecimal.valueOf(initialBasis).multiply(policy.getCommissionRate()).divide(BigDecimal.valueOf(100),0,RoundingMode.HALF_UP).longValueExact();
+        long initialAmount=BigDecimal.valueOf(initialBasis).multiply(agreedRate.totalRate()).divide(BigDecimal.valueOf(100),0,RoundingMode.HALF_UP).longValueExact();
         commission.setBasisAmountVnd(initialBasis);
         commission.setCommissionAmountVnd(initialAmount);
         commission.setStatus(CommissionStatus.PENDING);
         commission.setAdjustmentHistory(Map.of("initializedAt", Instant.now().toString(),
-                "policyId", policy.getPolicyId(), "scope", policy.getScopeType().name(),
-                "rateSnapshot", policy.getCommissionRate().toPlainString()));
+                "policyId", agreedRate.policyId(), "scope", policy.getScopeType().name(),
+                "rateSnapshot", agreedRate.totalRate().toPlainString()));
         var initialHistory=new LinkedHashMap<>(commission.getAdjustmentHistory());
+        initialHistory.put("baseRate", agreedRate.baseRate());
+        initialHistory.put("extraPoints", agreedRate.extraPoints());
+        if (agreedRate.dealId() != null) initialHistory.put("productDealId", agreedRate.dealId());
         if(itemDetails.get("productSnapshot") instanceof Map<?,?> product) initialHistory.put("productName",Objects.toString(product.get("name"),Objects.toString(product.get("title"),"Sản phẩm")));
         initialHistory.put("originalBasisVnd",initialBasis); initialHistory.put("originalAmountVnd",initialAmount);
         commission.setAdjustmentHistory(initialHistory);
@@ -222,7 +238,7 @@ public class FinanceContractController {
         log.info("Commission {} created: item={} collaborator={} policy={} rate={}",
                 saved.getCommissionId(), itemId, collaboratorId, policy.getPolicyId(), policy.getCommissionRate());
         return Map.of("orderItemId", itemId, "initialized", true,
-                "commissionId", saved.getCommissionId(), "rateSnapshot", policy.getCommissionRate().toPlainString());
+                "commissionId", saved.getCommissionId(), "rateSnapshot", agreedRate.totalRate().toPlainString());
     }
 
     // ─── Commission Adjustment (return / refund) ─────────────────────────────────

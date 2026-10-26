@@ -34,7 +34,9 @@ public class CheckoutVoucherController {
     private String orderUrl;
 
     public record Input(String code, String customerId, List<Map<String, Object>> lines,
-                        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String shippingCode) {
+                        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String shippingCode,
+                        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) Map<String,Long> shippingFees) {
+        public Input(String code,String customerId,List<Map<String,Object>> lines,String shippingCode) { this(code,customerId,lines,shippingCode,null); }
         public Input(String code, String customerId, List<Map<String,Object>> lines) { this(code,customerId,lines,null); }
     }
 
@@ -99,7 +101,7 @@ public class CheckoutVoucherController {
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Unsupported voucher benefit");
         boolean shipping = "SHIPPING".equals(benefit);
         if (shipping) {
-            if (v.getIssuerType()!=VoucherIssuerType.PLATFORM || shippingFee==null || shippingFee<=0
+            if (v.getIssuerType()!=VoucherIssuerType.PLATFORM || (input.shippingFees()==null && (shippingFee==null || shippingFee<=0))
                     || !Set.of(VoucherScopeType.PLATFORM,VoucherScopeType.STORE).contains(v.getScopeType()))
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Voucher vận chuyển chưa áp dụng được cho đơn này");
             hash += ":shipping:" + shippingFee;
@@ -164,7 +166,14 @@ public class CheckoutVoucherController {
         List<String> shippingStores = eligible.stream().map(line->Objects.toString(line.get("storeId"),"")).distinct().sorted().toList();
         if (shipping && shippingStores.stream().anyMatch(String::isBlank))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Shipping store is missing");
-        long basis = shipping ? Math.multiplyExact(shippingFee,shippingStores.size()) : subtotal;
+        var fees=new LinkedHashMap<String,Long>();
+        if(shipping) for(String store:shippingStores) {
+            Long fee=input.shippingFees()==null?shippingFee:input.shippingFees().get(store);
+            if(fee==null || fee<0 || fee>10000000)throw new ResponseStatusException(HttpStatus.CONFLICT,"Shipping fee snapshot is missing or invalid");
+            fees.put(store,fee);
+        }
+        long basis = shipping ? fees.values().stream().reduce(0L,Math::addExact) : subtotal;
+        if(shipping && basis<=0)throw new ResponseStatusException(HttpStatus.CONFLICT,"Không có phí vận chuyển để giảm");
         long discount = v.getDiscountType() == VoucherDiscountType.PERCENTAGE
                 ? BigDecimal.valueOf(basis)
                         .multiply(v.getValue())
@@ -194,9 +203,11 @@ public class CheckoutVoucherController {
         List<Map<String, Object>> allocations = new ArrayList<>();
         long allocated = 0, cumulativeGross = 0;
         if (shipping) {
+            long cumulativeFees=0;
             for (int i=0;i<shippingStores.size();i++) {
-                long next = BigInteger.valueOf(discount).multiply(BigInteger.valueOf(i+1))
-                        .divide(BigInteger.valueOf(shippingStores.size())).longValueExact();
+                cumulativeFees=Math.addExact(cumulativeFees,fees.get(shippingStores.get(i)));
+                long next = BigInteger.valueOf(discount).multiply(BigInteger.valueOf(cumulativeFees))
+                        .divide(BigInteger.valueOf(basis)).longValueExact();
                 allocations.add(Map.of("benefitType","SHIPPING","storeId",shippingStores.get(i),
                         "voucherId",v.getVoucherId(),"allocatedAmountVnd",next-allocated,
                         "fundedBy","PLATFORM","voucherVersion",v.getVersion()));
@@ -272,7 +283,7 @@ public class CheckoutVoucherController {
         List<Map<String,Object>> allocations=new ArrayList<>();
         Map<String,Long> discounts=new LinkedHashMap<>();
         for(String code:codes) {
-            var quote=reserve(orderId,new Input(code,input.customerId(),input.lines()),jwt,true,shippingFee).result();
+            var quote=reserve(orderId,new Input(code,input.customerId(),input.lines(),null,input.shippingFees()),jwt,true,shippingFee).result();
             allocations.addAll((List<Map<String,Object>>)quote.get("allocations"));
             String voucherId=locked.stream().filter(v->v.getCode().equalsIgnoreCase(code)).findFirst().orElseThrow().getVoucherId();
             discounts.put(voucherId,((Number)quote.get("discountAmountVnd")).longValue());

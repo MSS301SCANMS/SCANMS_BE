@@ -138,12 +138,16 @@ public class InventoryCheckoutController {
             Map<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("productId", p.getProductId());
             snapshot.put("variantId", variant.getVariantId());
+            snapshot.put("sku", variant.getSku());
             snapshot.put("quantity", line.quantity());
             snapshot.put("unitPriceVnd", variant.getPriceVnd());
             snapshot.put("grossAmountVnd", Math.multiplyExact(variant.getPriceVnd(), line.quantity()));
             snapshot.put("storeId", p.getStoreId());
             snapshot.put("storeName", store.getName());
             snapshot.put("name", p.getName());
+            var images = em.createQuery("select i.imageUrl from ProductImage i where i.productId=:product order by i.primaryImage desc, i.sortOrder asc, i.imageId asc", String.class)
+                    .setParameter("product", p.getProductId()).setMaxResults(1).getResultList();
+            if (!images.isEmpty()) snapshot.put("imageUrl", images.getFirst());
             snapshot.put("size", variant.getSize());
             snapshot.put("color", variant.getColor());
             if (line.sourceLivestreamId() != null) snapshot.put("sourceLivestreamId", line.sourceLivestreamId());

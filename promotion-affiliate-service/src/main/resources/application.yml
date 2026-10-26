@@ -37,6 +37,8 @@ clients:
   payment:
     url: ${PAYMENT_SERVICE_URL:http://localhost:8084}
 scanms:
+  commission:
+    default-policy-enabled: ${COMMISSION_DEFAULT_POLICY_ENABLED:true}
   finance:
     token-url: ${FINANCE_TOKEN_URL:}
     client-id: ${AFFILIATE_SERVICE_CLIENT_ID:promotion-affiliate-service}
