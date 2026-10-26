@@ -14,6 +14,9 @@ import com.scanms.user.entity.Role;
 import com.scanms.user.entity.User;
 import com.scanms.user.exception.AppException;
 import com.scanms.user.exception.ErrorCode;
+import com.scanms.user.event.UserRegisteredEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import java.time.Instant;
 import com.scanms.user.repository.RoleRepository;
 import com.scanms.user.repository.UserRepository;
 import com.scanms.user.service.AuthService;
@@ -47,6 +50,7 @@ public class AuthServiceImpl implements AuthService {
     private final RoleRepository roleRepository;
     private final OtpService otpService;
     private final MailService mailService;
+    private final ApplicationEventPublisher events;
     @Value("${keycloak.auth-server-url}")
     private String serverUrl;
 
@@ -134,7 +138,9 @@ public class AuthServiceImpl implements AuthService {
                             .status(UserStatus.ACTIVE)
                             .roles(roles)
                             .build();
-                    repository.save(localUser);
+                    localUser = repository.save(localUser);
+                    events.publishEvent(new UserRegisteredEvent(localUser.getUserId(), identitySubject,
+                            localUser.getEmail(), UserRegisteredEvent.SOURCE_REGISTER, Instant.now()));
                 }
             }
         } catch (Exception e) {
@@ -321,7 +327,9 @@ public class AuthServiceImpl implements AuthService {
                         .status(UserStatus.ACTIVE)
                         .roles(roles)
                         .build();
-                repository.save(newUser);
+                newUser = repository.save(newUser);
+                events.publishEvent(new UserRegisteredEvent(newUser.getUserId(), identitySubject,
+                        newUser.getEmail(), UserRegisteredEvent.SOURCE_GOOGLE, Instant.now()));
             }
 
             // Lấy token cho user
