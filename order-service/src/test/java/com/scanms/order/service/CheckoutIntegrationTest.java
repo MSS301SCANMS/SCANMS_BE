@@ -54,28 +54,121 @@ class CheckoutIntegrationTest {
     @MockitoBean JwtDecoder decoder;
     static final AtomicInteger reserves=new AtomicInteger(); static final AtomicBoolean failNext=new AtomicBoolean();
     static final AtomicBoolean multiStore=new AtomicBoolean();
+    static final AtomicInteger voucherCommits=new AtomicInteger();
+    static final AtomicInteger productCancels=new AtomicInteger(),voucherCancels=new AtomicInteger();
     static final HttpServer server=server();
     final Jwt jwt=Jwt.withTokenValue("customer-token").header("alg","RS256").subject("identity").build();
     static HttpServer server() {
         try {
             var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
             server.createContext("/token",exchange -> { byte[] body="{\"access_token\":\"order-service-token\"}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
-            server.createContext("/user/api/v1/users/me",exchange -> { byte[] body="{\"result\":{\"userId\":\"customer\",\"identitySubject\":\"identity\",\"status\":\"ACTIVE\"}}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            server.createContext("/user/api/v1/users",exchange -> { byte[] body="{\"result\":{\"userId\":\"customer\",\"identitySubject\":\"identity\",\"status\":\"ACTIVE\"}}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             server.createContext("/product/api/v1/inventory/reservations",exchange -> {
+                if(exchange.getRequestURI().getPath().endsWith("/cancel"))productCancels.incrementAndGet();
                 reserves.incrementAndGet(); boolean fail=failNext.getAndSet(false);
                 int status=fail?503:"Bearer order-service-token".equals(exchange.getRequestHeaders().getFirst("Authorization"))?200:403;
                 String second=multiStore.get()?",{\"productId\":\"product-b\",\"variantId\":\"variant-b\",\"storeId\":\"store-b\",\"storeName\":\"Shop B\",\"name\":\"Product B\",\"quantity\":1,\"unitPriceVnd\":25000,\"grossAmountVnd\":25000}":"";
                 byte[] body=(status==200?"{\"result\":{\"lines\":[{\"productId\":\"product\",\"variantId\":\"variant\",\"storeId\":\"store\",\"storeName\":\"Shop\",\"name\":\"Product\",\"quantity\":2,\"unitPriceVnd\":15000,\"grossAmountVnd\":30000}"+second+"]}}":"{\"message\":\"Source unavailable\"}").getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(status,body.length); exchange.getResponseBody().write(body); exchange.close();
-            }); server.start(); return server;
+            });
+            server.createContext("/promotion/api/v1/checkout-vouchers",exchange -> {
+                assertEquals("Bearer order-service-token",exchange.getRequestHeaders().getFirst("Authorization"));
+                if(exchange.getRequestURI().getPath().endsWith("/commit")) voucherCommits.incrementAndGet();
+                else if(exchange.getRequestURI().getPath().endsWith("/cancel"))voucherCancels.incrementAndGet();
+                else assertEquals("30000",exchange.getRequestHeaders().getFirst("X-Shipping-Fee-Per-Store-Vnd"));
+                String request=new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8);
+                if(request.contains("INVALID")) {
+                    byte[] error="{\"message\":\"Voucher unavailable\"}".getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(409,error.length);
+                    exchange.getResponseBody().write(error); exchange.close(); return;
+                }
+                boolean pair=request.contains("shippingCode") && request.contains("GOODS");
+                String goods=pair?",{\"variantId\":\"variant\",\"voucherId\":\"goods-voucher\",\"allocatedAmountVnd\":10000,\"fundedBy\":\"PLATFORM\"}":"";
+                String body="{\"result\":{\"discountAmountVnd\":"+(pair?40000:30000)+",\"allocations\":[{\"benefitType\":\"SHIPPING\",\"storeId\":\"store\",\"voucherId\":\"ship-voucher\",\"allocatedAmountVnd\":30000,\"fundedBy\":\"PLATFORM\"}"+goods+"]}}";
+                byte[] bytes=body.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,bytes.length);
+                exchange.getResponseBody().write(bytes); exchange.close();
+            });
+            server.createContext("/promotion/api/v1/referrals/clicks/",exchange->{
+                assertEquals("Bearer order-service-token",exchange.getRequestHeaders().getFirst("Authorization"));
+                assertTrue(exchange.getRequestURI().getQuery().contains("productId=product"));
+                assertTrue(exchange.getRequestURI().getQuery().contains("customerId=customer"));
+                boolean expired=exchange.getRequestURI().getPath().contains("expired"), invalid=exchange.getRequestURI().getPath().contains("invalid");
+                String result=expired?"{}":"{\"referralLinkId\":\"ref\",\"referralClickId\":\"click\",\"sourceVideoId\":\"video\",\"collaboratorId\":\"kol\"}";
+                byte[] body=(invalid?"{\"message\":\"Wrong product\"}":"{\"result\":"+result+"}").getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type","application/json");exchange.sendResponseHeaders(invalid?409:200,body.length);exchange.getResponseBody().write(body);exchange.close();
+            });
+            server.start(); return server;
         } catch(Exception ex) { throw new IllegalStateException(ex); }
     }
     @DynamicPropertySource static void sources(DynamicPropertyRegistry r) {
-        String base="http://127.0.0.1:"+server.getAddress().getPort(); r.add("clients.user.url",() -> base+"/user"); r.add("clients.product.url",() -> base+"/product"); r.add("scanms.finance.token-url",() -> base+"/token");
+        String base="http://127.0.0.1:"+server.getAddress().getPort(); r.add("clients.user.url",() -> base+"/user"); r.add("clients.product.url",() -> base+"/product"); r.add("clients.promotion.url",() -> base+"/promotion"); r.add("scanms.finance.token-url",() -> base+"/token");
     }
     @AfterAll static void close() { server.stop(0); }
     @BeforeEach void setup() { returns.deleteAll(); allocations.deleteAll(); items.deleteAll(); sellers.deleteAll(); orders.deleteAll(); reserves.set(0); failNext.set(false); multiStore.set(false); org.springframework.test.util.ReflectionTestUtils.setField(shippingPolicy,"fee",0L); org.springframework.test.util.ReflectionTestUtils.setField(shippingPolicy,"simulation",false); }
     CheckoutService.Input input(String key,int quantity) { return new CheckoutService.Input(key,"Customer","0900000000","Delivery address","PAYOS",true,null,null,List.of(new CheckoutService.Line("product","variant",quantity))); }
+    @Test void freeshipQuoteAndPersistedOrderChargeShippingOnlyAndKeepProductRefundBasis() {
+        org.springframework.test.util.ReflectionTestUtils.setField(shippingPolicy,"fee",30000L);
+        var quote=checkout.quote(new CheckoutService.QuoteInput(List.of(new CheckoutService.Line("product","variant",2)),"SHIP"),jwt);
+        assertEquals(0L,quote.get("discountAmount")); assertEquals(30000L,quote.get("shippingDiscountVnd"));
+        assertEquals(30000L,quote.get("shippingFeeVnd")); assertEquals(30000L,quote.get("finalAmount"));
+        var input=new CheckoutService.Input("freeship-test","Customer","0900000000","Delivery address","WALLET",true,"SHIP",null,
+                List.of(new CheckoutService.Line("product","variant",2)),30000L);
+        var result=checkout.checkout(input,jwt);
+        assertEquals(30000L,result.get("finalAmount")); assertEquals(0L,result.get("shippingFeeVnd"));
+        assertEquals(30000L,result.get("shippingOriginalFeeVnd")); assertEquals(30000L,result.get("shippingDiscountVnd"));
+        assertEquals(30000L,items.findAll().getFirst().getNetPaidAmountVnd());
+        assertEquals(0L,items.findAll().getFirst().getDiscountAmountVnd()); assertEquals(0,allocations.count());
+        assertEquals(result.get("orderId"),checkout.checkout(input,jwt).get("orderId"));
+        assertEquals(1,items.count());
+    }
+    @Test void paidOrderCancellationIsDispatchedEvenAfterResourcesWereCommitted(){
+        productCancels.set(0);voucherCancels.set(0);
+        org.springframework.test.util.ReflectionTestUtils.setField(shippingPolicy,"fee",30000L);
+        var input=new CheckoutService.Input("paid-cancel-dispatch","Customer","0900000000","Delivery address","WALLET",true,"SHIP",null,List.of(new CheckoutService.Line("product","variant",2)),30000L);
+        String id=checkout.checkout(input,jwt).get("orderId").toString();
+        var order=orders.findById(id).orElseThrow();order.setStatus(com.scanms.order.constant.OrderStatus.PAID);orders.saveAndFlush(order);
+        financeDispatch.dispatch();assertEquals("commit",orders.findById(id).orElseThrow().getSagaState().get("resourceOutcome"));
+        order=orders.findById(id).orElseThrow();order.setStatus(com.scanms.order.constant.OrderStatus.CANCELLED);orders.saveAndFlush(order);
+        for(var seller:sellers.findByOrderId(id)){seller.setStatus(com.scanms.order.constant.SellerOrderStatus.CANCELLED);sellers.saveAndFlush(seller);}
+        financeDispatch.dispatch();financeDispatch.dispatch();
+        assertEquals(1,productCancels.get());assertEquals(1,voucherCancels.get());assertEquals("cancel",orders.findById(id).orElseThrow().getSagaState().get("resourceOutcome"));
+    }
+    @Test void verifiedVideoClickIsPersistedOnceAndExpiredClicksDoNotBlockPurchase(){
+        var input=new CheckoutService.Input("video-attribution","Customer","0900000000","Delivery address","PAYOS",true,null,null,
+                List.of(new CheckoutService.Line("product","variant",2,null,"client-forged-ref","click")));
+        var order=checkout.checkout(input,jwt);var item=items.findAll().getFirst();
+        assertEquals("ref",item.getReferralLinkId());assertEquals("video",item.getRuleSnapshot().get("sourceVideoId"));assertEquals(30000,item.getNetPaidAmountVnd());
+        assertEquals(order.get("orderId"),checkout.checkout(input,jwt).get("orderId"));assertEquals(1,items.count());
+        checkout.checkout(new CheckoutService.Input("expired-click","Customer","0900000000","Delivery address","PAYOS",true,null,null,
+                List.of(new CheckoutService.Line("product","variant",2,null,"ref","expired"))),jwt);
+        assertEquals(1,items.findAll().stream().filter(i->i.getReferralLinkId()!=null).count());
+    }
+    @Test void invalidAttributionCannotReserveStockOrCreateAttributedItems(){
+        assertEquals(409,assertThrows(ResponseStatusException.class,()->checkout.checkout(new CheckoutService.Input("invalid-click","Customer","0900000000","Delivery address","PAYOS",true,null,null,
+                List.of(new CheckoutService.Line("product","variant",2,null,"ref","invalid"))),jwt)).getStatusCode().value());
+        assertEquals(0,items.count());assertEquals(0,reserves.get());
+    }
+    @Test void pairDiscountsGoodsAndShippingSeparatelyAndDispatchesShippingOnlyRedemption() {
+        org.springframework.test.util.ReflectionTestUtils.setField(shippingPolicy,"fee",30000L);
+        var lines=List.of(new CheckoutService.Line("product","variant",2));
+        var quote=checkout.quote(new CheckoutService.QuoteInput(lines,"GOODS","SHIP"),jwt);
+        assertEquals(409,assertThrows(ResponseStatusException.class,()->checkout.quote(new CheckoutService.QuoteInput(lines,"INVALID","SHIP"),jwt)).getStatusCode().value());
+        assertEquals(10000L,quote.get("discountAmount")); assertEquals(30000L,quote.get("shippingDiscountVnd"));
+        assertEquals(20000L,quote.get("finalAmount")); assertEquals("MIXED",quote.get("benefitType"));
+        var input=new CheckoutService.Input("pair","Customer","0900000000","Delivery address","WALLET",true,"GOODS",null,lines,30000L,"SHIP");
+        var created=checkout.checkout(input,jwt);
+        assertEquals(20000L,created.get("finalAmount")); assertEquals(0L,created.get("shippingFeeVnd"));
+        assertEquals(10000L,items.findAll().getFirst().getDiscountAmountVnd());
+        assertEquals(20000L,items.findAll().getFirst().getNetPaidAmountVnd()); assertEquals(1,allocations.count());
+        assertEquals(created.get("orderId"),checkout.checkout(input,jwt).get("orderId")); assertEquals(1,items.count());
+        var shippingOnly=new CheckoutService.Input("shipping-dispatch","Customer","0900000000","Delivery address","WALLET",true,null,null,lines,30000L,"SHIP");
+        var ship=checkout.checkout(shippingOnly,jwt);
+        var order=orders.findById(ship.get("orderId").toString()).orElseThrow();
+        order.setStatus(com.scanms.order.constant.OrderStatus.PAID); orders.saveAndFlush(order);
+        int before=voucherCommits.get(); financeDispatch.dispatch(); assertEquals(before+1,voucherCommits.get());
+        assertEquals(true,orders.findById(order.getOrderId()).orElseThrow().getSagaState().get("resourcesFinalized"));
+    }
     @Test void checkoutUsesServerPriceAndCreatesSellerItemsOnlyOnce() {
         var first=checkout.checkout(input("key",2),jwt); var second=checkout.checkout(input("key",2),jwt);
         assertEquals(first.get("orderId"),second.get("orderId")); assertEquals(30000L,first.get("finalAmount")); assertEquals(1,reserves.get());

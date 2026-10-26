@@ -31,7 +31,7 @@ class RefreshSecurityTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.result.access_token").value("access"))
                 .andExpect(jsonPath("$.result.refresh_token").doesNotExist())
                 .andExpect(header().string("Set-Cookie", allOf(containsString("scanms_rt=rotated-refresh"), containsString("HttpOnly"), containsString("Path=/api/v1/auth"))));
-        mvc.perform(get("/api/v1/users/me")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/users")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/auth/refresh-token")).andExpect(status().isUnauthorized());
     }
 

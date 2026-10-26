@@ -23,7 +23,7 @@ class VoucherStoreProductsAccessTest {
         server.createContext("/api/v1/", exchange -> {
             if (!"Bearer fixture-token".equals(exchange.getRequestHeaders().getFirst("Authorization"))) badHeaders.incrementAndGet();
             String path = exchange.getRequestURI().getPath(), body; int code = 200;
-            if (path.endsWith("/users/me")) body = "{\"result\":{\"userId\":\"owner\",\"identitySubject\":\"subject\",\"status\":\"ACTIVE\"}}";
+            if (path.endsWith("/users")) body = "{\"result\":{\"userId\":\"owner\",\"identitySubject\":\"subject\",\"status\":\"ACTIVE\"}}";
             else if (path.endsWith("/stores/own-shop")) body = "{\"result\":{\"ownerUserId\":\"owner\",\"approvalStatus\":\"APPROVED\"}}";
             else if (path.endsWith("/products")) { productReads.incrementAndGet(); body = catalog.get(); code = status.get(); }
             else body = "{\"result\":{\"ownerUserId\":\"someone-else\",\"approvalStatus\":\"APPROVED\"}}";

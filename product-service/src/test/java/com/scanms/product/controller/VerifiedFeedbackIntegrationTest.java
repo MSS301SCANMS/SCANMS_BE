@@ -78,6 +78,22 @@ class VerifiedFeedbackIntegrationTest {
         bad=payload("Áo đẹp đúng mô tả");bad.remove("orderItemId");mvc.perform(post("/api/v1/feedbacks").with(jwt()).contentType("application/json").content(json(bad))).andExpect(status().isBadRequest());
         bad=payload("Áo đẹp đúng mô tả");bad.put("imageRefs",Collections.nCopies(6,"https://assets.example.test/a.jpg"));mvc.perform(post("/api/v1/feedbacks").with(jwt()).contentType("application/json").content(json(bad))).andExpect(status().isBadRequest());assertEquals(0,feedbacks.count());
     }
+    @Test void homepageRatingsArePerProductAndExcludeHiddenOrRemovedReviews() throws Exception {
+        var other=products.saveAndFlush(Product.builder().name("Unreviewed product").storeId(storeId).status(ProductStatus.ACTIVE).priceVnd(100000L).build());
+        var first=feedbacks.saveAndFlush(Feedback.builder().productId(productId).orderItemId("rated-item-1").customerId("buyer-1").rating(3).comment("Verified review").status(FeedbackStatus.ACTIVE).build());
+        feedbacks.saveAndFlush(Feedback.builder().productId(productId).orderItemId("rated-item-2").customerId("buyer-2").rating(5).status(FeedbackStatus.ACTIVE).build());
+        feedbacks.saveAndFlush(Feedback.builder().productId(productId).orderItemId("hidden-item").customerId("buyer-3").rating(1).status(FeedbackStatus.HIDDEN).build());
+        feedbacks.saveAndFlush(Feedback.builder().productId(productId).orderItemId("removed-item").customerId("buyer-4").rating(1).status(FeedbackStatus.REMOVED).build());
+        var rows=tools.jackson.databind.json.JsonMapper.builder().build().readTree(mvc.perform(get("/api/v1/public/products")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("result").path("items");
+        var rated=java.util.stream.StreamSupport.stream(rows.spliterator(),false).filter(p->p.path("id").asText().equals(productId)).findFirst().orElseThrow();
+        var empty=java.util.stream.StreamSupport.stream(rows.spliterator(),false).filter(p->p.path("id").asText().equals(other.getProductId())).findFirst().orElseThrow();
+        assertEquals(4.0,rated.path("rating").asDouble());assertEquals(2,rated.path("reviewCount").asLong());
+        assertTrue(empty.path("rating").isNull());assertEquals(0,empty.path("reviewCount").asLong());assertFalse(rated.has("customerId"));
+        mvc.perform(patch("/api/v1/feedbacks/"+first.getFeedbackId()).with(jwt()).contentType("application/json").content("{\"rating\":1}" )).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/public/products/"+productId)).andExpect(status().isOk()).andExpect(jsonPath("$.result.rating").value(3)).andExpect(jsonPath("$.result.reviewCount").value(2));
+        mvc.perform(delete("/api/v1/feedbacks/"+first.getFeedbackId()).with(jwt())).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/public/products/"+productId)).andExpect(status().isOk()).andExpect(jsonPath("$.result.rating").value(5)).andExpect(jsonPath("$.result.reviewCount").value(1));
+    }
     @Test void onlyDeliveredPaidBuyerMayReviewAndDuplicateCannotIncreaseRatings() throws Exception {
         var body=json(payload("Áo đẹp đúng mô tả"));
         mvc.perform(post("/api/v1/feedbacks").contentType("application/json").content(body)).andExpect(status().isUnauthorized());

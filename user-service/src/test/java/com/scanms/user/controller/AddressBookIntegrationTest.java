@@ -42,10 +42,10 @@ class AddressBookIntegrationTest {
         String book = "[{\"id\":\"first\",\"detailAddress\":\"" + "Địa chỉ kiểm thử ".repeat(100) + "\",\"isDefault\":true}]";
         assertTrue(book.length() > 500);
         String body = tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(Map.of("address", book));
-        mvc.perform(patch("/api/v1/users/me").with(jwt().jwt(j -> j.subject("address-owner")))
+        mvc.perform(patch("/api/v1/users").with(jwt().jwt(j -> j.subject("address-owner")))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.result.address").value(book));
-        mvc.perform(get("/api/v1/users/me").with(jwt().jwt(j -> j.subject("address-owner").claim("email",owner.getEmail()))))
+        mvc.perform(get("/api/v1/users").with(jwt().jwt(j -> j.subject("address-owner").claim("email",owner.getEmail()))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.result.address").value(book));
         User saved = users.findById(owner.getUserId()).orElseThrow();
         assertEquals(book,saved.getAddress());
@@ -57,7 +57,7 @@ class AddressBookIntegrationTest {
 
     @Test void emptyArrayClearsAddressBookWithoutChangingIdentity() throws Exception {
         owner.setAddress("[{\"id\":\"last\"}]"); users.saveAndFlush(owner);
-        mvc.perform(patch("/api/v1/users/me").with(jwt().jwt(j -> j.subject("address-owner")))
+        mvc.perform(patch("/api/v1/users").with(jwt().jwt(j -> j.subject("address-owner")))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"address\":\"[]\"}"))
                 .andExpect(status().isOk());
         assertEquals("[]",users.findById(owner.getUserId()).orElseThrow().getAddress());
@@ -65,7 +65,7 @@ class AddressBookIntegrationTest {
 
     @Test void rejectsOversizedBookBeforeWritingIt() throws Exception {
         String body = tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(Map.of("address","x".repeat(65536)));
-        mvc.perform(patch("/api/v1/users/me").with(jwt().jwt(j -> j.subject("address-owner")))
+        mvc.perform(patch("/api/v1/users").with(jwt().jwt(j -> j.subject("address-owner")))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("address")));
         assertNull(users.findById(owner.getUserId()).orElseThrow().getAddress());

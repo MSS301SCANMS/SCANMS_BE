@@ -38,6 +38,7 @@ public class SecurityConfig {
                 .authorizeExchange(auth -> auth
                         // Cho phép toàn bộ preflight OPTIONS request qua CORS
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/referrals/clicks").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/v1/auth/refresh-token").permitAll()
                         // Đăng xuất dựa trên cookie refresh token (HttpOnly); access token có thể đã hết hạn.
                         .pathMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
@@ -63,6 +64,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/orders/track").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/referrals/resolve/*").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/vouchers/public/platform").permitAll()
 
                         // Các request còn lại bắt buộc phải có JWT hợp lệ
                         .anyExchange().authenticated()

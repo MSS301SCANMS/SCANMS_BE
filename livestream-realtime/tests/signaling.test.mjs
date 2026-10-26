@@ -13,9 +13,14 @@ test('signed identity, host consent, room isolation, chat identity, pinning and 
     expired: await token('expired', ['USER'], '-1s'),
   };
   const sessions = new Map(['room-a','room-b','scheduled'].map(id => [id, { livestreamId: id, storeId: 'store-a', status: id === 'scheduled' ? 'SCHEDULED' : 'LIVE', productRefs: { productIds: ['shirt','dress'] }, collaboratorRefs: { collaboratorIds: ['kol-a'] }, participantRefs: { collaboratorResponses: { 'kol-a': 'ACCEPTED' } } }]));
-  const server = createLiveServer({ pollMs: 100, verifyToken: async token => (await jwtVerify(token, publicKey, { issuer: 'fixture' })).payload,
+  const metricRequests=[];
+  const server = createLiveServer({ pollMs: 100, metricsSecret:'fixture-metrics-key-32-characters-long', verifyToken: async token => (await jwtVerify(token, publicKey, { issuer: 'fixture' })).payload,
     fetcher: async (url, options) => {
       const { payload } = await jwtVerify(options.headers.Authorization.slice(7), publicKey);
+      if(['POST','PATCH'].includes(options.method)){
+        metricRequests.push({url,method:options.method,body:JSON.parse(options.body),user:payload.sub,signature:options.headers['X-Live-Metrics-Signature']});
+        return Response.json({result:true});
+      }
       let result;
       if (url.endsWith('/collaborators/me')) result = { collaboratorId: payload.sub === 'kol-user' ? 'kol-a' : 'other-kol', approvalStatus: 'APPROVED' };
       else if (url.includes('/referrals/livestream-access?')) result = { approvalStatus: 'APPROVED', collaboratorId: 'kol-a', storeId: 'store-a' };
@@ -67,5 +72,8 @@ test('signed identity, host consent, room isolation, chat identity, pinning and 
     assert.equal((await emit(scheduledHost, 'live_stream_started', { sessionId: 'scheduled' })).ok, false, 'camera cannot publish before shop starts the session');
     sessions.get('scheduled').status = 'LIVE';
     assert.equal((await emit(scheduledHost, 'live_stream_started', { sessionId: 'scheduled' })).ok, true);
+    assert.ok(metricRequests.some(r=>r.method==='POST'&&r.url.endsWith('/views')&&r.user==='buyer'),'viewer joins must persist to Product using the viewer identity');
+    assert.ok(metricRequests.some(r=>r.method==='PATCH'&&r.url.endsWith('/stats')&&r.body.concurrentViewerCount>0),'realtime viewer peaks must persist');
+    assert.ok(metricRequests.every(r=>/^[a-f0-9]{64}$/.test(r.signature)),'only the authenticated relay signs metric requests');
   } finally { sockets.forEach(socket => socket.disconnect());await server.close(); }
 });

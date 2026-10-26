@@ -56,7 +56,22 @@ public class ProductAccess {
     }
 
     public boolean isManager() {
-        return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER")::contains);
+        return roles().stream().anyMatch(Set.of("ADMIN", "MANAGER", "SYSTEM_ADMIN", "SYSTEM_MANAGER")::contains);
+    }
+
+    public boolean canReadAllCatalog() {
+        if (roles().stream().anyMatch(Set.of("ORDER_INTERNAL","PAYMENT_INTERNAL","AFFILIATE_INTERNAL")::contains)) return true;
+        if (isManager()) { requireManager(); return true; }
+        return false;
+    }
+
+    public Set<String> readableStoreIds() {
+        String user=userId();
+        return stores.findByOwnerUserId(user).stream().map(Store::getStoreId).collect(java.util.stream.Collectors.toSet());
+    }
+
+    public void requireReadableStore(String storeId) {
+        if (!canReadAllCatalog()) requireOwnedStore(storeId);
     }
 
     public Store requireApprovedStore(String storeId) {

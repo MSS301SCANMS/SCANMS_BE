@@ -1,6 +1,11 @@
 server:
   port: ${SERVER_PORT:8082}
 
+scanms:
+  catalog:
+    seed-enabled: ${CATALOG_SEED_ENABLED:true}
+    cache-enabled: ${CATALOG_CACHE_ENABLED:true}
+
 spring:
   config:
     import: optional:file:.env[.properties],optional:file:product-service/.env[.properties]

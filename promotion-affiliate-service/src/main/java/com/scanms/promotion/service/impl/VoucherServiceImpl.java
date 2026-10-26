@@ -48,6 +48,12 @@ public class VoucherServiceImpl implements VoucherService {
                 throw new AppException(ErrorCode.INVALID_REQUEST, "Store voucher requires storeId");
             access.requireStoreOwner(request.storeId());
         }
+        String benefit = Objects.toString(request.scope()==null?null:request.scope().get("benefitType"),"GOODS");
+        if (!Set.of("GOODS","SHIPPING").contains(benefit))
+            throw new AppException(ErrorCode.INVALID_REQUEST,"Unsupported voucher benefit");
+        if ("SHIPPING".equals(benefit) && (request.issuerType()!=VoucherIssuerType.PLATFORM
+                || !Set.of(VoucherScopeType.PLATFORM,VoucherScopeType.STORE).contains(request.scopeType())))
+            throw new AppException(ErrorCode.INVALID_REQUEST,"Shipping vouchers require a platform issuer and platform/store scope");
         switch (request.scopeType()) {
             case PLATFORM -> {
                 if (request.issuerType() != VoucherIssuerType.PLATFORM) throw new AppException(ErrorCode.FORBIDDEN, "Platform scope requires platform issuer");
@@ -105,12 +111,14 @@ public class VoucherServiceImpl implements VoucherService {
 
     @Transactional(readOnly = true)
     public VoucherResponse getById(String id) {
-        return repository.findById(id).map(mapper::toResponse)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Voucher not found: " + id));
+        var voucher=repository.findById(id).orElseThrow(()->new AppException(ErrorCode.RESOURCE_NOT_FOUND,"Voucher not found: "+id));
+        if(!access.canReadAllVouchers()&&(voucher.getStoreId()==null||!access.ownedStoreIds().contains(voucher.getStoreId())))throw new AppException(ErrorCode.FORBIDDEN);
+        return mapper.toResponse(voucher);
     }
 
     @Transactional(readOnly = true)
     public List<VoucherResponse> findAll() {
-        return repository.findAll().stream().map(mapper::toResponse).toList();
+        boolean all=access.canReadAllVouchers();var owned=all?Set.<String>of():access.ownedStoreIds();
+        return repository.findAll().stream().filter(v->all||(v.getStoreId()!=null&&owned.contains(v.getStoreId()))).map(mapper::toResponse).toList();
     }
 }

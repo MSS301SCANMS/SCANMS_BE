@@ -12,6 +12,7 @@ import java.util.Optional;
 
 public interface ProductRepository extends JpaRepository<Product, String> {
     List<Product> findByStoreId(String storeId);
+    List<Product> findByStoreIdIn(java.util.Collection<String> storeIds);
     boolean existsByCategoryId(String categoryId);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Product> findLockedByProductId(String productId);

@@ -47,6 +47,11 @@ public class Livestream {
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> collaboratorRefs;
 
+    /** Relay visit/identity hashes used for durable idempotency; never returned by the public DTO. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition="jsonb")
+    private Map<String,Object> statistics;
+
     private Long viewerCount;
 
     private Long uniqueViewerCount;

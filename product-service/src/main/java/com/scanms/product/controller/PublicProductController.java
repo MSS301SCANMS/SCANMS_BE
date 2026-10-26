@@ -106,7 +106,7 @@ public class PublicProductController {
         int safeLimit = Math.min(Math.max(limit, 1), 100);
         int from = Math.min((safePage - 1) * safeLimit, items.size());
         int to = Math.min(from + safeLimit, items.size());
-        List<Map<String, Object>> pageItems = items.subList(from, to);
+        List<Map<String, Object>> pageItems = withRatings(items.subList(from, to));
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("items", pageItems);
@@ -142,7 +142,8 @@ public class PublicProductController {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Product not found"));
         Store store = product.getStoreId() != null ? stores.findById(product.getStoreId()).orElse(null) : null;
-        return ApiResponse.success(catalog != null ? catalog.productDetails(product, store) : PublicCatalogService.toPublicProduct(product, store));
+        var details = catalog != null ? catalog.productDetails(product, store) : PublicCatalogService.toPublicProduct(product, store);
+        return ApiResponse.success(withRatings(List.of(details)).getFirst());
     }
 
     @GetMapping("/products/{id}/landing")
@@ -202,6 +203,19 @@ public class PublicProductController {
     @GetMapping("/stores")
     public ApiResponse<List<Map<String, Object>>> marketplaceStores() {
         return ApiResponse.success(catalog.approvedStores());
+    }
+
+    private List<Map<String, Object>> withRatings(List<Map<String, Object>> rows) {
+        // Review totals stay current even when catalog rows are served from Redis.
+        var ratings = reviewSummaries == null ? Map.<String, PublicReviewService.Rating>of()
+                : reviewSummaries.ratings(rows.stream().map(row -> str(row.get("productId"))).filter(Objects::nonNull).toList());
+        return rows.stream().map(row -> {
+            var copy = new LinkedHashMap<String, Object>(row);
+            var rating = ratings.get(str(row.get("productId")));
+            copy.put("rating", rating == null ? null : rating.averageRating());
+            copy.put("reviewCount", rating == null ? 0L : rating.reviewCount());
+            return (Map<String, Object>) copy;
+        }).toList();
     }
 
     private static String str(Object value) {

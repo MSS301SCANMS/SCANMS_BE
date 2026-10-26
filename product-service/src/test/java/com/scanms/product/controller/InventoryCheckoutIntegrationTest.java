@@ -46,6 +46,7 @@ class InventoryCheckoutIntegrationTest {
     @Autowired EntityManager em;
     @Autowired PlatformTransactionManager transactions;
     @MockitoBean JwtDecoder decoder;
+    @MockitoBean com.scanms.product.client.OrderCancellationClient cancellations;
     final Jwt jwt=Jwt.withTokenValue("internal").header("alg","RS256").subject("order-service").claim("realm_access",Map.of("roles",List.of("ORDER_INTERNAL"))).build();
     String productId,variantId;
     @BeforeEach void setup() {
@@ -73,6 +74,13 @@ class InventoryCheckoutIntegrationTest {
         inventory.quote(input(2),jwt); assertEquals(3,stock());
         inventory.reserve("paid",input(2),jwt); inventory.commit("paid",jwt);
         assertThrows(ResponseStatusException.class,() -> inventory.release("paid",jwt)); assertEquals(1,stock());
+    }
+    @Test void paidCancellationRestoresStockOnceOnlyAfterOrderConfirmsNoDelivery(){
+        inventory.reserve("paid-cancel",input(2),jwt);inventory.commit("paid-cancel",jwt);
+        org.mockito.Mockito.when(cancellations.eligibility("Bearer internal","paid-cancel")).thenReturn(Map.of("result",Map.of("eligible",false)));
+        assertThrows(ResponseStatusException.class,()->inventory.cancel("paid-cancel",jwt));assertEquals(1,stock());
+        org.mockito.Mockito.when(cancellations.eligibility("Bearer internal","paid-cancel")).thenReturn(Map.of("result",Map.of("eligible",true)));
+        inventory.cancel("paid-cancel",jwt);inventory.cancel("paid-cancel",jwt);assertEquals(3,stock());
     }
     @Test void customerCannotMutateStockEvenWithAnOrderReference() {
         Jwt customer=Jwt.withTokenValue("user").header("alg","RS256").subject("customer").claim("realm_access",Map.of("roles",List.of("USER"))).build();
