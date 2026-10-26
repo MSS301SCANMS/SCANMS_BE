@@ -74,6 +74,73 @@ class CheckoutVoucherIntegrationTest {
         List<Map<String,Object>> lines=new ArrayList<>(); for(int i=0;i<100;i++) lines.add(Map.of("variantId","v"+i,"storeId","store","productId","product","grossAmountVnd",1));
         return new CheckoutVoucherController.Input("SAVE","customer",lines);
     }
+
+    void shippingVoucher() {
+        vouchers.saveAndFlush(Voucher.builder().code("SHIP").issuerType(VoucherIssuerType.PLATFORM).scopeType(VoucherScopeType.PLATFORM)
+                .scope(Map.of("benefitType","SHIPPING")).discountType(VoucherDiscountType.FIXED).value(BigDecimal.valueOf(50000))
+                .validFrom(LocalDateTime.now(ZoneOffset.UTC).minusDays(1)).validUntil(LocalDateTime.now(ZoneOffset.UTC).plusDays(1))
+                .limits(Map.of("totalUsageLimit",1,"perCustomerLimit",1)).build());
+    }
+
+    @Test void pairReservesExactlyTwoRedemptionsAndReleasesBothWithoutLosingQuota() {
+        shippingVoucher();
+        var pair=new CheckoutVoucherController.Input("SAVE","customer",input().lines(),"SHIP");
+        assertEquals(30099L,checkout.quote(pair,jwt,30000L).result().get("discountAmountVnd"));
+        assertTrue(redemptions.findAll().isEmpty());
+        checkout.reserve("pair",pair,jwt,30000L); checkout.reserve("pair",pair,jwt,30000L);
+        assertEquals(2,redemptions.findAllByOrderId("pair").size());
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("other",pair,jwt,30000L));
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("pair",pair,jwt,40000L));
+        checkout.release("pair",jwt); checkout.release("pair",jwt);
+        assertTrue(redemptions.findAllByOrderId("pair").stream().allMatch(r->r.getStatus()==VoucherRedemptionStatus.CANCELLED));
+        checkout.reserve("next-pair",pair,jwt,30000L); checkout.commit("next-pair",jwt); checkout.commit("next-pair",jwt);
+        assertTrue(redemptions.findAllByOrderId("next-pair").stream().allMatch(r->r.getStatus()==VoucherRedemptionStatus.USED));
+        assertThrows(ResponseStatusException.class,()->checkout.release("next-pair",jwt));
+    }
+
+    @Test void pairRestoresBothUsesOnlyAfterOrderEligibilityAndRejectsWrongBenefitSlots() {
+        shippingVoucher();
+        var pair=new CheckoutVoucherController.Input("SAVE","customer",input().lines(),"SHIP");
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("wrong",new CheckoutVoucherController.Input("SHIP","customer",input().lines(),"SAVE"),jwt,30000L));
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("same",new CheckoutVoucherController.Input("SAVE","customer",input().lines(),"save"),jwt,30000L));
+        assertTrue(redemptions.findAll().isEmpty());
+        checkout.reserve("restorable",pair,jwt,30000L); checkout.commit("restorable",jwt);
+        checkout.restore("restorable",jwt); checkout.restore("restorable",jwt);
+        assertEquals(2,redemptions.findAllByOrderId("restorable").size());
+        assertTrue(redemptions.findAllByOrderId("restorable").stream().allMatch(r->r.getStatus()==VoucherRedemptionStatus.RESTORED));
+        assertDoesNotThrow(()->checkout.reserve("restored-pair",pair,jwt,30000L));
+    }
+
+    @Test void invalidSecondVoucherRollsBackTheWholePairAndShippingCanBeUsedAlone() {
+        shippingVoucher();
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("invalid",new CheckoutVoucherController.Input("MISSING","customer",input().lines(),"SHIP"),jwt,30000L));
+        assertTrue(redemptions.findAll().isEmpty());
+        assertEquals(30000L,checkout.quote(new CheckoutVoucherController.Input("","customer",input().lines(),"SHIP"),jwt,30000L).result().get("discountAmountVnd"));
+        checkout.reserve("shipping-only",new CheckoutVoucherController.Input("","customer",input().lines(),"SHIP"),jwt,30000L);
+        assertEquals(1,redemptions.findAllByOrderId("shipping-only").size());
+    }
+
+    @Test @SuppressWarnings("unchecked") void freeshipIsCappedByShippingAndNeverAllocatedToProductPrices() {
+        vouchers.saveAndFlush(Voucher.builder().code("SHIP").issuerType(VoucherIssuerType.PLATFORM)
+                .scopeType(VoucherScopeType.PLATFORM).scope(Map.of("benefitType","SHIPPING"))
+                .discountType(VoucherDiscountType.FIXED).value(BigDecimal.valueOf(100000)).cap(50000L)
+                .minimumSubtotal(100L).validFrom(LocalDateTime.now(ZoneOffset.UTC).minusDays(1))
+                .validUntil(LocalDateTime.now(ZoneOffset.UTC).plusDays(1)).build());
+        var input=new CheckoutVoucherController.Input("SHIP","customer",List.of(
+                Map.of("variantId","a","storeId","store-a","productId","p-a","grossAmountVnd",200),
+                Map.of("variantId","b","storeId","store-b","productId","p-b","grossAmountVnd",300)));
+        var result=checkout.quote(input,jwt,30000L).result();
+        var rows=(List<Map<String,Object>>)result.get("allocations");
+        assertEquals(50000L,result.get("discountAmountVnd"));
+        assertEquals(2,rows.size());
+        for(var row:rows) { assertEquals("SHIPPING",row.get("benefitType")); assertFalse(row.containsKey("variantId")); assertEquals(25000L,row.get("allocatedAmountVnd")); }
+        checkout.reserve("ship-order",input,jwt,30000L); checkout.reserve("ship-order",input,jwt,30000L);
+        assertEquals(1,redemptions.findAll().size());
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("ship-order",input,jwt,40000L));
+        assertThrows(ResponseStatusException.class,()->checkout.quote(input,jwt,0L));
+        checkout.release("ship-order",jwt);
+        assertEquals(10000L,checkout.quote(input,jwt,5000L).result().get("discountAmountVnd"));
+    }
     @Test @SuppressWarnings("unchecked") void allocationsNeverExceedLineValueAndPreserveEveryVnd() {
         var result=checkout.quote(input(),jwt).result(); var lines=(List<Map<String,Object>>)result.get("allocations"); long sum=0;
         for(var line:lines) { long amount=((Number)line.get("allocatedAmountVnd")).longValue(); assertTrue(amount>=0 && amount<=1); sum+=amount; }

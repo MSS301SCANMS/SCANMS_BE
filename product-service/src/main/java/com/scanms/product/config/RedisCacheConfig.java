@@ -12,6 +12,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.support.NoOpCacheManager;
 
 /**
  * Cache dùng chung qua Redis (nhiều instance cùng thấy một bản cache).
@@ -25,9 +28,12 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 public class RedisCacheConfig implements CachingConfigurer {
     private static final String KEY_PREFIX = "scanms:product:cache:v1:";
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(5);
+    @Value("${scanms.catalog.cache-enabled:true}")
+    private boolean cacheEnabled;
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+    public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+        if (!cacheEnabled) return new NoOpCacheManager();
         RedisCacheConfiguration defaults = RedisCacheConfiguration.defaultCacheConfig(getClass().getClassLoader())
                 .entryTtl(DEFAULT_TTL)
                 .disableCachingNullValues()

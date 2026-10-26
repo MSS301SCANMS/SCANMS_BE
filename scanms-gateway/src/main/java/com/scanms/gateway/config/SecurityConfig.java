@@ -63,6 +63,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/orders/track").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/referrals/resolve/*").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/vouchers/public/platform").permitAll()
 
                         // Các request còn lại bắt buộc phải có JWT hợp lệ
                         .anyExchange().authenticated()

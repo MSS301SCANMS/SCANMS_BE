@@ -87,7 +87,8 @@ public class FinanceDispatch {
         var request = JsonMapper.builder().build().readTree(checkoutRequest);
         var code = request.path("couponCode");
         if (code.isMissingNode() || code.isNull()) code = request.path("voucherCode");
-        return code.isTextual() && !code.asText().isBlank();
+        var shipping=request.path("shippingCouponCode");
+        return code.isTextual() && !code.asText().isBlank() || shipping.isTextual() && !shipping.asText().isBlank();
     }
 
     @Scheduled(fixedDelayString = "${scanms.finance.dispatch-delay-ms:60000}")

@@ -1,0 +1,36 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),work=path.join(repo,'.local','product-cloud');
+const parse=file=>new URL(fs.readFileSync(file,'utf8').split(/\r?\n/).find(l=>l.startsWith('DATABASE_URL=')).slice(13));
+const uri=parse(path.join(work,'connection.env'));
+const receipt=JSON.parse(fs.readFileSync(path.join(work,'migration-receipt.json'),'utf8'));
+assert.ok(receipt.restored&&receipt.host===uri.hostname,'Verify migration before provisioning app account');
+const role='scanms_product_app',file=path.join(work,'app-connection.env');
+const saved=fs.existsSync(file)?parse(file):null;
+if(saved)assert.equal(saved.hostname,uri.hostname,'Existing app connection belongs to another host');
+const password=saved?decodeURIComponent(saved.password):crypto.randomBytes(32).toString('base64url');
+const env={...process.env,PGHOST:uri.hostname,PGPORT:uri.port||'5432',PGDATABASE:decodeURIComponent(uri.pathname.slice(1)),PGUSER:decodeURIComponent(uri.username),PGPASSWORD:decodeURIComponent(uri.password),PGSSLMODE:'require',PGCHANNELBINDING:'require',PGCONNECT_TIMEOUT:'20',PGCLIENTENCODING:'UTF8'};
+const pg=path.join(process.env.POSTGRES_BIN||'C:/Program Files/PostgreSQL/18/bin','psql.exe');
+function query(sql,extra={}) {const r=spawnSync(pg,['-X','-A','-t','-v','ON_ERROR_STOP=1','-c',sql],{encoding:'utf8',env:{...env,...extra}});assert.equal(r.status,0,'App account operation failed: '+String(r.stderr||'').slice(0,500));return r.stdout.trim();}
+const quote=value=>"'"+value.replaceAll("'","''")+"'";
+const exists=query(`SELECT count(*) FROM pg_roles WHERE rolname=${quote(role)};`)!=='0';
+assert.ok(!exists||saved,'Refusing to change an unmanaged existing app role');
+query(`BEGIN;
+${!exists?`CREATE ROLE ${role} LOGIN PASSWORD ${quote(password)};`:''}
+GRANT CONNECT ON DATABASE "${env.PGDATABASE.replaceAll('"','""')}" TO ${role};
+GRANT USAGE ON SCHEMA public TO ${role};
+GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO ${role};
+GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO ${role};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO ${role};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE,SELECT ON SEQUENCES TO ${role};
+COMMIT;`);
+const app=new URL(uri);app.username=role;app.password=password;
+fs.writeFileSync(file,'DATABASE_URL='+app.toString()+'\n',{mode:0o600});
+const permissions=JSON.parse(query(`SELECT json_build_object('products',(SELECT count(*) FROM products),'canRead',has_table_privilege(current_user,'products','SELECT'),'canWrite',has_table_privilege(current_user,'products','UPDATE'),'canCreate',has_schema_privilege(current_user,'public','CREATE'),'superuser',(SELECT rolsuper FROM pg_roles WHERE rolname=current_user),'createDb',(SELECT rolcreatedb FROM pg_roles WHERE rolname=current_user));`,{PGUSER:role,PGPASSWORD:password}));
+assert.equal(permissions.products,receipt.tables.products.rows);assert.equal(permissions.canRead,true);assert.equal(permissions.canWrite,true);assert.equal(permissions.canCreate,false);assert.equal(permissions.superuser,false);assert.equal(permissions.createDb,false);
+fs.writeFileSync(path.join(work,'app-account-receipt.json'),JSON.stringify({at:new Date().toISOString(),host:uri.hostname,role,connectionFile:file,permissions},null,2));
+console.log(JSON.stringify({configured:true,role,connectionFile:file,permissions}));

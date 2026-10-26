@@ -36,4 +36,27 @@ class PublicVoucherIntegrationTest {
         mvc.perform(get("/api/v1/vouchers")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/vouchers/public").param("storeId"," ")).andExpect(status().isBadRequest());
     }
+
+    @Test void platformSuggestionsExposeOnlyCurrentGoodsAndShippingForTheApplicableStore() throws Exception {
+        var now=LocalDateTime.now(ZoneOffset.UTC);
+        var global=voucher("SAN10",null,now.minusDays(1),now.plusDays(1),VoucherIssuerType.PLATFORM);
+        global.setScopeType(VoucherScopeType.PLATFORM); global.setLimits(null); vouchers.save(global);
+        var ship=voucher("FREESHIP","store-a",now.minusDays(1),now.plusDays(1),VoucherIssuerType.PLATFORM);
+        ship.setScope(Map.of("benefitType","SHIPPING")); ship.setLimits(Map.of("totalUsageLimit",3)); vouchers.save(ship);
+        vouchers.save(voucher("SHOP","store-a",now.minusDays(1),now.plusDays(1),VoucherIssuerType.STORE));
+        vouchers.save(voucher("OTHER","store-b",now.minusDays(1),now.plusDays(1),VoucherIssuerType.PLATFORM));
+        vouchers.save(voucher("OLD","store-a",now.minusDays(2),now.minusDays(1),VoucherIssuerType.PLATFORM));
+        var cashback=voucher("CASHBACK","store-a",now.minusDays(1),now.plusDays(1),VoucherIssuerType.PLATFORM);
+        cashback.setScope(Map.of("benefitType","CASHBACK")); vouchers.save(cashback); vouchers.flush();
+        mvc.perform(get("/api/v1/vouchers/public/platform").param("storeId","store-a"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.length()").value(2))
+                .andExpect(jsonPath("$.result[0].code").value("FREESHIP"))
+                .andExpect(jsonPath("$.result[0].benefitType").value("SHIPPING"))
+                .andExpect(jsonPath("$.result[0].remainingUses").value(3))
+                .andExpect(jsonPath("$.result[0].funding").doesNotExist())
+                .andExpect(jsonPath("$.result[0].limits").doesNotExist());
+        mvc.perform(get("/api/v1/vouchers/public/platform"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.length()").value(1))
+                .andExpect(jsonPath("$.result[0].code").value("SAN10"));
+    }
 }

@@ -23,9 +23,9 @@ class ManagerStatisticsAccessTest {
     @Test void requiresMatchingActiveUserAndPropagatesDependencyOutage() {
         var access=new ManagerStatisticsAccess(); var builder=RestClient.builder(); var server=MockRestServiceServer.bindTo(builder).build();
         ReflectionTestUtils.setField(access,"http",builder.build()); ReflectionTestUtils.setField(access,"userUrl","http://user.test");
-        server.expect(requestTo("http://user.test/api/v1/users/me")).andExpect(header("Authorization","Bearer fixture")).andRespond(withSuccess("{\"result\":{\"status\":\"ACTIVE\",\"identitySubject\":\"subject\"}}",MediaType.APPLICATION_JSON));
-        server.expect(requestTo("http://user.test/api/v1/users/me")).andRespond(withSuccess("{\"result\":{\"status\":\"ACTIVE\",\"identitySubject\":\"someone-else\"}}",MediaType.APPLICATION_JSON));
-        server.expect(requestTo("http://user.test/api/v1/users/me")).andRespond(withServerError());
+        server.expect(requestTo("http://user.test/api/v1/users")).andExpect(header("Authorization","Bearer fixture")).andRespond(withSuccess("{\"result\":{\"status\":\"ACTIVE\",\"identitySubject\":\"subject\"}}",MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://user.test/api/v1/users")).andRespond(withSuccess("{\"result\":{\"status\":\"ACTIVE\",\"identitySubject\":\"someone-else\"}}",MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://user.test/api/v1/users")).andRespond(withServerError());
         access.requireManager(jwt("MANAGER"));
         assertEquals(403,assertThrows(ResponseStatusException.class,()->access.requireManager(jwt("ADMIN"))).getStatusCode().value());
         assertEquals(503,assertThrows(ResponseStatusException.class,()->access.requireManager(jwt("MANAGER"))).getStatusCode().value()); server.verify();

@@ -48,6 +48,12 @@ public class VoucherServiceImpl implements VoucherService {
                 throw new AppException(ErrorCode.INVALID_REQUEST, "Store voucher requires storeId");
             access.requireStoreOwner(request.storeId());
         }
+        String benefit = Objects.toString(request.scope()==null?null:request.scope().get("benefitType"),"GOODS");
+        if (!Set.of("GOODS","SHIPPING").contains(benefit))
+            throw new AppException(ErrorCode.INVALID_REQUEST,"Unsupported voucher benefit");
+        if ("SHIPPING".equals(benefit) && (request.issuerType()!=VoucherIssuerType.PLATFORM
+                || !Set.of(VoucherScopeType.PLATFORM,VoucherScopeType.STORE).contains(request.scopeType())))
+            throw new AppException(ErrorCode.INVALID_REQUEST,"Shipping vouchers require a platform issuer and platform/store scope");
         switch (request.scopeType()) {
             case PLATFORM -> {
                 if (request.issuerType() != VoucherIssuerType.PLATFORM) throw new AppException(ErrorCode.FORBIDDEN, "Platform scope requires platform issuer");
