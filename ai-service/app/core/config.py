@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     model_path: Path = Path("weights/best.pt")
-    confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    # Primary pass; a second lower-confidence pass runs when only one garment family is found.
+    confidence_threshold: float = Field(default=0.28, ge=0.0, le=1.0)
     max_image_size_mb: int = Field(default=10, gt=0)
     color_clusters: int = Field(default=3, ge=1, le=8)
     color_resize_pixels: int = Field(default=128, ge=32, le=512)

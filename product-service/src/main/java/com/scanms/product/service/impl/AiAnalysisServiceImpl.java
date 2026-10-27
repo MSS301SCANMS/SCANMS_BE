@@ -1,8 +1,7 @@
 package com.scanms.product.service.impl;
 
 import com.scanms.product.client.AiServiceClient;
-import com.scanms.product.dto.ai.AiDetectionResponse;
-import com.scanms.product.dto.ai.ShopAiAnalyzeResponse;
+import com.scanms.product.dto.ai.*;
 import com.scanms.product.exception.AppException;
 import com.scanms.product.exception.ErrorCode;
 import com.scanms.product.service.AiAnalysisService;
@@ -11,6 +10,11 @@ import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -35,16 +39,44 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     }
 
     public static ShopAiAnalyzeResponse enrich(AiDetectionResponse raw) {
-        String className = raw.topPrediction() != null ? raw.topPrediction().className() : null;
-        if ((className == null || className.isBlank()) && raw.detections() != null && !raw.detections().isEmpty()) {
-            className = raw.detections().getFirst().className();
+        List<DetectedGarment> garments = new ArrayList<>();
+        if (raw.detections() != null) {
+            for (AiDetectionItem item : raw.detections()) {
+                if (item == null || !ClothingGarmentMapper.isClothing(item.className())) continue;
+                garments.add(new DetectedGarment(
+                        item.className(),
+                        ClothingGarmentMapper.displayLabel(item.className()),
+                        ClothingGarmentMapper.garmentType(item.className()).name(),
+                        item.confidence()));
+            }
         }
-        boolean clothing = ClothingGarmentMapper.isClothing(className);
+
+        boolean clothing = !garments.isEmpty();
+        if (!clothing) {
+            String className = raw.topPrediction() != null ? raw.topPrediction().className() : null;
+            return ShopAiAnalyzeResponse.from(
+                    raw,
+                    ClothingGarmentMapper.garmentType(className).name(),
+                    ClothingGarmentMapper.displayLabel(className),
+                    ClothingGarmentMapper.suggestedCategory(className),
+                    false,
+                    List.of());
+        }
+
+        Set<String> types = new LinkedHashSet<>();
+        List<String> labels = new ArrayList<>();
+        for (DetectedGarment garment : garments) {
+            types.add(garment.garmentType());
+            if (!labels.contains(garment.displayLabel())) labels.add(garment.displayLabel());
+        }
+        String garmentType = String.join("+", types);
+        String displayLabel = String.join(" · ", labels);
         return ShopAiAnalyzeResponse.from(
                 raw,
-                ClothingGarmentMapper.garmentType(className).name(),
-                ClothingGarmentMapper.displayLabel(className),
-                ClothingGarmentMapper.suggestedCategory(className),
-                clothing);
+                garmentType,
+                displayLabel,
+                ClothingGarmentMapper.SUGGESTED_CATEGORY,
+                true,
+                List.copyOf(garments));
     }
 }

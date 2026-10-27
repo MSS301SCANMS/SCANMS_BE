@@ -27,7 +27,7 @@ The service has no database, does not train models, and does not persist product
 | `HOST` | `0.0.0.0` | Uvicorn bind host |
 | `PORT` | `8000` | Uvicorn port |
 | `MODEL_PATH` | `weights/best.pt` | YOLO weight file |
-| `CONFIDENCE_THRESHOLD` | `0.5` | Minimum detection confidence |
+| `CONFIDENCE_THRESHOLD` | `0.28` | Primary YOLO confidence; a second pass at ~0.22 runs when only one garment family is found |
 | `MAX_IMAGE_SIZE_MB` | `10` | Upload size limit |
 | `COLOR_CLUSTERS` | `3` | Number of Lab K-means clusters |
 | `COLOR_RESIZE_PIXELS` | `128` | Maximum color-analysis width/height |
@@ -42,17 +42,33 @@ Copy `.env.example` to `.env` when local overrides are needed.
 
 ## Local setup
 
+Use **Python 3.11**. Dependencies are pinned in `requirements.txt` to a known-good stack (`torch==2.14.1`, `torchvision==0.29.1`, `torchaudio==2.11.0`, `transformers==5.20.2`). That set satisfies `transformers` requiring **PyTorch ≥ 2.6** and avoids mixing leftover `torch==2.5.1+cu121` wheels.
+
 ```bash
 cd ai-service
-python -m venv .venv
+python -m venv venv
 ```
 
 Activate the environment, then install and run:
 
 ```bash
+# Windows: venv\Scripts\activate
+# Linux/macOS: source venv/bin/activate
+python -m pip install -U pip
 python -m pip install -r requirements.txt
+python -c "import torch, torchvision; print(torch.__version__, torchvision.__version__, torch.cuda.is_available())"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# or: python main.py
 ```
+
+If you previously installed CUDA-pinned Torch 2.5.x packages, uninstall them before reinstalling:
+
+```bash
+pip uninstall -y torch torchvision torchaudio
+pip install -r requirements.txt
+```
+
+Optional GPU: install a matching `torch` / `torchvision` / `torchaudio` trio from [pytorch.org](https://pytorch.org) (same CUDA build), then keep the rest of `requirements.txt`. Do not mix PyPI CPU Torch 2.14 with old `+cu121` vision/audio wheels.
 
 Place the trained file at `weights/best.pt`. The service still starts without it; health becomes `DEGRADED` and detection returns HTTP `503`.
 

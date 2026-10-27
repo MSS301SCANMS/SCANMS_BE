@@ -52,7 +52,7 @@ public class OutfitRecommendServiceImpl implements OutfitRecommendService {
         String message;
         if (shoes.isEmpty() && hats.isEmpty()) {
             message = "Đã nhận diện " + detection.displayLabel()
-                    + " nhưng catalog chưa có giày/nón phù hợp. Thử lại sau khi sàn có thêm phụ kiện.";
+                    + " nhưng chưa có sản phẩm giày/nón phù hợp. Thử lại sau khi sàn có thêm phụ kiện.";
         } else {
             message = "Đã nhận diện " + detection.displayLabel()
                     + (style != null ? " · style " + style : "")

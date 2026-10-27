@@ -2,7 +2,7 @@ package com.scanms.product.dto.ai;
 
 import java.util.List;
 
-/** Shop-facing AI analyze payload: raw detections plus garment mapping for form autofill. */
+/** Shop/customer-facing AI analyze payload: all garment detections plus summary hints. */
 public record ShopAiAnalyzeResponse(
         List<AiDetectionItem> detections,
         AiTopPrediction topPrediction,
@@ -14,10 +14,16 @@ public record ShopAiAnalyzeResponse(
         String garmentType,
         String displayLabel,
         String suggestedCategory,
-        boolean clothingDetected) {
+        boolean clothingDetected,
+        List<DetectedGarment> detectedGarments) {
 
-    public static ShopAiAnalyzeResponse from(AiDetectionResponse raw, String garmentType, String displayLabel,
-                                             String suggestedCategory, boolean clothingDetected) {
+    public static ShopAiAnalyzeResponse from(
+            AiDetectionResponse raw,
+            String garmentType,
+            String displayLabel,
+            String suggestedCategory,
+            boolean clothingDetected,
+            List<DetectedGarment> detectedGarments) {
         return new ShopAiAnalyzeResponse(
                 raw.detections(),
                 raw.topPrediction(),
@@ -29,6 +35,7 @@ public record ShopAiAnalyzeResponse(
                 garmentType,
                 displayLabel,
                 suggestedCategory,
-                clothingDetected);
+                clothingDetected,
+                detectedGarments);
     }
 }

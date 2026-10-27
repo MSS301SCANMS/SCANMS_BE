@@ -42,7 +42,29 @@ class AiAnalysisServiceTest {
         assertEquals("Áo tay ngắn", result.displayLabel());
         assertEquals(ClothingGarmentMapper.SUGGESTED_CATEGORY, result.suggestedCategory());
         assertTrue(result.clothingDetected());
+        assertEquals(1, result.detectedGarments().size());
         verify(client).analyze(any());
+    }
+
+    @Test
+    void enrichKeepsMultipleGarmentsInOutfit() {
+        var raw = new AiDetectionResponse(
+                List.of(
+                        new AiDetectionItem(1, "shorts", 0.92, null),
+                        new AiDetectionItem(0, "short_sleeve_top", 0.81, null)),
+                new AiTopPrediction("shorts", 0.92),
+                List.of(new AiDominantColor("black", 0.5)),
+                new AiStylePrediction("STREETWEAR", 0.7),
+                false, true, 20.0);
+
+        var result = AiAnalysisServiceImpl.enrich(raw);
+
+        assertTrue(result.clothingDetected());
+        assertEquals(2, result.detectedGarments().size());
+        assertTrue(result.garmentType().contains("BOTTOM"));
+        assertTrue(result.garmentType().contains("TOP"));
+        assertTrue(result.displayLabel().contains("Quần short"));
+        assertTrue(result.displayLabel().contains("Áo tay ngắn"));
     }
 
     @Test

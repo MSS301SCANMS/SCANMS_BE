@@ -5,7 +5,11 @@ from PIL import Image
 
 from app.models.schemas import AnalysisResponse
 from app.services.color_service import extract_dominant_colors
-from app.services.detection_service import crop_top_detection, detect_clothing
+from app.services.detection_service import (
+    crop_top_detection,
+    crop_union_detections,
+    detect_clothing,
+)
 from app.services.embedding_service import EmbeddingUnavailableError, generate_image_embedding
 from app.services.style_service import classify_style
 
@@ -16,7 +20,13 @@ def analyze_product_image(image: Image.Image) -> AnalysisResponse:
     started_at = perf_counter()
     detection = detect_clothing(image)
     best_detection = detection.detections[0] if detection.detections else None
-    crop = crop_top_detection(image, best_detection)
+    # Multi-garment outfits: color/style from the union of boxes (áo + quần),
+    # not only the single highest-confidence crop.
+    crop = (
+        crop_union_detections(image, detection.detections)
+        if len(detection.detections) > 1
+        else crop_top_detection(image, best_detection)
+    )
 
     try:
         colors = extract_dominant_colors(crop)
