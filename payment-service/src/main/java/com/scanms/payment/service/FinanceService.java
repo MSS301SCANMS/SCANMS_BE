@@ -73,6 +73,7 @@ public interface FinanceService {
     WalletTransactionResponse refundResult(String id);
 
     WalletTransactionResponse commission(String id);
+    Map<String,Object> reconcileCommission(String id);
 
     SettlementView computeSettlement(String sellerOrderId);
 

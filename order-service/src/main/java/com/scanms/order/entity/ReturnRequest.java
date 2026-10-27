@@ -35,6 +35,7 @@ public class ReturnRequest {
     @Enumerated(EnumType.STRING)
     private ReturnRequestStatus status;
 
+    @Column(length = 3000)
     private String decisionReason;
 
     @Column(name = "refund_amount_vnd")

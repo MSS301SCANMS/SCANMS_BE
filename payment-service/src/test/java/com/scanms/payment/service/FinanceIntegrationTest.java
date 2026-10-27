@@ -35,6 +35,7 @@ class FinanceIntegrationTest {
             for(int pass=0;pass<2;pass++) {
                 statement.execute(java.nio.file.Files.readString(java.nio.file.Path.of("db","finance-upgrade.sql")));
                 statement.execute(java.nio.file.Files.readString(java.nio.file.Path.of("db","finance-reconciliation-upgrade.sql")));
+                statement.execute(java.nio.file.Files.readString(java.nio.file.Path.of("db","commission-reversal-upgrade.sql")));
                 statement.execute(java.nio.file.Files.readString(java.nio.file.Path.of("db","bank-calendar-upgrade.sql")));
                 statement.execute(java.nio.file.Files.readString(java.nio.file.Path.of("db","payment-bank-details-upgrade.sql")));
             }
@@ -296,6 +297,43 @@ class FinanceIntegrationTest {
         ledger.create(command(w.getWalletId(),"release",200,WalletTransactionType.RELEASE,WalletTransactionDirection.CREDIT));
         Wallet actual=wallets.findById(w.getWalletId()).orElseThrow(); assertEquals(550,actual.getAvailableBalanceVnd()); assertEquals(0,actual.getHeldBalanceVnd());
         assertThrows(AppException.class,() -> finance.walletStatus(w.getWalletId(),WalletStatus.CLOSED));
+    }
+    @Test void fullRefundReversesExactlyOnceAndNeverRewritesOriginalCredit() {
+        when(access.get(contains("commission-basis"))).thenReturn(Map.of("collaboratorId","owner","amountVnd",100_000));
+        var original=finance.commission("full-return");
+        when(access.get(contains("commission-reconciliation-basis"))).thenReturn(Map.of("commissionId","full-return","collaboratorId","owner","amountVnd",0,"originalTransactionId",original.transactionId()));
+        var first=finance.reconcileCommission("full-return"); var retry=finance.reconcileCommission("full-return");
+        assertEquals(first.get("transactionId"),retry.get("transactionId"));
+        assertEquals(0,wallets.findById(original.walletId()).orElseThrow().getAvailableBalanceVnd());
+        assertEquals(100_000,entries.findById(original.transactionId()).orElseThrow().getAmountVnd());
+        assertEquals(2,entries.count());
+        assertEquals(WalletTransactionType.COMMISSION_REVERSAL,entries.findByIdempotencyKey("commission-reversal:full-return:0").orElseThrow().getType());
+    }
+    @Test void withdrawnCommissionBecomesRecoverableDebtAndFutureEarningsOffsetIt() {
+        when(access.get(contains("commission-basis"))).thenReturn(Map.of("collaboratorId","owner","amountVnd",100_000));
+        var original=finance.commission("withdrawn-return");
+        ledger.create(command(original.walletId(),"hold-paid",100_000,WalletTransactionType.HOLD,WalletTransactionDirection.DEBIT));
+        ledger.create(command(original.walletId(),"paid-out",100_000,WalletTransactionType.WITHDRAWAL,WalletTransactionDirection.DEBIT));
+        when(access.get(contains("commission-reconciliation-basis"))).thenReturn(Map.of("commissionId","withdrawn-return","collaboratorId","owner","amountVnd",0,"originalTransactionId",original.transactionId()));
+        finance.reconcileCommission("withdrawn-return");
+        assertEquals(-100_000,wallets.findById(original.walletId()).orElseThrow().getAvailableBalanceVnd());
+        assertThrows(AppException.class,()->ledger.create(command(original.walletId(),"more-withdrawal",1,WalletTransactionType.HOLD,WalletTransactionDirection.DEBIT)));
+        when(access.get(contains("commission-basis"))).thenReturn(Map.of("collaboratorId","owner","amountVnd",40_000));
+        finance.commission("next-earning");
+        assertEquals(-60_000,wallets.findById(original.walletId()).orElseThrow().getAvailableBalanceVnd());
+    }
+    @Test void simultaneousReversalsDoNotDoubleDebitAndWrongOwnerIsRejected() throws Exception {
+        when(access.get(contains("commission-basis"))).thenReturn(Map.of("collaboratorId","owner","amountVnd",100_000));
+        var original=finance.commission("parallel-return");
+        when(access.get(contains("commission-reconciliation-basis"))).thenReturn(Map.of("commissionId","parallel-return","collaboratorId","owner","amountVnd",0,"originalTransactionId",original.transactionId()));
+        try(var executor=Executors.newFixedThreadPool(2)) {
+            var start=new CountDownLatch(1); var a=executor.submit(()->{start.await();return finance.reconcileCommission("parallel-return");});
+            var b=executor.submit(()->{start.await();return finance.reconcileCommission("parallel-return");}); start.countDown();
+            assertEquals(a.get(15,TimeUnit.SECONDS).get("transactionId"),b.get(15,TimeUnit.SECONDS).get("transactionId"));
+        }
+        assertEquals(2,entries.count());
+        when(access.get(contains("commission-reconciliation-basis"))).thenReturn(Map.of("commissionId","parallel-return","collaboratorId","someone-else","amountVnd",0,"originalTransactionId",original.transactionId()));
+        assertThrows(AppException.class,()->finance.reconcileCommission("parallel-return"));
     }
     @Test void commissionCreditsOnlyOnceAndCannotReuseReferenceForChangedAmount() {
         when(access.get(contains("commission-basis"))).thenReturn(Map.of("collaboratorId","owner","amountVnd",15_000));

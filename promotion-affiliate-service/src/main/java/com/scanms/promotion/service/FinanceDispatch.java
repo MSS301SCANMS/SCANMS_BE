@@ -53,16 +53,21 @@ public class FinanceDispatch {
         } catch (Exception ex) {
             return;
         }
-        var eligible = commissions.findAll().stream().filter(c -> c.getStatus() == CommissionStatus.ELIGIBLE || c.getStatus() == CommissionStatus.ADJUSTED)
+        var eligible = commissions.findAll().stream().filter(c -> needsReconciliation(c) || c.getStatus() == CommissionStatus.ELIGIBLE || c.getStatus() == CommissionStatus.ADJUSTED)
                 .sorted(Comparator.comparing(Commission::getCommissionId)).toList();
         if (eligible.isEmpty()) return;
         int start = Math.floorMod(cursor, eligible.size()), count = Math.min(20, eligible.size());
         for (int i = 0; i < count; i++) {
             var c = eligible.get((start + i) % eligible.size());
             try {
-                http.post().uri(paymentUrl + "/api/v1/finance/commissions/" + c.getCommissionId() + "/credit").headers(h -> h.setBearerAuth(token)).body(Map.of()).retrieve().toBodilessEntity();
+                http.post().uri(paymentUrl + "/api/v1/finance/commissions/" + c.getCommissionId() + (needsReconciliation(c)?"/reconcile":"/credit")).headers(h -> h.setBearerAuth(token)).body(Map.of()).retrieve().toBodilessEntity();
             } catch (Exception ex) { /* Reference is retried until the source acknowledgement arrives. */ }
         }
         cursor = (start + count) % eligible.size();
+    }
+    static boolean needsReconciliation(Commission c) {
+        if(c.getTransferReference()==null) return false;
+        Object amount=c.getAdjustmentHistory()==null?null:c.getAdjustmentHistory().get("ledgerReconciledAmountVnd");
+        return !(amount instanceof Number n) || !java.util.Objects.equals(n.longValue(),c.getCommissionAmountVnd());
     }
 }

@@ -72,4 +72,12 @@ class RefundReservationIntegrationTest {
             assertEquals(1,successes);
         }
     }
+    @Test void fullRefundHasZeroCommissionBasisBeforeReturnWindowClosesButCannotBeFinalizedEarly() {
+        var returned=request(3,ReturnRequestStatus.RECEIVED,0);
+        long amount=basis(returned.getReturnRequestId()); assertEquals(100,amount);
+        finance.refunded(returned.getReturnRequestId(),new FinanceContractController.RefundInput("full-refund-ledger",amount),jwt);
+        assertEquals(0L,finance.commissionAdjustmentItem(itemId,jwt).result().get("basisAmountVnd"));
+        assertEquals(100L,finance.commissionAdjustmentItem(itemId,jwt).result().get("refundedAmountVnd"));
+        assertThrows(ResponseStatusException.class,()->finance.commissionItem(itemId,jwt));
+    }
 }

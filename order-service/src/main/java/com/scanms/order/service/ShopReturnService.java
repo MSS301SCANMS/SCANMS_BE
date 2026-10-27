@@ -20,6 +20,12 @@ public interface ShopReturnService {
     ) {
     }
 
+    record DecisionInput(
+            @NotNull ReturnRequestStatus status,
+            @Size(max = 3000) String decisionReason
+    ) {
+    }
+
     record View(
             String returnRequestId,
             String orderId,
@@ -54,12 +60,4 @@ public interface ShopReturnService {
             ResponseInput input,
             Jwt jwt
     );
-
-    record ManagerDecision(
-            @NotNull ReturnRequestStatus status,
-            @NotBlank @Size(min = 20, max = 3000) String notes
-    ) {
-    }
-
-    Map<String, Object> managerDecide(String id, ManagerDecision input);
 }

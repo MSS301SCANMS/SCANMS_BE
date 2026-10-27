@@ -1,0 +1,11 @@
+# Shared local-development defaults
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+JPA_DDL_AUTO=update
+SWAGGER_ENABLED=true
+KEYCLOAK_ISSUER_URI=http://localhost:8180/realms/scanms
+
+# Product service
+PRODUCT_DB_NAME=product_db
+PRODUCT_DB_PORT=5432
+PRODUCT_SERVICE_PORT=8082

@@ -47,11 +47,13 @@ class CheckoutIntegrationTest {
     @Autowired OrderRepository orders;
     @Autowired SellerOrderRepository sellers;
     @Autowired OrderItemRepository items;
+    @Autowired com.scanms.order.mapper.OrderItemMapper itemMapper;
     @Autowired ReturnRequestRepository returns;
     @Autowired DiscountAllocationRepository allocations;
     @Autowired CheckoutShippingPolicy shippingPolicy;
     @Autowired org.springframework.web.context.WebApplicationContext webContext;
     @MockitoBean JwtDecoder decoder;
+    @MockitoBean GhnSandboxShipping ghn;
     static final AtomicInteger reserves=new AtomicInteger(); static final AtomicBoolean failNext=new AtomicBoolean();
     static final AtomicBoolean multiStore=new AtomicBoolean();
     static final AtomicInteger voucherCommits=new AtomicInteger();
@@ -63,9 +65,17 @@ class CheckoutIntegrationTest {
             var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
             server.createContext("/token",exchange -> { byte[] body="{\"access_token\":\"order-service-token\"}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
             server.createContext("/user/api/v1/users",exchange -> { byte[] body="{\"result\":{\"userId\":\"customer\",\"identitySubject\":\"identity\",\"status\":\"ACTIVE\"}}".getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close(); });
+            server.createContext("/promotion/api/v1/referrals/attribution/",exchange -> {
+                String ref=exchange.getRequestURI().getPath().substring(exchange.getRequestURI().getPath().lastIndexOf('/')+1);
+                String product=ref.equals("ref-b") || ref.equals("wrong-product")?"product-b":"product";
+                String owner=ref.equals("self")?"customer":"creator-user";
+                byte[] body=("{\"result\":{\"referralLinkId\":\""+ref+"\",\"productId\":\""+product+"\",\"collaboratorId\":\"kol\",\"userId\":\""+owner+"\"}}").getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type","application/json"); exchange.sendResponseHeaders(ref.equals("expired")?410:200,body.length); exchange.getResponseBody().write(body); exchange.close();
+            });
             server.createContext("/product/api/v1/inventory/reservations",exchange -> {
-                if(exchange.getRequestURI().getPath().endsWith("/cancel"))productCancels.incrementAndGet();
-                reserves.incrementAndGet(); boolean fail=failNext.getAndSet(false);
+                if(exchange.getRequestURI().getPath().endsWith("/cancel")) productCancels.incrementAndGet();
+                boolean preview=exchange.getRequestURI().getPath().endsWith("/quote");
+                if(!preview) reserves.incrementAndGet(); boolean fail=!preview && failNext.getAndSet(false);
                 int status=fail?503:"Bearer order-service-token".equals(exchange.getRequestHeaders().getFirst("Authorization"))?200:403;
                 String second=multiStore.get()?",{\"productId\":\"product-b\",\"variantId\":\"variant-b\",\"storeId\":\"store-b\",\"storeName\":\"Shop B\",\"name\":\"Product B\",\"quantity\":1,\"unitPriceVnd\":25000,\"grossAmountVnd\":25000}":"";
                 byte[] body=(status==200?"{\"result\":{\"lines\":[{\"productId\":\"product\",\"variantId\":\"variant\",\"storeId\":\"store\",\"storeName\":\"Shop\",\"name\":\"Product\",\"quantity\":2,\"unitPriceVnd\":15000,\"grossAmountVnd\":30000}"+second+"]}}":"{\"message\":\"Source unavailable\"}").getBytes(StandardCharsets.UTF_8);
@@ -169,12 +179,68 @@ class CheckoutIntegrationTest {
         int before=voucherCommits.get(); financeDispatch.dispatch(); assertEquals(before+1,voucherCommits.get());
         assertEquals(true,orders.findById(order.getOrderId()).orElseThrow().getSagaState().get("resourcesFinalized"));
     }
+
+    @Test void verifiedReferralIsPersistedPerProductAndRetryNeverReattributesAnOrder() {
+        multiStore.set(true);
+        var input=new CheckoutService.Input("referrals","Customer","0900000000","Delivery address","PAYOS",true,null,null,List.of(
+            new CheckoutService.Line("product","variant",2,null,"ref-a"),new CheckoutService.Line("product-b","variant-b",1,null,"ref-b")));
+        var first=checkout.checkout(input,jwt); checkout.checkout(input,jwt);
+        assertEquals(2,items.count()); assertEquals(1,reserves.get());
+        for(var item:items.findAll()) assertEquals(item.getProductId().equals("product")?"ref-a":"ref-b",item.getReferralLinkId());
+        assertNotNull(first.get("orderId"));
+    }
+    @Test void invalidOrSelfReferralCannotCreateAttributedOrderItemsOrHoldInventory() {
+        for(String ref:List.of("wrong-product","self","expired")) {
+            var input=new CheckoutService.Input(ref,"Customer","0900000000","Delivery address","PAYOS",true,null,null,
+                List.of(new CheckoutService.Line("product","variant",2,null,ref)));
+            assertThrows(RuntimeException.class,()->checkout.checkout(input,jwt));
+        }
+        assertEquals(0,items.count()); assertEquals(0,reserves.get());
+    }
     @Test void checkoutUsesServerPriceAndCreatesSellerItemsOnlyOnce() {
         var first=checkout.checkout(input("key",2),jwt); var second=checkout.checkout(input("key",2),jwt);
         assertEquals(first.get("orderId"),second.get("orderId")); assertEquals(30000L,first.get("finalAmount")); assertEquals(1,reserves.get());
         assertEquals(1,orders.count()); assertEquals(1,sellers.count()); assertEquals(1,items.count()); assertEquals(30000L,items.findAll().getFirst().getNetPaidAmountVnd());
         assertThrows(ResponseStatusException.class,() -> checkout.checkout(input("key",1),jwt)); assertEquals(1,reserves.get());
     }
+    @Test void sandboxAddressQuoteMatchesCapturedOrderAndStaleFeeCannotReserve() {
+        whenSandbox();
+        var a=new CheckoutService.ShippingDestination("Province","District","Ward A","123 Test street");
+        var b=new CheckoutService.ShippingDestination("Province","District","Ward B","123 Test street");
+        var lines=List.of(new CheckoutService.Line("product","variant",1));
+        assertEquals(25000L,checkout.quote(new CheckoutService.QuoteInput(lines,null,null,a),jwt).get("shippingFeeVnd"));
+        assertEquals(35000L,checkout.quote(new CheckoutService.QuoteInput(lines,null,null,b),jwt).get("shippingFeeVnd"));
+        assertThrows(ResponseStatusException.class,()->checkout.checkout(new CheckoutService.Input("stale-ghn","Customer","0901234567","123 Test street, Ward B, District, Province","WALLET",true,null,null,lines,25000L,null,b),jwt));
+        assertEquals(0,orders.count());assertEquals(0,reserves.get());
+        var command=new CheckoutService.Input("valid-ghn","Customer","0901234567","123 Test street, Ward B, District, Province","WALLET",true,null,null,lines,35000L,null,b);
+        var result=checkout.checkout(command,jwt);assertEquals(65000L,result.get("finalAmount"));
+        var seller=sellers.findAll().getFirst();assertEquals(35000L,((Number)seller.getTotalsSnapshot().get("shippingFeeVnd")).longValue());
+        assertEquals("GHN_SANDBOX",seller.getTotalsSnapshot().get("shippingMode"));assertEquals(30000L,items.findAll().getFirst().getNetPaidAmountVnd());
+        org.mockito.Mockito.doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE)).when(ghn).quote(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyList());
+        assertEquals(result.get("orderId"),checkout.checkout(command,jwt).get("orderId"));
+        assertEquals(65000L,checkout.checkout(command,jwt).get("finalAmount"));assertEquals(1,reserves.get());
+    }
+    void whenSandbox() {
+        org.mockito.Mockito.when(ghn.enabled()).thenReturn(true);
+        org.mockito.Mockito.when(ghn.mode()).thenReturn(Map.of("shippingMode","GHN_SANDBOX","shippingPayer","CUSTOMER","shippingSettlementStatus","SANDBOX"));
+        org.mockito.Mockito.when(ghn.quote(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyList())).thenAnswer(call->{
+            CheckoutService.ShippingDestination d=call.getArgument(1);
+            long fee=d.ward().equals("Ward A")?25000L:35000L;
+            return new GhnSandboxShipping.ParcelQuote(fee,Map.of("shippingMode","GHN_SANDBOX","shippingPayer","CUSTOMER","shippingOriginalFeeVnd",fee));
+        });
+    }
+
+    @Test void checkoutRecordsAnAbsolutePlacementTimeForCommissionDeals() {
+        var before=java.time.Instant.now().minusSeconds(1);
+        checkout.checkout(input("deal-timestamp",1),jwt);
+        var item=items.findAll().getFirst();
+        assertNotNull(item.getPlacedAt());assertFalse(item.getPlacedAt().isBefore(before));
+        assertEquals(item.getPlacedAt(),itemMapper.toResponse(item).placedAt());
+        var timestamp=item.getPlacedAt();
+        checkout.checkout(input("deal-timestamp",1),jwt);
+        assertEquals(timestamp,items.findById(item.getOrderItemId()).orElseThrow().getPlacedAt());
+    }
+
     @Test void failedSourceRetainsOneCheckoutReferenceForSafeRetry() {
         failNext.set(true); assertThrows(RestClientResponseException.class,() -> checkout.checkout(input("retry",2),jwt));
         assertEquals(1,orders.count()); assertEquals(0,items.count()); String id=orders.findAll().getFirst().getOrderId();
