@@ -11,5 +11,6 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
     boolean existsByIdempotencyKey(String idempotencyKey);
     Optional<WalletTransaction> findByIdempotencyKey(String key);
     Page<WalletTransaction> findByWalletId(String walletId, Pageable page);
+    java.util.List<WalletTransaction> findByWalletIdAndReferenceTypeAndReferenceId(String walletId, String referenceType, String referenceId);
 }
 

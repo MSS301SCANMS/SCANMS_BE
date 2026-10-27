@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@org.springframework.core.annotation.Order(0)
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(name = "scanms.catalog.seed-enabled", havingValue = "true", matchIfMissing = true)

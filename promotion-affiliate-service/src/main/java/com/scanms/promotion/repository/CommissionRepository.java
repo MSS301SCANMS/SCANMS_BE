@@ -10,6 +10,7 @@ public interface CommissionRepository extends JpaRepository<Commission, String> 
 
     /** Lấy tất cả commission của một OrderItem (thường chỉ có 1) */
     List<Commission> findByOrderItemId(String orderItemId);
+    List<Commission> findByCollaboratorIdOrderByCreatedAtDesc(String collaboratorId);
 
     /** Kiểm tra tránh duplicate commission cho cùng item + collaborator */
     Optional<Commission> findByOrderItemIdAndCollaboratorId(String orderItemId, String collaboratorId);

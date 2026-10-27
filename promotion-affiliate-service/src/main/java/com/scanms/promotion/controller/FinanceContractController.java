@@ -34,6 +34,7 @@ public class FinanceContractController {
     private final CommissionFinalizationRepository finalizations;
     private final ReferralLinkRepository referralLinks;
     private final CommissionPolicyService policyService;
+    private final com.scanms.promotion.service.ProductCommissionDealService productDeals;
     @Value("${clients.order.url:http://localhost:8083}") private String orderUrl;
     private final RestClient http=http();
     private static RestClient http() {
@@ -70,11 +71,40 @@ public class FinanceContractController {
     public record CreditInput(String transactionId,Long amountVnd) {}
     @PostMapping("/commissions/{id}/credited") public ApiResponse<Map<String,Object>> credited(@PathVariable String id,@RequestBody CreditInput input,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,false); Commission c=find(id);
-        if(input.transactionId()==null || !Objects.equals(input.amountVnd(),c.getCommissionAmountVnd())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission credit mismatch");
+        if(input.transactionId()==null || input.amountVnd()==null || input.amountVnd()<=0 || input.amountVnd()<c.getCommissionAmountVnd()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission credit mismatch");
         if(c.getTransferReference()!=null && !c.getTransferReference().equals(input.transactionId())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Another credit already exists");
-        if(!Set.of(CommissionStatus.ELIGIBLE,CommissionStatus.ADJUSTED,CommissionStatus.CREDITED,CommissionStatus.PAID).contains(c.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT);
-        c.setTransferReference(input.transactionId()); c.setStatus(CommissionStatus.CREDITED); c.setPaidAt(LocalDateTime.now(ZoneOffset.UTC)); commissions.save(c);
-        return ApiResponse.success(Map.of("commissionId",id,"status","CREDITED"));
+        if(!Set.of(CommissionStatus.ELIGIBLE,CommissionStatus.ADJUSTED,CommissionStatus.CREDITED,CommissionStatus.PAID,CommissionStatus.CANCELLED).contains(c.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT);
+        var history=new LinkedHashMap<>(c.getAdjustmentHistory()==null?Map.<String,Object>of():c.getAdjustmentHistory());
+        // A delayed initial acknowledgement must not erase a newer reversal acknowledgement.
+        history.putIfAbsent("ledgerReconciledAmountVnd",input.amountVnd());
+        c.setAdjustmentHistory(history); c.setTransferReference(input.transactionId());
+        Object reconciledAmount=history.get("ledgerReconciledAmountVnd");
+        c.setStatus(c.getCommissionAmountVnd()==0?CommissionStatus.CANCELLED:reconciledAmount instanceof Number n && n.longValue()==c.getCommissionAmountVnd()?CommissionStatus.CREDITED:CommissionStatus.ADJUSTED);
+        if(c.getPaidAt()==null) c.setPaidAt(LocalDateTime.now(ZoneOffset.UTC)); commissions.save(c);
+        return ApiResponse.success(Map.of("commissionId",id,"status",c.getStatus().name()));
+    }
+    @GetMapping("/commission-reconciliation-basis/{id}") public ApiResponse<Map<String,Object>> reconciliationBasis(@PathVariable String id,@AuthenticationPrincipal Jwt jwt) {
+        trusted(jwt,true); Commission c=find(id);
+        if(c.getTransferReference()==null || c.getCommissionAmountVnd()==null || c.getCommissionAmountVnd()<0)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission has not been credited");
+        var basis=order("/api/v1/finance/commission-adjustment-item/"+c.getOrderItemId(),jwt);
+        long retained=new BigDecimal(basis.get("basisAmountVnd").toString()).longValueExact();
+        long expected=BigDecimal.valueOf(retained).multiply(c.getRateSnapshot()).divide(BigDecimal.valueOf(100),0,RoundingMode.HALF_UP).longValueExact();
+        if(!Objects.equals(c.getCommissionAmountVnd(),expected)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission adjustment is not up to date");
+        return ApiResponse.success(Map.of("commissionId",id,"collaboratorId",c.getCollaboratorId(),"amountVnd",expected,"originalTransactionId",c.getTransferReference(),"currency","VND"));
+    }
+    @PostMapping("/commissions/{id}/reconciled") public ApiResponse<Map<String,Object>> reconciled(@PathVariable String id,@RequestBody CreditInput input,@AuthenticationPrincipal Jwt jwt) {
+        trusted(jwt,false); Commission c=find(id);
+        if(c.getTransferReference()==null || input.amountVnd()==null || input.amountVnd()<c.getCommissionAmountVnd() || input.transactionId()==null)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Commission reconciliation mismatch");
+        var history=new LinkedHashMap<>(c.getAdjustmentHistory()==null?Map.<String,Object>of():c.getAdjustmentHistory());
+        Object previous=history.get("ledgerReconciledAmountVnd");
+        if(previous instanceof Number n && input.amountVnd()>n.longValue()) return ApiResponse.success(Map.of("commissionId",id,"amountVnd",n.longValue()));
+        history.put("ledgerReconciledAmountVnd",input.amountVnd());
+        if(!input.transactionId().equals(c.getTransferReference())) history.put("reversalTransactionId",input.transactionId());
+        c.setAdjustmentHistory(history);
+        if(Objects.equals(input.amountVnd(),c.getCommissionAmountVnd())) c.setStatus(input.amountVnd()==0?CommissionStatus.CANCELLED:CommissionStatus.CREDITED);
+        commissions.save(c); return ApiResponse.success(Map.of("commissionId",id,"amountVnd",input.amountVnd()));
     }
     @GetMapping("/commissions-total") public ApiResponse<Map<String,Object>> total(@RequestParam String orderItemIds,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,true); Set<String> ids=new HashSet<>(Arrays.asList(orderItemIds.split(","))); long total=0;
@@ -159,8 +189,11 @@ public class FinanceContractController {
                 Map<?,?> resp = http.get().uri(orderUrl + "/api/v1/seller-orders/" + sellerOrderId)
                         .headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class);
                 if (resp != null && resp.get("result") instanceof Map<?,?> r) storeId = Objects.toString(r.get("storeId"), null);
-            } catch(Exception ex) { log.debug("Could not fetch storeId for seller order {}: {}", sellerOrderId, ex.getMessage()); }
+            } catch(Exception ex) { throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cannot verify seller store for commission; retry required"); }
         }
+        if (storeId == null || storeId.isBlank()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Missing seller store for commission");
+        if (itemDetails.get("productId") != null && !referralLink.getProductId().equals(itemDetails.get("productId")))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order product does not match referral product");
         // Resolve CommissionPolicy: COLLABORATOR → LIVESTREAM → PRODUCT → STORE → PLATFORM
         CommissionPolicy policy = policyService.resolvePolicy(
                 collaboratorId, referralLink.getLivestreamId(), referralLink.getProductId(), storeId);
@@ -168,6 +201,15 @@ public class FinanceContractController {
             log.warn("No active policy for collaborator={} product={} store={}", collaboratorId, referralLink.getProductId(), storeId);
             return Map.of("orderItemId", itemId, "initialized", false, "reason", "No applicable active commission policy");
         }
+        Instant orderCreatedAt = null;
+        if (itemDetails.get("placedAt") != null) {
+            String date = itemDetails.get("placedAt").toString();
+            try { orderCreatedAt = Instant.parse(date); }
+            catch (java.time.format.DateTimeParseException ex) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid order placement instant for commission deal");
+            }
+        }
+        var agreedRate = productDeals.rate(collaboratorId, referralLink.getProductId(), storeId, orderCreatedAt, policy);
         // Tạo CommissionFinalization anchor nếu chưa có
         if (anchor == null) { anchor = new CommissionFinalization(); anchor.setOrderItemId(itemId); em.persist(anchor); em.flush(); }
         // Tạo Commission với rate snapshot tại thời điểm này (không thay đổi dù policy sau đổi)
@@ -175,19 +217,28 @@ public class FinanceContractController {
         commission.setOrderItemId(itemId);
         commission.setCollaboratorId(collaboratorId);
         commission.setReferralLinkId(referralLinkId);
-        commission.setCommissionPolicyId(policy.getPolicyId());
-        commission.setRateSnapshot(policy.getCommissionRate());
-        commission.setBasisAmountVnd(0L);
-        commission.setCommissionAmountVnd(0L);
+        commission.setCommissionPolicyId(agreedRate.policyId());
+        commission.setRateSnapshot(agreedRate.totalRate());
+        long initialBasis=new BigDecimal(itemDetails.get("netPaidAmountVnd").toString()).longValueExact();
+        long initialAmount=BigDecimal.valueOf(initialBasis).multiply(agreedRate.totalRate()).divide(BigDecimal.valueOf(100),0,RoundingMode.HALF_UP).longValueExact();
+        commission.setBasisAmountVnd(initialBasis);
+        commission.setCommissionAmountVnd(initialAmount);
         commission.setStatus(CommissionStatus.PENDING);
         commission.setAdjustmentHistory(Map.of("initializedAt", Instant.now().toString(),
-                "policyId", policy.getPolicyId(), "scope", policy.getScopeType().name(),
-                "rateSnapshot", policy.getCommissionRate().toPlainString()));
+                "policyId", agreedRate.policyId(), "scope", policy.getScopeType().name(),
+                "rateSnapshot", agreedRate.totalRate().toPlainString()));
+        var initialHistory=new LinkedHashMap<>(commission.getAdjustmentHistory());
+        initialHistory.put("baseRate", agreedRate.baseRate());
+        initialHistory.put("extraPoints", agreedRate.extraPoints());
+        if (agreedRate.dealId() != null) initialHistory.put("productDealId", agreedRate.dealId());
+        if(itemDetails.get("productSnapshot") instanceof Map<?,?> product) initialHistory.put("productName",Objects.toString(product.get("name"),Objects.toString(product.get("title"),"Sản phẩm")));
+        initialHistory.put("originalBasisVnd",initialBasis); initialHistory.put("originalAmountVnd",initialAmount);
+        commission.setAdjustmentHistory(initialHistory);
         Commission saved = commissions.save(commission);
         log.info("Commission {} created: item={} collaborator={} policy={} rate={}",
                 saved.getCommissionId(), itemId, collaboratorId, policy.getPolicyId(), policy.getCommissionRate());
         return Map.of("orderItemId", itemId, "initialized", true,
-                "commissionId", saved.getCommissionId(), "rateSnapshot", policy.getCommissionRate().toPlainString());
+                "commissionId", saved.getCommissionId(), "rateSnapshot", agreedRate.totalRate().toPlainString());
     }
 
     // ─── Commission Adjustment (return / refund) ─────────────────────────────────
@@ -204,14 +255,15 @@ public class FinanceContractController {
             @RequestBody(required = false) AdjustInput input,
             @AuthenticationPrincipal Jwt jwt) {
         trusted(jwt, true);
-        Map<String,Object> basis = order("/api/v1/finance/commission-order-item/" + itemId, jwt);
+        CommissionFinalization anchor = em.find(CommissionFinalization.class, itemId, LockModeType.PESSIMISTIC_WRITE);
+        Map<String,Object> basis = order("/api/v1/finance/commission-adjustment-item/" + itemId, jwt);
         long retained = new BigDecimal(basis.get("basisAmountVnd").toString()).longValueExact();
         String reason = input != null && input.reason() != null && !input.reason().isBlank()
                 ? input.reason() : "Return/refund adjustment";
         int adjusted = 0;
         for (Commission candidate : commissions.findByOrderItemId(itemId)) {
             Commission c = find(candidate.getCommissionId());
-            if (c.getStatus() == CommissionStatus.PENDING || c.getStatus() == CommissionStatus.CANCELLED) continue;
+            if (c.getStatus() == CommissionStatus.CANCELLED) continue;
             if (c.getRateSnapshot() == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "Missing rate snapshot");
             long amount = BigDecimal.valueOf(retained)
                     .multiply(c.getRateSnapshot())
@@ -220,21 +272,25 @@ public class FinanceContractController {
             if (Objects.equals(c.getCommissionAmountVnd(), amount) && Objects.equals(c.getBasisAmountVnd(), retained))
                 continue;
             Map<String,Object> history = new LinkedHashMap<>(c.getAdjustmentHistory() == null ? Map.of() : c.getAdjustmentHistory());
+            if(!history.containsKey("adjustedAt") && !history.containsKey("finalizedAt")) {
+                history.putIfAbsent("originalAmountVnd", c.getCommissionAmountVnd());
+                history.putIfAbsent("originalBasisVnd", c.getBasisAmountVnd());
+            }
             history.put("adjustedAt", Instant.now().toString());
             history.put("reason", reason);
             history.put("beforeAmountVnd", c.getCommissionAmountVnd() == null ? 0 : c.getCommissionAmountVnd());
             history.put("afterAmountVnd", amount);
             history.put("beforeBasisVnd", c.getBasisAmountVnd() == null ? 0 : c.getBasisAmountVnd());
             history.put("afterBasisVnd", retained);
+            history.put("refundedAmountVnd",basis.getOrDefault("refundedAmountVnd",0L));
             c.setAdjustmentHistory(history);
             c.setBasisAmountVnd(retained);
             c.setCommissionAmountVnd(amount);
-            c.setStatus(amount == 0 ? CommissionStatus.CANCELLED : CommissionStatus.ADJUSTED);
+            c.setStatus(amount == 0 ? CommissionStatus.CANCELLED : c.getStatus()==CommissionStatus.PENDING ? CommissionStatus.PENDING : CommissionStatus.ADJUSTED);
             commissions.save(c);
             adjusted++;
         }
         // Keep finalized snapshot consistent when already finalized
-        CommissionFinalization anchor = em.find(CommissionFinalization.class, itemId, LockModeType.PESSIMISTIC_WRITE);
         if (anchor != null && anchor.getFinalizedAt() != null) {
             long total = commissions.findByOrderItemId(itemId).stream()
                     .filter(c -> c.getStatus() != CommissionStatus.CANCELLED && c.getCommissionAmountVnd() != null)
@@ -265,6 +321,7 @@ public class FinanceContractController {
             try { doInitialize(itemId, jwt); }
             catch(Exception ex) { throw new ResponseStatusException(HttpStatus.CONFLICT, "Commission auto-init failed: " + ex.getMessage()); }
             rows=commissions.findByOrderItemId(itemId).stream().sorted(Comparator.comparing(Commission::getCommissionId)).toList();
+            if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT,"Chưa có chính sách hoa hồng hợp lệ; chưa thể chốt đơn có KOL giới thiệu.");
         }
         for(Commission candidate:rows) {
             Commission c=find(candidate.getCommissionId());
@@ -274,6 +331,12 @@ public class FinanceContractController {
                 if(!Objects.equals(c.getCommissionAmountVnd(),amount)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Already credited commission requires a ledger adjustment");
             } else {
                 Map<String,Object> history=new LinkedHashMap<>(c.getAdjustmentHistory()==null?Map.of():c.getAdjustmentHistory());
+                if(!history.containsKey("adjustedAt") && !history.containsKey("finalizedAt")) {
+                    history.putIfAbsent("originalAmountVnd", c.getCommissionAmountVnd());
+                    history.putIfAbsent("originalBasisVnd", c.getBasisAmountVnd());
+                }
+                history.put("refundedAmountVnd", basis.getOrDefault("refundedAmountVnd", 0L));
+                history.put("afterAmountVnd", amount);
                 history.put("beforeAmountVnd",c.getCommissionAmountVnd()==null?0:c.getCommissionAmountVnd()); history.put("finalBasisAmountVnd",retained); history.put("finalizedAt",Instant.now().toString());
                 c.setAdjustmentHistory(history); c.setBasisAmountVnd(retained); c.setCommissionAmountVnd(amount);
                 c.setStatus(amount==0?CommissionStatus.CANCELLED:CommissionStatus.ELIGIBLE); commissions.save(c);

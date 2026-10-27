@@ -22,4 +22,9 @@ public class ShopReturnController {
     public ApiResponse<ShopReturnService.View> respond(@PathVariable String id,@Valid @RequestBody ShopReturnService.ResponseInput input,@AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.success(service.respond(id,input,jwt));
     }
+
+    @PostMapping("/{id}/shop-decision")
+    public ApiResponse<ShopReturnService.View> decide(@PathVariable String id,@Valid @RequestBody ShopReturnService.DecisionInput input,@AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.success(service.decide(id,input,jwt));
+    }
 }

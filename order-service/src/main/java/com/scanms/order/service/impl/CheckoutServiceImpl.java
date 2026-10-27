@@ -26,6 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -44,6 +45,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final DiscountAllocationRepository allocations;
     private final PlatformTransactionManager transactions;
     private final CheckoutShippingPolicy shippingPolicy;
+    private final com.scanms.order.service.CheckoutShippingQuotes shippingQuotes;
     private final com.scanms.order.service.CheckoutAttribution attribution;
     @Value("${clients.product.url:http://localhost:8082}")
     private String productUrl;
@@ -109,8 +111,9 @@ public class CheckoutServiceImpl implements CheckoutService {
         return goods!=null && !goods.isBlank() || shipping!=null && !shipping.isBlank();
     }
 
-    private Map<String,Object> voucherInput(String goods,String shipping,Object customer,List<Map<String,Object>> lines) {
+    private Map<String,Object> voucherInput(String goods,String shipping,Object customer,List<Map<String,Object>> lines,Map<String,Long> shippingFees) {
         var input=new LinkedHashMap<String,Object>();
+        input.put("shippingFees",shippingFees);
         input.put("code",Objects.toString(goods,"")); input.put("customerId",customer); input.put("lines",lines);
         if(shipping!=null && !shipping.isBlank()) input.put("shippingCode",shipping);
         return input;
@@ -121,19 +124,23 @@ public class CheckoutServiceImpl implements CheckoutService {
     public Map<String, Object> checkout(Input input, Jwt jwt) {
         if (!Set.of("PAYOS", "WALLET", "COD").contains(input.paymentMethod()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported payment method");
+        if(input.shippingDestination()!=null) {
+            var d=input.shippingDestination();
+            String full=String.join(", ",d.detail().trim(),d.ward().trim(),d.district().trim(),d.province().trim());
+            if(!full.equals(input.shippingAddress().trim())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Địa chỉ nhận hàng không khớp địa chỉ tính cước. Vui lòng chọn lại.");
+        }
         Map<String, Object> user = result(http.get().uri(userUrl + "/api/v1/users").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class));
         if (!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Active customer profile required");
         String customer = user.get("userId").toString(), serialized = JsonMapper.builder().build().writeValueAsString(input);
         String token = serviceToken();
-        shippingPolicy.perStore();
         // Idempotent retries must use the original order's captured policy.
         var existing = orders.findByCustomerIdAndIdempotencyKey(customer, input.idempotencyKey());
-        if ((existing.isEmpty() || !"READY".equals(existing.get().getSagaState().get("checkoutState"))) && input.expectedShippingFeeVnd() != null) {
+        if (existing.isEmpty() || !"READY".equals(existing.get().getSagaState().get("checkoutState"))) {
             var quote = post(productUrl + "/api/v1/inventory/reservations/quote", token, Map.of("items", input.items()));
             var quotedLines = (List<Map<String, Object>>) quote.get("lines");
-            long expected = shippingPolicy.total(quotedLines.stream().map(l -> l.get("storeId")).distinct().count());
-            if (input.expectedShippingFeeVnd() != expected)
+            long expected = shippingQuotes.quote(quotedLines,input.shippingDestination()).total();
+            if (input.expectedShippingFeeVnd() != null && input.expectedShippingFeeVnd() != expected)
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Phí vận chuyển đã thay đổi. Vui lòng tính lại trước khi đặt hàng.");
         }
         Order candidate = tx(() -> {
@@ -143,8 +150,11 @@ public class CheckoutServiceImpl implements CheckoutService {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Checkout key belongs to another request");
                 return previous.get();
             }
+            var shippingAddress = new LinkedHashMap<String,Object>();
+            shippingAddress.put("name",input.customerName());shippingAddress.put("phone",input.customerPhone());shippingAddress.put("address",input.shippingAddress());
+            if(input.shippingDestination()!=null) shippingAddress.put("destination",input.shippingDestination());
             return orders.saveAndFlush(Order.builder().customerId(customer).idempotencyKey(input.idempotencyKey()).checkoutRequest(serialized).payableVnd(0L).currency("VND").status(OrderStatus.PENDING)
-                    .shippingSnapshot(Map.of("name", input.customerName(), "phone", input.customerPhone(), "address", input.shippingAddress()))
+                    .shippingSnapshot(shippingAddress)
                     .sagaState(Map.of("checkoutState", "RESERVING", "paymentMethod", input.paymentMethod())).expiresAt(LocalDateTime.now(ZoneOffset.UTC).plusMinutes(30)).build());
         });
         return tx(() -> {
@@ -160,12 +170,19 @@ public class CheckoutServiceImpl implements CheckoutService {
             }
             Map<String, Object> reserved = post(productUrl + "/api/v1/inventory/reservations/" + order.getOrderId(), token, Map.of("items", input.items()));
             List<Map<String, Object>> lines = (List<Map<String, Object>>) reserved.get("lines");
+            var shippingQuote = shippingQuotes.quote(lines,input.shippingDestination());
+            if(input.expectedShippingFeeVnd()!=null && input.expectedShippingFeeVnd()!=shippingQuote.total())
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Phí vận chuyển đã thay đổi. Vui lòng tính lại trước khi đặt hàng.");
             List<Map<String, Object>> discounts = List.of();
             if (hasVoucher(input.couponCode(),input.shippingCouponCode()))
-                discounts = (List<Map<String, Object>>) post(promotionUrl + "/api/v1/checkout-vouchers/" + order.getOrderId(), token, voucherInput(input.couponCode(),input.shippingCouponCode(),customer,lines)).get("allocations");
+                discounts = (List<Map<String, Object>>) post(promotionUrl + "/api/v1/checkout-vouchers/" + order.getOrderId(), token, voucherInput(input.couponCode(),input.shippingCouponCode(),customer,lines,shippingQuote.fees())).get("allocations");
             Map<String, SellerOrder> sellerMap = new LinkedHashMap<>();
             long total = 0;
             for (Map<String, Object> line : lines) {
+                List<Line> matching = input.items().stream().filter(requested -> requested.productId().equals(line.get("productId"))
+                        && (requested.variantId() == null || requested.variantId().equals(line.get("variantId")))).toList();
+                if (matching.size() != 1) throw new ResponseStatusException(HttpStatus.CONFLICT, "Dòng sản phẩm không khớp với yêu cầu đặt hàng.");
+                Line requested = matching.getFirst();
                 String storeId = line.get("storeId").toString();
                 SellerOrder seller = sellerMap.computeIfAbsent(storeId, id -> sellers.saveAndFlush(SellerOrder.builder().orderId(order.getOrderId()).storeId(id).status(SellerOrderStatus.PENDING).totalsSnapshot(new LinkedHashMap<>()).build()));
                 long gross = number(line, "grossAmountVnd"), discount = 0;
@@ -174,7 +191,7 @@ public class CheckoutServiceImpl implements CheckoutService {
                 if (discount < 0 || discount > gross)
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid allocated discount");
                 var source=attributed.getOrDefault(line.get("productId").toString(),Map.of());
-                OrderItem item = items.saveAndFlush(OrderItem.builder().sellerOrderId(seller.getSellerOrderId()).productId(line.get("productId").toString()).variantId(line.get("variantId").toString()).sourceLivestreamId(Objects.toString(line.get("sourceLivestreamId"), null)).referralLinkId(Objects.toString(source.get("referralLinkId"),null)).ruleSnapshot(source.isEmpty()?null:source).quantity(((Number) line.get("quantity")).intValue()).unitPrice(number(line, "unitPriceVnd")).grossAmountVnd(gross).discountAmountVnd(discount).netPaidAmountVnd(gross - discount).productSnapshot(line).selectedSize(Objects.toString(line.get("size"), null)).build());
+                OrderItem item = items.saveAndFlush(OrderItem.builder().sellerOrderId(seller.getSellerOrderId()).productId(line.get("productId").toString()).variantId(line.get("variantId").toString()).sourceLivestreamId(requested.sourceLivestreamId() != null ? requested.sourceLivestreamId() : Objects.toString(line.get("sourceLivestreamId"), null)).referralLinkId(Objects.toString(source.get("referralLinkId"),null)).ruleSnapshot(source.isEmpty()?null:source).quantity(((Number) line.get("quantity")).intValue()).unitPrice(number(line, "unitPriceVnd")).grossAmountVnd(gross).discountAmountVnd(discount).netPaidAmountVnd(gross - discount).productSnapshot(line).selectedSize(Objects.toString(line.get("size"), null)).build());
                 for (var d : ds)
                     if (number(d, "allocatedAmountVnd") > 0)
                         allocations.save(DiscountAllocation.builder().orderItemId(item.getOrderItemId()).voucherId(d.get("voucherId").toString()).sourceType(DiscountSourceType.VOUCHER).fundedBy(DiscountFundingType.valueOf(d.get("fundedBy").toString())).allocatedAmountVnd(number(d, "allocatedAmountVnd")).ruleSnapshotJson(JsonMapper.builder().build().writeValueAsString(d)).build());
@@ -184,34 +201,42 @@ public class CheckoutServiceImpl implements CheckoutService {
                 totals.put("netPaidVnd", Math.addExact(((Number) totals.getOrDefault("netPaidVnd", 0L)).longValue(), gross - discount));
                 seller.setTotalsSnapshot(totals);
             }
-            long shippingFee = shippingPolicy.perStore();
             long shippingDiscount = 0;
             for (SellerOrder seller : sellerMap.values()) {
+                long shippingFee = shippingQuote.fees().get(seller.getStoreId());
                 long storeShippingDiscount = 0;
-                for (var d : discounts) if ("SHIPPING".equals(d.get("benefitType")) && seller.getStoreId().equals(d.get("storeId")))
-                    storeShippingDiscount = Math.addExact(storeShippingDiscount,number(d,"allocatedAmountVnd"));
-                if (storeShippingDiscount<0 || storeShippingDiscount>shippingFee)
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid shipping discount");
-                shippingDiscount = Math.addExact(shippingDiscount,storeShippingDiscount);
+                for (var d : discounts) {
+                    if ("SHIPPING".equals(d.get("benefitType")) && seller.getStoreId().equals(d.get("storeId"))) {
+                        storeShippingDiscount = Math.addExact(storeShippingDiscount, number(d, "allocatedAmountVnd"));
+                    }
+                }
+                if (storeShippingDiscount < 0 || storeShippingDiscount > shippingFee) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid shipping discount");
+                }
+                shippingDiscount = Math.addExact(shippingDiscount, storeShippingDiscount);
+
                 var totals = new LinkedHashMap<String, Object>(seller.getTotalsSnapshot());
-                totals.putAll(shippingPolicy.snapshot());
-                totals.put("shippingOriginalFeeVnd",shippingFee);
-                totals.put("shippingDiscountVnd",storeShippingDiscount);
-                totals.put("shippingFeeVnd", shippingFee-storeShippingDiscount);
-                totals.put("customerTotalVnd", Math.addExact(((Number) totals.get("netPaidVnd")).longValue(), shippingFee-storeShippingDiscount));
+                totals.putAll(shippingQuote.snapshots().get(seller.getStoreId()));
+                totals.put("shippingOriginalFeeVnd", shippingFee);
+                totals.put("shippingDiscountVnd", storeShippingDiscount);
+                totals.put("shippingFeeVnd", shippingFee - storeShippingDiscount);
+                totals.put("customerTotalVnd", Math.addExact(((Number) totals.get("netPaidVnd")).longValue(), shippingFee - storeShippingDiscount));
                 seller.setTotalsSnapshot(totals);
             }
-            total = Math.addExact(total, shippingPolicy.total(sellerMap.size())-shippingDiscount);
-            if (total <= 0)
+            total = Math.addExact(total, shippingQuote.total() - shippingDiscount);
+            if (total <= 0) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Zero-value checkout requires a separate free-order policy");
+            }
             order.setPayableVnd(total);
             order.setStatus(OrderStatus.AWAITING_PAYMENT);
-            var saga = new LinkedHashMap<String, Object>(shippingPolicy.snapshot());
+
+            var saga = new LinkedHashMap<String, Object>(shippingQuote.mode());
+            saga.put("shippingFeesByStore", shippingQuote.fees());
             saga.put("checkoutState", "READY");
             saga.put("paymentMethod", input.paymentMethod());
-            saga.put("shippingOriginalFeeVnd",shippingPolicy.total(sellerMap.size()));
-            saga.put("shippingDiscountVnd",shippingDiscount);
-            saga.put("shippingFeeVnd", shippingPolicy.total(sellerMap.size())-shippingDiscount);
+            saga.put("shippingOriginalFeeVnd", shippingQuote.total());
+            saga.put("shippingDiscountVnd", shippingDiscount);
+            saga.put("shippingFeeVnd", shippingQuote.total() - shippingDiscount);
             order.setSagaState(saga);
             orders.saveAndFlush(order);
             return view(order);
@@ -224,45 +249,115 @@ public class CheckoutServiceImpl implements CheckoutService {
 
     public Map<String, Object> view(Order order) {
         List<Map<String, Object>> sellerViews = new ArrayList<>();
-        for (SellerOrder s : sellers.findAll().stream().filter(s -> order.getOrderId().equals(s.getOrderId())).toList())
-            sellerViews.add(Map.of("storeId", s.getStoreId(), "storeName", s.getTotalsSnapshot().getOrDefault("storeName", "Shop"), "publicOrderCode", order.getOrderId(), "finalAmount", s.getTotalsSnapshot().getOrDefault("customerTotalVnd", s.getTotalsSnapshot().getOrDefault("netPaidVnd", 0)), "shippingFeeVnd", s.getTotalsSnapshot().getOrDefault("shippingFeeVnd", 0), "items", items.findAll().stream().filter(i -> s.getSellerOrderId().equals(i.getSellerOrderId())).map(OrderItem::getProductSnapshot).toList()));
-        var response = new LinkedHashMap<String, Object>(Map.of("orderId", order.getOrderId(), "publicOrderCode", order.getOrderId(), "finalAmount", order.getPayableVnd(), "paymentMethod", order.getSagaState().get("paymentMethod"), "paymentStatus", order.getStatus() == OrderStatus.PAID ? "PAID" : "UNPAID", "status", order.getStatus(), "isMultiStore", sellerViews.size() > 1, "orders", sellerViews));
-        for (String key : List.of("shippingFeeVnd", "shippingOriginalFeeVnd", "shippingDiscountVnd", "shippingMode", "shippingPayer", "shippingSettlementResponsible", "shippingSettlementStatus"))
-            if (order.getSagaState().containsKey(key)) response.put(key, order.getSagaState().get(key));
+        var matchedSellers = sellers.findAll().stream()
+                .filter(s -> order.getOrderId().equals(s.getOrderId()))
+                .toList();
+
+        for (SellerOrder s : matchedSellers) {
+            var orderItems = items.findAll().stream()
+                    .filter(i -> s.getSellerOrderId().equals(i.getSellerOrderId()))
+                    .map(OrderItem::getProductSnapshot)
+                    .toList();
+
+            sellerViews.add(Map.of(
+                    "storeId", s.getStoreId(),
+                    "storeName", s.getTotalsSnapshot().getOrDefault("storeName", "Shop"),
+                    "publicOrderCode", order.getOrderId(),
+                    "finalAmount", s.getTotalsSnapshot().getOrDefault("customerTotalVnd", s.getTotalsSnapshot().getOrDefault("netPaidVnd", 0)),
+                    "shippingFeeVnd", s.getTotalsSnapshot().getOrDefault("shippingFeeVnd", 0),
+                    "items", orderItems
+            ));
+        }
+
+        var response = new LinkedHashMap<String, Object>(Map.of(
+                "orderId", order.getOrderId(),
+                "publicOrderCode", order.getOrderId(),
+                "finalAmount", order.getPayableVnd(),
+                "paymentMethod", order.getSagaState().get("paymentMethod"),
+                "paymentStatus", order.getStatus() == OrderStatus.PAID ? "PAID" : "UNPAID",
+                "status", order.getStatus(),
+                "isMultiStore", sellerViews.size() > 1,
+                "orders", sellerViews
+        ));
+
+        for (String key : List.of("shippingFeeVnd", "shippingOriginalFeeVnd", "shippingDiscountVnd", "shippingMode", "shippingPayer", "shippingSettlementResponsible", "shippingSettlementStatus")) {
+            if (order.getSagaState().containsKey(key)) {
+                response.put(key, order.getSagaState().get(key));
+            }
+        }
         return response;
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, Object> quote(QuoteInput input, Jwt jwt) {
-        Map<String, Object> user = result(http.get().uri(userUrl + "/api/v1/users").headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().body(Map.class));
-        if (!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject")))
+        Map<String, Object> user = result(http.get()
+                .uri(userUrl + "/api/v1/users")
+                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
+                .retrieve()
+                .body(Map.class));
+
+        if (!"ACTIVE".equals(user.get("status")) || !jwt.getSubject().equals(user.get("identitySubject"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+
         String token = serviceToken();
-        List<Map<String, Object>> lines = (List<Map<String, Object>>) post(productUrl + "/api/v1/inventory/reservations/quote", token, Map.of("items", input.items())).get("lines");
+        List<Map<String, Object>> lines = (List<Map<String, Object>>) post(
+                productUrl + "/api/v1/inventory/reservations/quote",
+                token,
+                Map.of("items", input.items())
+        ).get("lines");
+
         long gross = 0;
-        for (var line : lines) gross = Math.addExact(gross, number(line, "grossAmountVnd"));
+        for (var line : lines) {
+            gross = Math.addExact(gross, number(line, "grossAmountVnd"));
+        }
+
+        var shippingQuote = shippingQuotes.quote(lines, input.shippingDestination());
         long discount = 0;
         long shippingDiscount = 0;
         String benefit = "GOODS";
-        if (hasVoucher(input.couponCode(),input.shippingCouponCode())) {
-            var promotion = post(promotionUrl + "/api/v1/checkout-vouchers/quote", token, voucherInput(input.couponCode(),input.shippingCouponCode(),user.get("userId"),lines));
+
+        if (hasVoucher(input.couponCode(), input.shippingCouponCode())) {
+            var promotion = post(
+                    promotionUrl + "/api/v1/checkout-vouchers/quote",
+                    token,
+                    voucherInput(input.couponCode(), input.shippingCouponCode(), user.get("userId"), lines, shippingQuote.fees())
+            );
             Object raw = promotion.get("allocations");
-            if (raw instanceof List<?> rows) for (Object value : rows) {
-                if (value instanceof Map<?,?> row && "SHIPPING".equals(row.get("benefitType"))) {
-                    shippingDiscount = Math.addExact(shippingDiscount,new BigDecimal(row.get("allocatedAmountVnd").toString()).longValueExact());
-                    benefit = "SHIPPING";
+            if (raw instanceof List<?> rows) {
+                for (Object value : rows) {
+                    if (value instanceof Map<?, ?> row && "SHIPPING".equals(row.get("benefitType"))) {
+                        shippingDiscount = Math.addExact(shippingDiscount, new BigDecimal(row.get("allocatedAmountVnd").toString()).longValueExact());
+                        benefit = "SHIPPING";
+                    }
                 }
             }
-            discount = number(promotion,"discountAmountVnd")-shippingDiscount;
-            if(discount>0 && shippingDiscount>0) benefit="MIXED";
+            discount = number(promotion, "discountAmountVnd") - shippingDiscount;
+            if (discount > 0 && shippingDiscount > 0) {
+                benefit = "MIXED";
+            }
         }
-        long shipping = shippingPolicy.total(lines.stream().map(l -> l.get("storeId")).distinct().count());
-        if (shippingDiscount<0 || shippingDiscount>shipping || discount<0 || discount>gross)
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"Invalid voucher discount");
-        var response = new LinkedHashMap<String, Object>(shippingPolicy.snapshot());
-        response.putAll(Map.of("code", Objects.toString(input.couponCode(), ""), "discountAmount", discount, "discountType", "VOUCHER", "subtotalVnd", gross, "shippingFeeVnd", shipping, "shippingDiscountVnd",shippingDiscount,"benefitType",benefit,"finalAmount", Math.addExact(gross - discount, shipping-shippingDiscount)));
-        response.put("shippingCouponCode",Objects.toString(input.shippingCouponCode(),""));
+
+        long shipping = shippingQuote.total();
+        if (shippingDiscount < 0 || shippingDiscount > shipping || discount < 0 || discount > gross) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid voucher discount");
+        }
+
+        var response = new LinkedHashMap<String, Object>(shippingQuote.mode());
+        response.put("shippingFeesByStore", shippingQuote.fees());
+        response.put("shippingSnapshotsByStore", shippingQuote.snapshots());
+        response.putAll(Map.of(
+                "code", Objects.toString(input.couponCode(), ""),
+                "discountAmount", discount,
+                "discountType", "VOUCHER",
+                "subtotalVnd", gross,
+                "shippingFeeVnd", shipping,
+                "shippingDiscountVnd", shippingDiscount,
+                "benefitType", benefit,
+                "finalAmount", Math.addExact(gross - discount, shipping - shippingDiscount)
+        ));
+        response.put("shippingCouponCode", Objects.toString(input.shippingCouponCode(), ""));
         return response;
     }
 }

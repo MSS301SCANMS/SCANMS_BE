@@ -56,4 +56,9 @@ public class OrderItem {
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
+
+    /** Absolute order time for product commission deals; legacy local dates have no zone. */
+    @CreationTimestamp
+    @Column(updatable = false)
+    private java.time.Instant placedAt;
 }
