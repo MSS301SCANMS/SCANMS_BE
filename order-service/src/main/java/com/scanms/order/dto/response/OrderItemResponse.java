@@ -21,5 +21,6 @@ public record OrderItemResponse(
         Map<String, Object> discountAllocations,
         String referralLinkId,
         Map<String, Object> ruleSnapshot,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        java.time.Instant placedAt
 ) {}

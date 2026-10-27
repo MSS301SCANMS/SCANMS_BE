@@ -44,13 +44,22 @@ clients:
   promotion:
     url: ${PROMOTION_SERVICE_URL:http://localhost:8085}
 scanms:
-  shipping:
-    simulation-enabled: ${SHIPPING_SIMULATION_ENABLED:false}
   finance:
     token-url: ${FINANCE_TOKEN_URL:}
     client-id: ${ORDER_SERVICE_CLIENT_ID:order-service}
     client-secret: ${ORDER_SERVICE_CLIENT_SECRET:}
     dispatch-delay-ms: ${FINANCE_DISPATCH_DELAY_MS:60000}
   checkout:
+    shipping-provider: ${CHECKOUT_SHIPPING_PROVIDER:FIXED}
     shipping-fee-per-store-vnd: ${CHECKOUT_SHIPPING_FEE_PER_STORE_VND:0}
     shipping-simulation-enabled: ${CHECKOUT_SHIPPING_SIMULATION_ENABLED:false}
+  shipping:
+    simulation-enabled: ${SHIPPING_SIMULATION_ENABLED:false}
+    ghn-sandbox:
+      token: ${GHN_SANDBOX_TOKEN:}
+      shop-id: ${GHN_SANDBOX_SHOP_ID:0}
+      store-id: ${GHN_SANDBOX_STORE_ID:}
+      item-weight-grams: ${GHN_SANDBOX_ITEM_WEIGHT_GRAMS:300}
+      length-cm: ${GHN_SANDBOX_PARCEL_LENGTH_CM:25}
+      width-cm: ${GHN_SANDBOX_PARCEL_WIDTH_CM:20}
+      height-cm: ${GHN_SANDBOX_PARCEL_HEIGHT_CM:8}

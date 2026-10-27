@@ -63,7 +63,11 @@ public class ShortVideoReferralServiceImpl implements ShortVideoReferralService 
         if(!productId.equals(click.getProductId())) throw failure("Lượt giới thiệu không thuộc sản phẩm.");
         // An expired click must not prevent the customer's purchase; simply omit commission.
         if(!click.getExpiresAt().isAfter(LocalDateTime.now(ZoneOffset.UTC))) return Map.of();
-        var link=validLink(click.getReferralLinkId(),productId);
+        // The link must have been valid when this server-recorded click occurred.
+        // Its configured expiry must not shorten the click's existing 24-hour window.
+        if (click.getClickedAt() == null || click.getClickedAt().isAfter(LocalDateTime.now(ZoneOffset.UTC)))
+            throw failure("Thời điểm lượt giới thiệu không hợp lệ.");
+        var link=validLink(click.getReferralLinkId(),productId,click.getClickedAt());
         var profile=profiles.findById(link.getCollaboratorId()).orElseThrow();
         if(profile.getUserId().equals(customerId)) return Map.of();
         var result=new LinkedHashMap<String,String>();
@@ -73,9 +77,12 @@ public class ShortVideoReferralServiceImpl implements ShortVideoReferralService 
         return result;
     }
     private ReferralLink validLink(String id,String productId) {
+        return validLink(id,productId,LocalDateTime.now(ZoneOffset.UTC));
+    }
+    private ReferralLink validLink(String id,String productId,LocalDateTime at) {
         var link=links.findById(id).orElseThrow(()->failure("Liên kết giới thiệu không tồn tại."));
         if(!productId.equals(link.getProductId())||link.getStatus()!=ReferralLinkStatus.ACTIVE
-                || link.getExpiresAt()!=null&&!link.getExpiresAt().isAfter(LocalDateTime.now(ZoneOffset.UTC))) throw failure("Liên kết giới thiệu không còn hiệu lực.");
+                || link.getExpiresAt()!=null&&!link.getExpiresAt().isAfter(at)) throw failure("Liên kết giới thiệu không còn hiệu lực.");
         profiles.findById(link.getCollaboratorId()).filter(p->p.getApprovalStatus()==CollaboratorStatus.APPROVED).orElseThrow(()->failure("KOL chưa được duyệt."));
         return link;
     }

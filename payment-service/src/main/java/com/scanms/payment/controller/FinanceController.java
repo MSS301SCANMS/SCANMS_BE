@@ -192,6 +192,11 @@ public class FinanceController {
         return ApiResponse.success(service.settlementList(storeId, page, size));
     }
 
+    @PostMapping("/commissions/{commissionId}/reconcile")
+    public ApiResponse<Map<String,Object>> reconcileCommission(@PathVariable String commissionId) {
+        return ApiResponse.success(service.reconcileCommission(commissionId));
+    }
+
     @PostMapping("/settlements")
     public ApiResponse<SettlementView> settlement(@Valid @RequestBody SettlementInput input) {
         return ApiResponse.created(service.computeSettlement(input.sellerOrderId()));

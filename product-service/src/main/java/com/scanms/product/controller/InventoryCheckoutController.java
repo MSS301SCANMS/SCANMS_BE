@@ -165,17 +165,18 @@ public class InventoryCheckoutController {
             Map<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("productId", p.getProductId());
             snapshot.put("variantId", variant.getVariantId());
+            snapshot.put("sku", variant.getSku());
             snapshot.put("quantity", line.quantity());
             snapshot.put("unitPriceVnd", unitPrice);
             snapshot.put("grossAmountVnd", Math.multiplyExact(unitPrice, line.quantity()));
-            snapshot.put("sku", variant.getSku());
             if (liveOffer.get("sourceLiveOfferId") != null)
                 snapshot.put("sourceLiveOfferId", liveOffer.get("sourceLiveOfferId"));
-            var images = em.createQuery("select i.imageUrl from ProductImage i where i.productId=:id order by i.primaryImage desc,i.sortOrder asc", String.class).setParameter("id", p.getProductId()).setMaxResults(1).getResultList();
-            if (!images.isEmpty()) snapshot.put("imageUrl", images.getFirst());
             snapshot.put("storeId", p.getStoreId());
             snapshot.put("storeName", store.getName());
             snapshot.put("name", p.getName());
+            var images = em.createQuery("select i.imageUrl from ProductImage i where i.productId=:product order by i.primaryImage desc, i.sortOrder asc, i.imageId asc", String.class)
+                    .setParameter("product", p.getProductId()).setMaxResults(1).getResultList();
+            if (!images.isEmpty()) snapshot.put("imageUrl", images.getFirst());
             snapshot.put("size", variant.getSize());
             snapshot.put("color", variant.getColor());
             if (line.sourceLivestreamId() != null) snapshot.put("sourceLivestreamId", line.sourceLivestreamId());

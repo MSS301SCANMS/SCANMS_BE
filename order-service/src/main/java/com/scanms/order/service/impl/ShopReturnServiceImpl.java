@@ -85,6 +85,42 @@ public class ShopReturnServiceImpl implements ShopReturnService {
         return view(row, stores);
     }
 
+    @Override
+    @Transactional
+    public View decide(String id, DecisionInput input, Jwt jwt) {
+        var stores = access.stores(jwt);
+        ReturnRequest row = returns.lockById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu đổi trả."));
+        var item = items.findById(row.getOrderItemId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        var seller = sellers.findById(item.getSellerOrderId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!stores.containsKey(seller.getStoreId()))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu đổi trả của gian hàng.");
+
+        if (input.status() != ReturnRequestStatus.APPROVED && input.status() != ReturnRequestStatus.REJECTED)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể chấp thuận hoặc từ chối yêu cầu trả hàng.");
+        String reason = input.decisionReason() == null ? "" : input.decisionReason().trim();
+        if (reason.length() > 3000 || (input.status() == ReturnRequestStatus.REJECTED && reason.length() < 20))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khi từ chối, vui lòng nhập căn cứ tối thiểu 20 ký tự và tối đa 3.000 ký tự.");
+
+        if (row.getStatus() != ReturnRequestStatus.REQUESTED) {
+            if (row.getStatus() == input.status() && Objects.equals(nullIfBlank(row.getDecisionReason()), nullIfBlank(reason)))
+                return view(row, stores);
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu đã được xử lý. Vui lòng tải lại danh sách.");
+        }
+        if (row.getRefundReference() != null)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu đã có tham chiếu hoàn tiền, cần đối soát trước khi xử lý.");
+
+        row.setStatus(input.status());
+        row.setDecisionReason(reason.isBlank() ? null : reason);
+        row.setResolvedAt(LocalDateTime.now());
+        returns.saveAndFlush(row);
+        // Shop approval only authorizes the return shipment. Refunds remain gated on receipt and finance processing.
+        return view(row, stores);
+    }
+
+    private static String nullIfBlank(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
     private View view(ReturnRequest row, Map<String, String> stores) {
         var item = items.findById(row.getOrderItemId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu thiếu dòng sản phẩm."));
         var seller = sellers.findById(item.getSellerOrderId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu thiếu đơn của gian hàng."));

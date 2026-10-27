@@ -51,7 +51,7 @@ public class FinanceDispatch {
     private String promotionUrl;
     @Value("${clients.product.url:http://localhost:8082}")
     private String productUrl;
-    private int refundCursor = 0, settlementCursor = 0, checkoutCursor = 0;
+    private int refundCursor = 0, settlementCursor = 0, checkoutCursor = 0, commissionCursor = 0;
 
     private <T> List<T> batch(List<T> values, int cursor) {
         if (values.isEmpty()) return List.of();
@@ -100,6 +100,17 @@ public class FinanceDispatch {
             return;
         }
         if (token == null) return;
+        // Payment acknowledgements can arrive while Affiliate is unavailable; retry persisted paid items.
+        var paidSellerIds=sellers.findAll().stream().filter(s -> orders.findById(s.getOrderId())
+                .map(o -> Set.of(OrderStatus.PAID,OrderStatus.PROCESSING,OrderStatus.COMPLETED).contains(o.getStatus())).orElse(false))
+                .map(SellerOrder::getSellerOrderId).collect(java.util.stream.Collectors.toSet());
+        var attributed=items.findAll().stream().filter(i -> i.getReferralLinkId()!=null && paidSellerIds.contains(i.getSellerOrderId()))
+                .sorted(Comparator.comparing(com.scanms.order.entity.OrderItem::getOrderItemId)).toList();
+        for(var item:batch(attributed,commissionCursor)) {
+            try { post(promotionUrl+"/api/v1/finance/commission-initializations/"+item.getOrderItemId(),token,Map.of("reason","Recover paid referral commission")); }
+            catch(Exception ex) { /* Same item reference is retried next cycle without duplicating commission. */ }
+        }
+        commissionCursor+=20;
         for (var r : batch(returns.findAll().stream().filter(r -> Set.of(ReturnRequestStatus.RECEIVED, ReturnRequestStatus.REFUND_PENDING, ReturnRequestStatus.REFUNDED).contains(r.getStatus())).sorted(Comparator.comparing(ReturnRequest::getReturnRequestId)).toList(), refundCursor)) {
             try {
                 if (r.getStatus() != ReturnRequestStatus.REFUNDED)

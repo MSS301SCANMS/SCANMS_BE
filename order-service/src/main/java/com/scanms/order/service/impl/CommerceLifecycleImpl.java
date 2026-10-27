@@ -356,7 +356,7 @@ public class CommerceLifecycleImpl implements CommerceLifecycle {
             require(input.environment().equals(row.getLogistics().get("environment")) && ("TEST".equals(input.environment()) || Objects.equals(input.trackingCode(), row.getLogistics().get("trackingCode"))), "Return already has another shipment");
             return returnView(row);
         }
-        require(row.getStatus() == ReturnRequestStatus.APPROVED, "The manager must approve the return before sending goods");
+        require(row.getStatus() == ReturnRequestStatus.APPROVED, "The shop must approve the return before goods can be sent");
         if ("MANUAL".equals(input.environment()) && (input.carrier() == null || input.carrier().isBlank() || input.trackingCode() == null || input.trackingCode().isBlank()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Carrier and tracking code are required");
         row.setLogistics(Map.of("environment", input.environment(), "carrier", "TEST".equals(input.environment()) ? "LOCAL_SIMULATION" : input.carrier().trim(),

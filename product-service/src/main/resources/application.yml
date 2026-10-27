@@ -4,6 +4,8 @@ server:
 scanms:
   catalog:
     seed-enabled: ${CATALOG_SEED_ENABLED:true}
+    sora-seed-enabled: ${SORA_CATALOG_SEED_ENABLED:true}
+    sora-owner-user-id: ${SORA_SEED_OWNER_USER_ID:3ecf64b8-5c15-4f74-9690-57707ada1104}
     cache-enabled: ${CATALOG_CACHE_ENABLED:true}
 
 spring:
