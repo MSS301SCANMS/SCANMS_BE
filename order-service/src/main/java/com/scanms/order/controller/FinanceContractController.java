@@ -53,6 +53,36 @@ public class FinanceContractController {
         if(result==null) throw new ResponseStatusException(HttpStatus.NOT_FOUND); return result;
     }
     public record PaidInput(String paymentId,Long amountVnd,String currency,String verifiedAt) {}
+    public record CommissionTimelineInput(List<String> orderItemIds) {}
+
+    @PostMapping("/commission-timelines")
+    @Transactional(readOnly = true)
+    public ApiResponse<Map<String, Object>> commissionTimelines(@RequestBody CommissionTimelineInput input,
+                                                               @AuthenticationPrincipal Jwt jwt) {
+        trusted(jwt, true);
+        if (input.orderItemIds() == null || input.orderItemIds().size() > 500)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid commission timeline batch");
+        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, SellerOrder> sellerCache = new HashMap<>();
+        Map<String, Boolean> unresolvedCache = new HashMap<>();
+        for (OrderItem item : items.findAllById(input.orderItemIds())) {
+            SellerOrder seller = sellerCache.computeIfAbsent(item.getSellerOrderId(),
+                    id -> sellers.findById(id).orElse(null));
+            if (seller == null) continue;
+            boolean unresolved = unresolvedCache.computeIfAbsent(item.getSellerOrderId(), sellerId ->
+                    items.findBySellerOrderId(sellerId).stream()
+                    .flatMap(line -> returns.findByOrderItemId(line.getOrderItemId()).stream())
+                    .anyMatch(r -> !Set.of(ReturnRequestStatus.REJECTED, ReturnRequestStatus.CANCELLED,
+                            ReturnRequestStatus.REFUNDED).contains(r.getStatus())));
+            Map<String, Object> timeline = new LinkedHashMap<>();
+            timeline.put("deliveredAt", seller.getDeliveredAt());
+            timeline.put("returnDeadline", seller.getReturnDeadline());
+            timeline.put("hasUnresolvedReturn", unresolved);
+            timeline.put("fulfillmentStatus", seller.getStatus());
+            result.put(item.getOrderItemId(), timeline);
+        }
+        return ApiResponse.success(result);
+    }
     @PostMapping("/orders/{id}/paid") public ApiResponse<Map<String,Object>> paid(@PathVariable String id,@RequestBody PaidInput input,@AuthenticationPrincipal Jwt jwt) {
         trusted(jwt,false); Order order=find(Order.class,id,true);
         if(input.paymentId()==null || !Objects.equals(input.amountVnd(),order.getPayableVnd()) || !Objects.equals(input.currency(),order.getCurrency())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Payment total mismatch");

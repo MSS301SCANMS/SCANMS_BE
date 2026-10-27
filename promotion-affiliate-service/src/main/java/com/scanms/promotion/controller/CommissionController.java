@@ -16,6 +16,12 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @RequiredArgsConstructor
 public class CommissionController {
     private final CommissionService service;
+    private final com.scanms.promotion.service.CommissionTimelineService timelines;
+
+    @GetMapping("/timelines")
+    public ApiResponse<Map<String, Object>> timelines() {
+        return ApiResponse.success(timelines.timelines(service.findAll()));
+    }
 
     @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping
