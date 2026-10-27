@@ -6,6 +6,7 @@ import com.scanms.user.constant.UserStatus;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Set;
 
 public record UserResponse(
@@ -20,6 +21,7 @@ public record UserResponse(
         String address,
         String avatarUrl,
         String bio,
+        Map<String, Object> fashionPreferences,
         UserStatus status,
         Set<RoleName> roles,
         LocalDateTime createdAt,

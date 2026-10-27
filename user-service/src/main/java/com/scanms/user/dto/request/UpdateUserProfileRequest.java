@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.util.Map;
 
 public record UpdateUserProfileRequest(
         @Size(min = 2, max = 150)
@@ -18,6 +19,7 @@ public record UpdateUserProfileRequest(
         @Size(max = 500)
         String avatarUrl,
         @Size(max = 500)
-        String bio
+        String bio,
+        Map<String, Object> fashionPreferences
 ) {
 }

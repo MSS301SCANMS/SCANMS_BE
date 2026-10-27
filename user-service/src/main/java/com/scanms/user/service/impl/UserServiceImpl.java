@@ -100,6 +100,7 @@ public class UserServiceImpl implements UserService {
         if (request.address() != null) user.setAddress(request.address());
         if (request.avatarUrl() != null) user.setAvatarUrl(request.avatarUrl());
         if (request.bio() != null) user.setBio(request.bio());
+        if (request.fashionPreferences() != null) user.setFashionPreferences(request.fashionPreferences());
         return mapper.toResponse(repository.save(user));
     }
 
