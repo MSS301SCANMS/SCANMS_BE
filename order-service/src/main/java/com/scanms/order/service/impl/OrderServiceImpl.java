@@ -341,8 +341,8 @@ public class OrderServiceImpl implements OrderService {
             }
             List<OrderItemResponse> itemResponses = items.stream().map(orderItemMapper::toResponse).toList();
 
-            long soGross = items.stream().mapToLong(OrderItem::getGrossAmountVnd).sum();
-            long soDiscount = items.stream().mapToLong(OrderItem::getDiscountAmountVnd).sum();
+            long soGross = items.stream().mapToLong(i -> i.getGrossAmountVnd() != null ? i.getGrossAmountVnd() : 0L).sum();
+            long soDiscount = items.stream().mapToLong(i -> i.getDiscountAmountVnd() != null ? i.getDiscountAmountVnd() : 0L).sum();
             masterGross += soGross;
             masterDiscount += soDiscount;
 

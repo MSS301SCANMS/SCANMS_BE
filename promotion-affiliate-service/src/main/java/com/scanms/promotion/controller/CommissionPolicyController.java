@@ -31,7 +31,12 @@ public class CommissionPolicyController {
     @PutMapping("/{id}")
     public ApiResponse<CommissionPolicyResponse> update(@PathVariable String id, @RequestParam Long version,
             @Valid @RequestBody CreateCommissionPolicyRequest request) {
-        access.requireManager();
+        if (!access.isManager() && request.scopeType() == CommissionPolicyScope.STORE
+                && request.storeId() != null && !request.storeId().isBlank()) {
+            access.requireStoreOwner(request.storeId());
+        } else {
+            access.requireManager();
+        }
         return ApiResponse.success(service.update(id, version, request));
     }
     @GetMapping("/{id}")

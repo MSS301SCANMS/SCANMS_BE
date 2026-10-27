@@ -7,7 +7,6 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-$workspace = Split-Path $repo -Parent
 $settings = @{}
 $moduleSettings = @{}
 Get-Content -LiteralPath (Join-Path $repo '.env') | ForEach-Object {
@@ -49,6 +48,6 @@ if (-not $Maven) {
 }
 if (-not $Maven) { throw 'Set -Maven to mvn.cmd.' }
 Push-Location $repo
-try { & $Maven "-Dmaven.repo.local=$(Join-Path $workspace '.maven-repository')" -pl $Service spring-boot:run; $result=$LASTEXITCODE }
+try { & $Maven -pl $Service spring-boot:run; $result=$LASTEXITCODE }
 finally { Pop-Location }
 exit $result
