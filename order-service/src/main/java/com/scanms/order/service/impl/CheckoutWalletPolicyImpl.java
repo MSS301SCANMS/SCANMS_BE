@@ -2,6 +2,7 @@ package com.scanms.order.service.impl;
 
 import com.scanms.order.client.CheckoutWalletClient;
 import com.scanms.order.service.CheckoutWalletPolicy;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -10,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.text.NumberFormat;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -20,7 +22,7 @@ public class CheckoutWalletPolicyImpl implements CheckoutWalletPolicy {
     public void requireFunds(Jwt jwt, long amount) {
         try {
             var response = payments.wallet("Bearer " + jwt.getTokenValue(), "CUSTOMER");
-            if (response == null || !(response.get("result") instanceof java.util.Map<?, ?> wallet)
+            if (response == null || !(response.get("result") instanceof Map<?, ?> wallet)
                     || !(wallet.get("availableBalanceVnd") instanceof Number balance) || !"ACTIVE".equals(wallet.get("status")))
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa xác minh được số dư ví. Vui lòng thử lại.");
             if (balance.longValue() < amount) {
@@ -28,7 +30,7 @@ public class CheckoutWalletPolicyImpl implements CheckoutWalletPolicy {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Ví có " + money.format(balance.longValue()) + "đ, đơn cần " + money.format(amount)
                         + "đ. Bạn còn thiếu " + money.format(amount - balance.longValue()) + "đ. Vui lòng nạp thêm tiền hoặc đổi phương thức thanh toán.");
             }
-        } catch (feign.FeignException ex) {
+        } catch (FeignException ex) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Không kiểm tra được ví. Vui lòng thử lại hoặc chọn phương thức khác.");
         }
     }

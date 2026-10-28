@@ -1,9 +1,12 @@
 package com.scanms.order.service;
 
+import com.scanms.order.client.CancellationPaymentClient;
+import com.scanms.order.client.PromotionClient;
 import com.scanms.order.constant.OrderStatus;
 import com.scanms.order.constant.ReturnRequestStatus;
 import com.scanms.order.constant.SellerOrderStatus;
 import com.scanms.order.entity.Order;
+import com.scanms.order.entity.OrderItem;
 import com.scanms.order.entity.ReturnRequest;
 import com.scanms.order.entity.SellerOrder;
 import com.scanms.order.repository.OrderItemRepository;
@@ -39,8 +42,8 @@ public class FinanceDispatch {
     private final OrderItemRepository items;
     private final OrderRepository orders;
     private final PlatformTransactionManager transactions;
-    private final com.scanms.order.client.CancellationPaymentClient cancellationPayments;
-    private final com.scanms.order.client.PromotionClient cancellationAffiliate;
+    private final CancellationPaymentClient cancellationPayments;
+    private final PromotionClient cancellationAffiliate;
     @Value("${scanms.finance.token-url:}")
     private String tokenUrl;
     @Value("${scanms.finance.client-id:order-service}")
@@ -141,7 +144,7 @@ public class FinanceDispatch {
                         .map(o -> Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(o.getStatus())).orElse(false))
                 .map(SellerOrder::getSellerOrderId).collect(java.util.stream.Collectors.toSet());
         var attributed = items.findAll().stream().filter(i -> i.getReferralLinkId() != null && paidSellerIds.contains(i.getSellerOrderId()))
-                .sorted(Comparator.comparing(com.scanms.order.entity.OrderItem::getOrderItemId)).toList();
+                .sorted(Comparator.comparing(OrderItem::getOrderItemId)).toList();
         for (var item : batch(attributed, commissionCursor)) {
             try {
                 post(promotionUrl + "/api/v1/finance/commission-initializations/" + item.getOrderItemId(), token, Map.of("reason", "Recover paid referral commission"));

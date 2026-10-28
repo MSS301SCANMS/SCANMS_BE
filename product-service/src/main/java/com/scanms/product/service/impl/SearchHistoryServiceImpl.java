@@ -19,6 +19,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -81,7 +82,7 @@ public class SearchHistoryServiceImpl implements SearchHistoryService {
         String identity = jwt == null ? "GUEST:" + session : "USER:" + jwt.getSubject();
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(identity.getBytes(StandardCharsets.UTF_8)));
-        } catch (java.security.NoSuchAlgorithmException ex) {
+        } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException(ex);
         }
     }

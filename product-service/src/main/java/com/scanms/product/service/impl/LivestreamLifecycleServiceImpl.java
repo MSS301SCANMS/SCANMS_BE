@@ -2,6 +2,7 @@ package com.scanms.product.service.impl;
 
 import com.scanms.product.constant.LivestreamStatus;
 import com.scanms.product.repository.LivestreamRepository;
+import com.scanms.product.service.LivestreamBroadcastPolicy;
 import com.scanms.product.service.LivestreamLifecycleService;
 import com.scanms.product.service.LivestreamSchedulePolicy;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,7 @@ import java.util.List;
 public class LivestreamLifecycleServiceImpl implements LivestreamLifecycleService {
     private final LivestreamRepository repository;
     private final LivestreamSchedulePolicy schedule;
-    private final com.scanms.product.service.LivestreamBroadcastPolicy broadcast;
+    private final LivestreamBroadcastPolicy broadcast;
 
     @Override
     @Transactional

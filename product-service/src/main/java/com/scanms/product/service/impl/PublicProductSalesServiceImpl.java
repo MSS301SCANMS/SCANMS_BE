@@ -2,6 +2,7 @@ package com.scanms.product.service.impl;
 
 import com.scanms.product.client.PublicProductSalesClient;
 import com.scanms.product.service.PublicProductSalesService;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -23,7 +24,7 @@ public class PublicProductSalesServiceImpl implements PublicProductSalesService 
                 if (values.get(id) instanceof Number count && count.longValue() >= 0) result.put(id, count.longValue());
             });
             return result;
-        } catch (feign.FeignException ex) {
+        } catch (FeignException ex) {
             return Map.of(); // Catalog remains available; the UI labels the sales count as unavailable.
         }
     }

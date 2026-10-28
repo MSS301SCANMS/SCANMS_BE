@@ -6,6 +6,9 @@ import com.scanms.payment.exception.AppException;
 import com.scanms.payment.exception.ErrorCode;
 import com.scanms.payment.repository.PaymentRepository;
 import com.scanms.payment.service.*;
+import feign.FeignException;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,7 +26,7 @@ public class CancellationRefundServiceImpl implements CancellationRefundService 
     private final PaymentAccess access;
     private final FinanceService finance;
     private final FinanceOutbox outbox;
-    private final jakarta.persistence.EntityManager em;
+    private final EntityManager em;
     @Value("${clients.order.url:http://localhost:8083}")
     private String orderUrl;
 
@@ -37,7 +40,7 @@ public class CancellationRefundServiceImpl implements CancellationRefundService 
             if (envelope == null || !(envelope.get("result") instanceof Map<?, ?> result))
                 throw new AppException(ErrorCode.CONFLICT);
             basis = (Map<String, Object>) result;
-        } catch (feign.FeignException ex) {
+        } catch (FeignException ex) {
             throw new AppException(ErrorCode.CONFLICT, "Chưa xác minh được điều kiện hoàn tiền hủy đơn.");
         }
         var captured = payments.findByOrderIdOrderByCreatedAtDesc(orderId).stream()
@@ -45,7 +48,7 @@ public class CancellationRefundServiceImpl implements CancellationRefundService 
                 .filter(payment -> basis.get("paymentId") == null || basis.get("paymentId").equals(payment.getPaymentId())).findFirst();
         if (captured.isEmpty()) return Map.of("refundStatus", "NO_CAPTURED_PAYMENT");
         var payment = captured.get();
-        em.refresh(payment, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        em.refresh(payment, LockModeType.PESSIMISTIC_WRITE);
         long amount = FinanceService.number(basis, "amountVnd");
         if (!orderId.equals(basis.get("orderId")) || !Objects.equals(payment.getPayerId(), basis.get("customerId"))
                 || !"VND".equals(basis.get("currency")) || !Objects.equals(payment.getAmountVnd(), amount) || payment.getVerifiedAt() == null)

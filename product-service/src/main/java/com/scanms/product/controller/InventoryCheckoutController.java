@@ -1,8 +1,12 @@
 package com.scanms.product.controller;
 
+import com.scanms.product.client.OrderCancellationClient;
 import com.scanms.product.constant.*;
 import com.scanms.product.dto.ApiResponse;
 import com.scanms.product.entity.*;
+import com.scanms.product.service.LiveOfferPricing;
+import com.scanms.product.service.LivestreamSchedulePolicy;
+import feign.FeignException;
 import jakarta.persistence.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -24,9 +28,9 @@ import java.util.*;
 @Transactional
 public class InventoryCheckoutController {
     private final EntityManager em;
-    private final com.scanms.product.client.OrderCancellationClient cancellations;
-    private final com.scanms.product.service.LiveOfferPricing livePricing;
-    private final com.scanms.product.service.LivestreamSchedulePolicy schedule;
+    private final OrderCancellationClient cancellations;
+    private final LiveOfferPricing livePricing;
+    private final LivestreamSchedulePolicy schedule;
 
     public record Line(
             @NotBlank String productId, String variantId, @Min(1) @Max(1000) int quantity, String sourceLivestreamId,
@@ -247,7 +251,7 @@ public class InventoryCheckoutController {
                 var response = cancellations.eligibility("Bearer " + jwt.getTokenValue(), orderId);
                 if (response == null || !(response.get("result") instanceof Map<?, ?> result) || !Boolean.TRUE.equals(result.get("eligible")))
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Committed stock can only be restored before delivery cancellation");
-            } catch (feign.FeignException ex) {
+            } catch (FeignException ex) {
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cannot verify cancellation");
             }
         } else if (!"RESERVED".equals(reservation.getStatus()))

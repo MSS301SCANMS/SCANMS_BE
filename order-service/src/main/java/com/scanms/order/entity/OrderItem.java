@@ -2,12 +2,12 @@ package com.scanms.order.entity;
 
 
 import jakarta.persistence.*;
-
 import lombok.*;
 import org.hibernate.annotations.*;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -66,10 +66,10 @@ public class OrderItem {
      * Absolute order time for product commission deals; legacy local dates have no zone.
      */
     @Column(updatable = false, nullable = true)
-    private java.time.Instant placedAt;
+    private Instant placedAt;
 
     @PrePersist
     void recordPlacementTime() {
-        if (placedAt == null) placedAt = java.time.Instant.now();
+        if (placedAt == null) placedAt = Instant.now();
     }
 }

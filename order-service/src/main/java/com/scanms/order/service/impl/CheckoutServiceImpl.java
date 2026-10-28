@@ -1,5 +1,6 @@
 package com.scanms.order.service.impl;
 
+import com.scanms.order.client.InventoryCheckoutClient;
 import com.scanms.order.constant.DiscountFundingType;
 import com.scanms.order.constant.DiscountSourceType;
 import com.scanms.order.constant.OrderStatus;
@@ -12,12 +13,17 @@ import com.scanms.order.repository.DiscountAllocationRepository;
 import com.scanms.order.repository.OrderItemRepository;
 import com.scanms.order.repository.OrderRepository;
 import com.scanms.order.repository.SellerOrderRepository;
+import com.scanms.order.service.CheckoutAttribution;
 import com.scanms.order.service.CheckoutService;
 import com.scanms.order.service.CheckoutShippingPolicy;
+import com.scanms.order.service.CheckoutShippingQuotes;
+import com.scanms.order.service.CheckoutWalletPolicy;
 import com.scanms.order.service.FinanceDispatch;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -45,10 +51,10 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final DiscountAllocationRepository allocations;
     private final PlatformTransactionManager transactions;
     private final CheckoutShippingPolicy shippingPolicy;
-    private final com.scanms.order.service.CheckoutShippingQuotes shippingQuotes;
-    private final com.scanms.order.service.CheckoutAttribution attribution;
-    private final com.scanms.order.client.InventoryCheckoutClient inventory;
-    private final com.scanms.order.service.CheckoutWalletPolicy walletPolicy;
+    private final CheckoutShippingQuotes shippingQuotes;
+    private final CheckoutAttribution attribution;
+    private final InventoryCheckoutClient inventory;
+    private final CheckoutWalletPolicy walletPolicy;
     @Value("${clients.product.url:http://localhost:8082}")
     private String productUrl;
     @Value("${clients.promotion.url:http://localhost:8085}")
@@ -79,7 +85,7 @@ public class CheckoutServiceImpl implements CheckoutService {
             return result(http.post().uri(url).headers(h -> h.setBearerAuth(token))
                     .header("X-Shipping-Fee-Per-Store-Vnd", Long.toString(shippingPolicy.perStore()))
                     .body(body).retrieve().body(Map.class));
-        } catch (org.springframework.web.client.RestClientResponseException ex) {
+        } catch (RestClientResponseException ex) {
             if (url.startsWith(promotionUrl + "/api/v1/checkout-vouchers/") && Set.of(400, 409, 422).contains(ex.getStatusCode().value())) {
                 String message = "Voucher không hợp lệ hoặc không còn áp dụng được cho đơn hàng.";
                 try {
@@ -130,14 +136,14 @@ public class CheckoutServiceImpl implements CheckoutService {
             var input = Map.<String, Object>of("items", lines, "buyerIdentitySubject", jwt.getSubject());
             return result(orderId == null ? inventory.quote("Bearer " + token, shippingPolicy.perStore(), input)
                     : inventory.reserve(orderId, "Bearer " + token, shippingPolicy.perStore(), input));
-        } catch (feign.FeignException ex) {
+        } catch (FeignException ex) {
             String message = "Chưa thể xác nhận giá hoặc tồn kho sản phẩm.";
             try {
                 var error = JsonMapper.builder().build().readTree(ex.contentUTF8());
                 if (error.path("message").isTextual()) message = error.path("message").asText();
             } catch (Exception ignored) {
             }
-            throw new ResponseStatusException(ex.status() > 0 ? org.springframework.http.HttpStatusCode.valueOf(ex.status()) : HttpStatus.SERVICE_UNAVAILABLE, message);
+            throw new ResponseStatusException(ex.status() > 0 ? HttpStatusCode.valueOf(ex.status()) : HttpStatus.SERVICE_UNAVAILABLE, message);
         }
     }
 

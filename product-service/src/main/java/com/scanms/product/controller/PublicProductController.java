@@ -8,16 +8,16 @@ import com.scanms.product.entity.Store;
 import com.scanms.product.repository.ProductRepository;
 import com.scanms.product.repository.StoreRepository;
 import com.scanms.product.service.PublicCatalogService;
+import com.scanms.product.service.PublicProductSalesService;
+import com.scanms.product.service.PublicReviewService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
-import com.scanms.product.service.PublicReviewService;
 
 /**
  * Public catalog endpoints consumed by SCANMS_FE marketplace / chat / storefront.
@@ -34,7 +34,7 @@ public class PublicProductController {
     @Autowired(required = false)
     private PublicReviewService reviewSummaries;
     @Autowired(required = false)
-    private com.scanms.product.service.PublicProductSalesService sales;
+    private PublicProductSalesService sales;
 
     @Autowired
     public PublicProductController(ProductRepository products, StoreRepository stores, PublicCatalogService catalog) {

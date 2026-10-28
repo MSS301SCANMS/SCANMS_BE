@@ -9,10 +9,11 @@ import com.scanms.product.exception.*;
 import com.scanms.product.mapper.LivestreamMapper;
 import com.scanms.product.repository.*;
 import com.scanms.product.service.*;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.security.oauth2.jwt.Jwt;
 
 import java.time.*;
 import java.util.*;
@@ -215,7 +216,7 @@ public class LivestreamServiceImpl implements LivestreamService {
             var verified = new LinkedHashMap<String, Object>();
             result.forEach((key, value) -> verified.put(key.toString(), value));
             return verified;
-        } catch (feign.FeignException ex) {
+        } catch (FeignException ex) {
             if (ex.status() == 403 || ex.status() == 404)
                 throw new AppException(ErrorCode.FORBIDDEN, "Cannot access this KOL partnership");
             throw conflict("KOL must be approved and have accepted the shop partnership");

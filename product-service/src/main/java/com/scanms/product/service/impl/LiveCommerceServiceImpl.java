@@ -9,6 +9,7 @@ import com.scanms.product.exception.*;
 import com.scanms.product.mapper.LiveCommerceMapper;
 import com.scanms.product.repository.*;
 import com.scanms.product.service.*;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -194,7 +195,7 @@ public class LiveCommerceServiceImpl implements LiveCommerceService, LiveOfferPr
                     throw invalid("Voucher không áp dụng cho sản phẩm của phiên.");
                 return stringMap(row);
             }
-        } catch (feign.FeignException ex) {
+        } catch (FeignException ex) {
             throw new AppException(ex.status() == 403 ? ErrorCode.FORBIDDEN : ErrorCode.CONFLICT, "Chưa xác minh được voucher để tung.");
         }
         throw invalid("Không tìm thấy voucher phù hợp.");
