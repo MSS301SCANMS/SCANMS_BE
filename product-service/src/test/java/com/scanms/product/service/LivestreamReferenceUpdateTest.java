@@ -27,7 +27,7 @@ class LivestreamReferenceUpdateTest {
     private final LivestreamServiceImpl service = new LivestreamServiceImpl(livestreams,
             Mappers.getMapper(LivestreamMapper.class), access, products,
             mock(com.scanms.product.client.LivestreamAffiliateClient.class),
-            new LivestreamSchedulePolicy(), mock(LivestreamLifecycleService.class));
+            new LivestreamSchedulePolicy(), mock(LivestreamLifecycleService.class), new LivestreamBroadcastPolicy());
 
     @Test
     void sellerCanUpdateParticipantsAndApprovedCollaboratorReferences() {

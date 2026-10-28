@@ -10,10 +10,12 @@ import com.scanms.product.constant.FeedbackStatus;
 import com.scanms.product.service.ProductAccess;
 import com.scanms.product.repository.ProductRepository;
 import com.scanms.product.repository.StoreRepository;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.http.HttpClient;
 import java.time.Duration;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -21,7 +23,9 @@ import org.springframework.web.client.RestClientException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.*;
+
 import com.scanms.product.dto.request.UpdateFeedbackRequest;
 import com.scanms.product.entity.Feedback;
 import com.scanms.product.entity.Product;
@@ -36,9 +40,12 @@ public class FeedbackServiceImpl implements FeedbackService {
     private final ProductAccess access;
     private final ProductRepository products;
     private final StoreRepository stores;
-    @Value("${clients.order.url:http://localhost:8083}") private String orderUrl;
+    private final com.scanms.product.service.FeedbackTextPolicy textPolicy;
+    @Value("${clients.order.url:http://localhost:8083}")
+    private String orderUrl;
 
     public FeedbackResponse create(CreateFeedbackRequest request) {
+        textPolicy.validate(request.comment());
         String customerId = access.userId();
         var product = products.findById(request.productId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found"));
@@ -50,9 +57,9 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (!product.getStoreId().equals(sellerOrder.get("storeId"))
                 || !customerId.equals(order.get("customerId"))
                 || !Set.of("PAID", "PROCESSING", "COMPLETED")
-                        .contains(Objects.toString(order.get("status"), ""))
+                .contains(Objects.toString(order.get("status"), ""))
                 || !Set.of("DELIVERED", "COMPLETED")
-                        .contains(Objects.toString(sellerOrder.get("status"), "")))
+                .contains(Objects.toString(sellerOrder.get("status"), "")))
             throw new AppException(ErrorCode.FORBIDDEN, "Chỉ người mua của sản phẩm đã giao và đã thanh toán mới được đánh giá.");
         if (repository.existsByOrderItemIdAndCustomerId(request.orderItemId(), customerId)) {
             throw new AppException(ErrorCode.CONFLICT, "Sản phẩm trong đơn này đã được đánh giá.");
@@ -61,10 +68,13 @@ public class FeedbackServiceImpl implements FeedbackService {
         feedback.setCustomerId(customerId);
         feedback.setStatus(FeedbackStatus.ACTIVE);
         Feedback saved;
-        try { saved = repository.save(feedback); repository.flush(); }
-        catch(DataIntegrityViolationException ex) {
-            if(!Objects.toString(ex.getMostSpecificCause().getMessage(),"").toLowerCase(Locale.ROOT).contains("uk_feedback_order_item_customer")) throw ex;
-            throw new AppException(ErrorCode.CONFLICT,"Sản phẩm trong đơn này đã được đánh giá. Vui lòng tải lại danh sách đơn hàng.");
+        try {
+            saved = repository.save(feedback);
+            repository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            if (!Objects.toString(ex.getMostSpecificCause().getMessage(), "").toLowerCase(Locale.ROOT).contains("uk_feedback_order_item_customer"))
+                throw ex;
+            throw new AppException(ErrorCode.CONFLICT, "Sản phẩm trong đơn này đã được đánh giá. Vui lòng tải lại danh sách đơn hàng.");
         }
         refreshStoreRating(product.getStoreId());
         return mapper.toResponse(saved);
@@ -72,9 +82,9 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     @Transactional(readOnly = true)
     public List<FeedbackResponse> findMine(List<String> orderItemIds) {
-        if(orderItemIds==null || orderItemIds.isEmpty() || orderItemIds.size()>100)
-            throw new AppException(ErrorCode.INVALID_REQUEST,"Danh sách sản phẩm trong đơn không hợp lệ.");
-        return repository.findByCustomerIdAndOrderItemIdIn(access.userId(),orderItemIds).stream().map(mapper::toResponse).toList();
+        if (orderItemIds == null || orderItemIds.isEmpty() || orderItemIds.size() > 100)
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Danh sách sản phẩm trong đơn không hợp lệ.");
+        return repository.findByCustomerIdAndOrderItemIdIn(access.userId(), orderItemIds).stream().map(mapper::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
@@ -103,7 +113,10 @@ public class FeedbackServiceImpl implements FeedbackService {
     public FeedbackResponse updateOwn(String id, UpdateFeedbackRequest request) {
         var feedback = ownedActive(id);
         if (request.rating() != null) feedback.setRating(request.rating());
-        if (request.comment() != null) feedback.setComment(request.comment());
+        if (request.comment() != null) {
+            textPolicy.validate(request.comment());
+            feedback.setComment(request.comment());
+        }
         if (request.imageRefs() != null) feedback.setImageRefs(request.imageRefs());
         repository.save(feedback);
         refreshStoreRating(storeId(feedback));

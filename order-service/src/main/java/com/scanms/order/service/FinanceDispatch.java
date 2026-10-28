@@ -39,6 +39,8 @@ public class FinanceDispatch {
     private final OrderItemRepository items;
     private final OrderRepository orders;
     private final PlatformTransactionManager transactions;
+    private final com.scanms.order.client.CancellationPaymentClient cancellationPayments;
+    private final com.scanms.order.client.PromotionClient cancellationAffiliate;
     @Value("${scanms.finance.token-url:}")
     private String tokenUrl;
     @Value("${scanms.finance.client-id:order-service}")
@@ -51,7 +53,7 @@ public class FinanceDispatch {
     private String promotionUrl;
     @Value("${clients.product.url:http://localhost:8082}")
     private String productUrl;
-    private int refundCursor = 0, settlementCursor = 0, checkoutCursor = 0, commissionCursor = 0;
+    private int refundCursor = 0, settlementCursor = 0, checkoutCursor = 0, commissionCursor = 0, cancellationCursor = 0;
 
     private <T> List<T> batch(List<T> values, int cursor) {
         if (values.isEmpty()) return List.of();
@@ -87,7 +89,7 @@ public class FinanceDispatch {
         var request = JsonMapper.builder().build().readTree(checkoutRequest);
         var code = request.path("couponCode");
         if (code.isMissingNode() || code.isNull()) code = request.path("voucherCode");
-        var shipping=request.path("shippingCouponCode");
+        var shipping = request.path("shippingCouponCode");
         return code.isTextual() && !code.asText().isBlank() || shipping.isTextual() && !shipping.asText().isBlank();
     }
 
@@ -100,17 +102,52 @@ public class FinanceDispatch {
             return;
         }
         if (token == null) return;
-        // Payment acknowledgements can arrive while Affiliate is unavailable; retry persisted paid items.
-        var paidSellerIds=sellers.findAll().stream().filter(s -> orders.findById(s.getOrderId())
-                .map(o -> Set.of(OrderStatus.PAID,OrderStatus.PROCESSING,OrderStatus.COMPLETED).contains(o.getStatus())).orElse(false))
-                .map(SellerOrder::getSellerOrderId).collect(java.util.stream.Collectors.toSet());
-        var attributed=items.findAll().stream().filter(i -> i.getReferralLinkId()!=null && paidSellerIds.contains(i.getSellerOrderId()))
-                .sorted(Comparator.comparing(com.scanms.order.entity.OrderItem::getOrderItemId)).toList();
-        for(var item:batch(attributed,commissionCursor)) {
-            try { post(promotionUrl+"/api/v1/finance/commission-initializations/"+item.getOrderItemId(),token,Map.of("reason","Recover paid referral commission")); }
-            catch(Exception ex) { /* Same item reference is retried next cycle without duplicating commission. */ }
+        for (var order : batch(orders.findAll().stream().filter(row -> row.getStatus() == OrderStatus.CANCELLED
+                        && row.getCheckoutRequest() != null && row.getPayableVnd() != null && row.getPayableVnd() > 0)
+                .sorted(Comparator.comparing(Order::getOrderId)).toList(), cancellationCursor)) {
+            for (var seller : sellers.findByOrderId(order.getOrderId())) {
+                for (var item : items.findBySellerOrderId(seller.getSellerOrderId())) {
+                    if (item.getReferralLinkId() == null) continue;
+                    try {
+                        cancellationAffiliate.cancelCommission(item.getOrderItemId(), "Bearer " + token, Map.of("reason", "Order cancelled before dispatch"));
+                    } catch (
+                            Exception ex) { /* Keep retrying cancelled items, including an initialization that raced cancellation. */ }
+                }
+            }
+            if (order.getSagaState() != null && order.getSagaState().get("cancellation") instanceof Map<?, ?> value && "REFUNDED".equals(value.get("refundStatus")))
+                continue;
+            try {
+                var response = cancellationPayments.refund(order.getOrderId(), "Bearer " + token);
+                if (response != null && response.get("result") instanceof Map<?, ?> result && "NO_CAPTURED_PAYMENT".equals(result.get("refundStatus"))) {
+                    new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+                        var current = orders.lockById(order.getOrderId()).orElseThrow();
+                        var saga = new LinkedHashMap<>(current.getSagaState() == null ? Map.of() : current.getSagaState());
+                        var cancellation = new LinkedHashMap<String, Object>();
+                        if (saga.get("cancellation") instanceof Map<?, ?> old)
+                            old.forEach((key, value) -> cancellation.put(key.toString(), value));
+                        if (!"REFUNDED".equals(cancellation.get("refundStatus")))
+                            cancellation.put("refundStatus", "NOT_REQUIRED");
+                        saga.put("cancellation", cancellation);
+                        current.setSagaState(saga);
+                        orders.save(current);
+                    });
+                }
+            } catch (
+                    Exception ex) { /* Retry even an initially unpaid cancellation to recover a concurrent/late capture. */ }
         }
-        commissionCursor+=20;
+        cancellationCursor += 20;
+        // Payment acknowledgements can arrive while Affiliate is unavailable; retry persisted paid items.
+        var paidSellerIds = sellers.findAll().stream().filter(s -> orders.findById(s.getOrderId())
+                        .map(o -> Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(o.getStatus())).orElse(false))
+                .map(SellerOrder::getSellerOrderId).collect(java.util.stream.Collectors.toSet());
+        var attributed = items.findAll().stream().filter(i -> i.getReferralLinkId() != null && paidSellerIds.contains(i.getSellerOrderId()))
+                .sorted(Comparator.comparing(com.scanms.order.entity.OrderItem::getOrderItemId)).toList();
+        for (var item : batch(attributed, commissionCursor)) {
+            try {
+                post(promotionUrl + "/api/v1/finance/commission-initializations/" + item.getOrderItemId(), token, Map.of("reason", "Recover paid referral commission"));
+            } catch (Exception ex) { /* Same item reference is retried next cycle without duplicating commission. */ }
+        }
+        commissionCursor += 20;
         for (var r : batch(returns.findAll().stream().filter(r -> Set.of(ReturnRequestStatus.RECEIVED, ReturnRequestStatus.REFUND_PENDING, ReturnRequestStatus.REFUNDED).contains(r.getStatus())).sorted(Comparator.comparing(ReturnRequest::getReturnRequestId)).toList(), refundCursor)) {
             try {
                 if (r.getStatus() != ReturnRequestStatus.REFUNDED)
@@ -130,8 +167,8 @@ public class FinanceDispatch {
         }
         settlementCursor += 20;
         for (var candidate : batch(orders.findAll().stream().filter(o -> o.getCheckoutRequest() != null && o.getSagaState() != null
-                && (!Boolean.TRUE.equals(o.getSagaState().get("resourcesFinalized"))
-                || o.getStatus()==OrderStatus.CANCELLED&&!"cancel".equals(o.getSagaState().get("resourceOutcome"))))
+                        && (!Boolean.TRUE.equals(o.getSagaState().get("resourcesFinalized"))
+                        || o.getStatus() == OrderStatus.CANCELLED && !"cancel".equals(o.getSagaState().get("resourceOutcome"))))
                 .sorted(Comparator.comparing(Order::getOrderId)).toList(), checkoutCursor)) {
             try {
                 var order = new TransactionTemplate(transactions).execute(s -> {
@@ -141,7 +178,7 @@ public class FinanceDispatch {
                     return orders.saveAndFlush(current);
                 });
                 if (order == null) continue;
-                String action = order.getStatus()==OrderStatus.CANCELLED?"cancel":order.getStatus()==OrderStatus.EXPIRED?"release": Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(order.getStatus()) ? "commit" : null;
+                String action = order.getStatus() == OrderStatus.CANCELLED ? "cancel" : order.getStatus() == OrderStatus.EXPIRED ? "release" : Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(order.getStatus()) ? "commit" : null;
                 if (action == null) continue;
                 post(productUrl + "/api/v1/inventory/reservations/" + order.getOrderId() + "/" + action, token, Map.of());
                 if (usesVoucher(order.getCheckoutRequest()))

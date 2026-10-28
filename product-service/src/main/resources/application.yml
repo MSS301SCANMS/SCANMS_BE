@@ -9,6 +9,13 @@ scanms:
     cache-enabled: ${CATALOG_CACHE_ENABLED:true}
 
 spring:
+  cloud:
+    openfeign:
+      client:
+        config:
+          public-product-sales:
+            connectTimeout: 1000
+            readTimeout: 1500
   config:
     import: optional:file:../.env[.properties],optional:file:.env[.properties],optional:file:product-service/.env[.properties]
   application:

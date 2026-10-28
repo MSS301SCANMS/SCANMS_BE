@@ -28,6 +28,7 @@ public class LiveCommerceServiceImpl implements LiveCommerceService, LiveOfferPr
     private final LiveVoucherClient vouchers;
     private final LivePurchaseAccess purchases;
     private final LivestreamSchedulePolicy schedule;
+    private final LivestreamBroadcastPolicy broadcast;
 
     @Transactional(readOnly = true)
     public LiveCommerceResponse get(String id, boolean management) {
@@ -135,6 +136,8 @@ public class LiveCommerceServiceImpl implements LiveCommerceService, LiveOfferPr
         var offers = rows(live.getProductRefs(), "offers");
         var match = offers.stream().filter(row -> variantId.equals(row.get("variantId")) && "ACTIVE".equals(offerStatus(live, row))).findFirst();
         if (match.isEmpty()) return Map.of();
+        if (!broadcast.available(live, Instant.now()))
+            throw new AppException(ErrorCode.CONFLICT, "Phiên đang gián đoạn camera. Vui lòng chờ KOL kết nối lại để mua với giá live.");
         purchases.verify(token, live.getLivestreamId(), subject);
         var offer = match.get();
         long reserved = number(offer, "reservedQuantity"), limit = number(offer, "quantityLimit");

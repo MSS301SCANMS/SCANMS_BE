@@ -12,6 +12,8 @@ Nguồn nghiệp vụ để đối chiếu trong workspace: `SCANMS_Team_Assignm
 
 ## Chạy local
 
+Sau cập nhật ngày 28/10, nếu dùng `JPA_DDL_AUTO=validate`, chạy hai script bổ sung trong Product DB: [lịch sử tìm kiếm](product-service/src/main/resources/db/manual/20261027_search_history.sql) và [bảng chat](product-service/src/main/resources/db/manual/20261028_store_chat.sql). Các script dùng `CREATE IF NOT EXISTS`, không xóa catalog. Xem [quy tắc hủy đơn, ví, giá checkout và mất mạng live](docs/TEACHER_FEEDBACK_20261028.md).
+
 Product Service tự nạp catalog mặc định gồm 24 sản phẩm, 96 biến thể và 69 ảnh khi database catalog hoàn toàn rỗng. Không ghi đè dữ liệu đã có. Xem [hướng dẫn seed trang chủ](product-service/HOMEPAGE_SEED.md); tắt bằng `CATALOG_SEED_ENABLED=false` khi cần.
 
 Java 21 và Maven 3.9+ được dùng cho các module Java. Chạy PostgreSQL theo `docker-compose.yml` của từng service cần dùng. Compose ở thư mục gốc chỉ chứa PostgreSQL cho Keycloak và Keycloak cổng 8180; có thể chạy bằng `docker compose up -d` khi Docker Engine sẵn sàng. Gateway chạy bằng IntelliJ/Maven ở cổng 8080. Các service mặc định ở 8081–8085; AI ở 8000.

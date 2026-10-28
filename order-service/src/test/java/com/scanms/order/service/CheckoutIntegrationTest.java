@@ -74,6 +74,8 @@ class CheckoutIntegrationTest {
     JwtDecoder decoder;
     @MockitoBean
     GhnSandboxShipping ghn;
+    @MockitoBean
+    CheckoutWalletPolicy walletPolicy;
     static final AtomicInteger reserves = new AtomicInteger();
     static final AtomicBoolean failNext = new AtomicBoolean();
     static final AtomicBoolean multiStore = new AtomicBoolean();
@@ -289,6 +291,30 @@ class CheckoutIntegrationTest {
         assertEquals(1, items.count());
         assertEquals(30000L, items.findAll().getFirst().getNetPaidAmountVnd());
         assertThrows(ResponseStatusException.class, () -> checkout.checkout(input("key", 1), jwt));
+        assertEquals(1, reserves.get());
+    }
+
+    @Test
+    void insufficientWalletCannotCreateAnOrderOrReserveInventory() {
+        org.mockito.Mockito.doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Insufficient wallet balance"))
+                .when(walletPolicy).requireFunds(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
+        var request = new CheckoutService.Input("low-wallet", "Customer", "0900000000", "Delivery address", "WALLET", true, null, null, input("unused", 2).items());
+        assertEquals(409, assertThrows(ResponseStatusException.class, () -> checkout.checkout(request, jwt)).getStatusCode().value());
+        assertEquals(0, orders.count());
+        assertEquals(0, reserves.get());
+    }
+
+    @Test
+    void readyIdempotentRetryDoesNotNeedTheAlreadySpentWalletBalanceAgain() {
+        var request = new CheckoutService.Input("wallet-retry", "Customer", "0900000000", "Delivery address", "WALLET", true, null, null, input("unused", 2).items());
+        var created = checkout.checkout(request, jwt);
+        org.mockito.Mockito.verify(walletPolicy).requireFunds(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
+        org.mockito.Mockito.clearInvocations(walletPolicy);
+        org.mockito.Mockito.doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Insufficient wallet balance"))
+                .when(walletPolicy).requireFunds(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
+        assertEquals(created.get("orderId"), checkout.checkout(request, jwt).get("orderId"));
+        org.mockito.Mockito.verifyNoInteractions(walletPolicy);
+        assertEquals(1, orders.count());
         assertEquals(1, reserves.get());
     }
 

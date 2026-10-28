@@ -1,5 +1,9 @@
 # Livestream camera / micro trên SCANMS
 
+## Cập nhật xử lý mất mạng (28/10)
+
+Relay gửi heartbeat có chữ ký tới Product khi camera đang phát. Mất heartbeat 30 giây chuyển sang chờ kết nối lại; KOL có thêm 120 giây trước khi phiên tự kết thúc. Ngắt kết nối được relay phát hiện ngay thì cửa sổ 120 giây bắt đầu ngay. Giá ưu đãi live tạm dừng cho đơn mới khi gián đoạn; đơn đã giữ hàng không bị đổi giá. Cần cập nhật và restart cả Product lẫn relay, dùng chung `LIVE_METRICS_SECRET` ít nhất 32 ký tự. Xem [quy tắc và kiểm tra](../docs/TEACHER_FEEDBACK_20261028.md).
+
 Server Socket.IO hỗ trợ WebRTC giữa một host và các người xem. Video/âm thanh truyền trực tiếp giữa trình duyệt; server trao đổi tín hiệu kết nối, chat, ghim sản phẩm, biểu cảm và số người đang xem. Không tạo tài khoản kỹ thuật hoặc tự bắt đầu phiên trong database.
 
 ## Chạy local

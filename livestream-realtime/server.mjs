@@ -173,11 +173,30 @@ export function createLiveServer({
     if(await metrics('PATCH',room.id,host.data.token,{viewerCount:0,uniqueViewerCount:0,concurrentViewerCount:peak}))room.persistedPeak=peak;
     room.metricsPending=room.peak>(room.persistedPeak||0);
   };
+  const broadcastPresence = async (socket, state) => {
+    if (!metricsSecret || metricsSecret.length < 32 || !socket.data.sessionId) throw new Error('Livestream relay presence is not configured.');
+    socket.data.broadcastEpoch ||= Date.now();
+    socket.data.broadcastSequence = (socket.data.broadcastSequence || 0) + 1;
+    const id = socket.data.sessionId;
+    const body = {publisherId:socket.id,epoch:socket.data.broadcastEpoch,sequence:socket.data.broadcastSequence,state};
+    const time=String(Math.floor(Date.now()/1000));
+    const payload=['BROADCAST',id,body.publisherId,body.epoch,body.sequence,state,time].join('\n');
+    const response=await fetcher(`${apiUrl}/livestreams/${encodeURIComponent(id)}/broadcast`, {
+      method:'POST',headers:{Authorization:`Bearer ${socket.data.token}`,'Content-Type':'application/json',
+        'X-Live-Metrics-Time':time,'X-Live-Metrics-Signature':createHmac('sha256',metricsSecret).update(payload).digest('hex')},
+      body:JSON.stringify(body),signal:AbortSignal.timeout(6000),
+    });
+    if(!response.ok)throw new Error('Unable to confirm broadcast presence.');
+    const presence = unpack(await response.json());
+    live.to(id).emit('live_broadcast_state', {state:presence?.state || state,reconnectUntil:presence?.reconnectUntil});
+    return presence;
+  };
   const leave = socket => {
     const room = rooms.get(socket.data.sessionId);
     if (!room) return;
     room.members.delete(socket.id); socket.leave(room.id);
     if (room.hostId === socket.id) {
+      if (room.publishing) void broadcastPresence(socket, 'RECONNECTING').catch(() => {});
       room.hostId = null; room.publishing = false;
       live.to(room.id).emit('live_host_left');
     } else if (room.hostId) live.to(room.hostId).emit('live_viewer_left', { viewerSocketId: socket.id });
@@ -241,7 +260,7 @@ export function createLiveServer({
         }
         if (room.pinnedProductId !== undefined) socket.emit('product_pinned_changed', { productIndex: (room.session.productRefs?.productIds || []).indexOf(room.pinnedProductId), productId: room.pinnedProductId });
         const purchaseToken=await purchaseAccess(socket);
-        return { hostOnline: Boolean(room.hostId), streamActive: room.publishing, viewerCount:audienceCount(room), likesCount:reactionsFor(sessionId,session,socket.data.token).count, purchaseToken };
+        return { hostOnline: Boolean(room.hostId), streamActive: room.publishing, viewerCount:audienceCount(room), likesCount:reactionsFor(sessionId,session,socket.data.token).count, purchaseToken, broadcast:session.participantRefs?.broadcast };
       } finally { socket.data.joining = false;joiningCount--; }
     });
     on('request_live_stream', ({sessionId})=>{
@@ -268,6 +287,8 @@ export function createLiveServer({
         const session = await authorize(socket, room.id, 'host');
         if (session.status !== 'LIVE') throw new Error('Chờ shop bắt đầu phiên trước khi phát camera.');
       }
+      if (!socket.connected || rooms.get(sessionId) !== room) return;
+      await broadcastPresence(socket, event === 'live_stream_started' ? 'LIVE' : 'RECONNECTING');
       if (!socket.connected || rooms.get(sessionId) !== room) return;
       room.publishing = event === 'live_stream_started'; socket.to(room.id).emit(event);
     });
@@ -340,6 +361,8 @@ export function createLiveServer({
         try {
           const session = await authorize(member, room.id, member.data.role);
           room.session = session;
+          const publisher = live.sockets.get(room.hostId);
+          if (publisher && room.publishing) await broadcastPresence(publisher, 'LIVE');
           if(room.serviceUnavailable){room.serviceUnavailable=false;live.to(room.id).emit('live_service_ready');}
           if(Object.hasOwn(session.productRefs || {},'pinnedProductId') && room.pinnedProductId!==session.productRefs.pinnedProductId){
             room.pinnedProductId=session.productRefs.pinnedProductId;

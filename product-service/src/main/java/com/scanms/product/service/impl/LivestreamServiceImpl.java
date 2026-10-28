@@ -21,7 +21,7 @@ import java.util.*;
 @RequiredArgsConstructor
 @Transactional
 public class LivestreamServiceImpl implements LivestreamService {
-    private static final Set<String> CONSENT_KEYS = Set.of("inviteStatus", "collaboratorResponses", "respondedBySubject", "respondedAt", "voucherDrops", "lifecycle");
+    private static final Set<String> CONSENT_KEYS = Set.of("inviteStatus", "collaboratorResponses", "respondedBySubject", "respondedAt", "voucherDrops", "lifecycle", "broadcast");
     private final LivestreamRepository repository;
     private final LivestreamMapper mapper;
     private final ProductAccess access;
@@ -29,6 +29,7 @@ public class LivestreamServiceImpl implements LivestreamService {
     private final LivestreamAffiliateClient affiliate;
     private final LivestreamSchedulePolicy schedule;
     private final LivestreamLifecycleService lifecycle;
+    private final LivestreamBroadcastPolicy broadcast;
 
     public LivestreamResponse create(CreateLivestreamRequest request) {
         access.requireApprovedStore(request.storeId());
@@ -112,6 +113,7 @@ public class LivestreamServiceImpl implements LivestreamService {
                 throw conflict("Livestream end time has passed");
             live.setStatus(next);
             live.setStartedAt(now);
+            broadcast.start(live, now.toInstant(ZoneOffset.UTC));
         } else if (next == LivestreamStatus.ENDED && live.getStatus() == LivestreamStatus.LIVE) {
             live.setStatus(next);
             live.setEndedAt(now);
@@ -180,6 +182,7 @@ public class LivestreamServiceImpl implements LivestreamService {
     private Livestream locked(String id) {
         var live = repository.lockById(id).orElseThrow(() -> missing(id));
         schedule.closeIfElapsed(live, Instant.now());
+        broadcast.closeIfDisconnected(live, Instant.now());
         return live;
     }
 

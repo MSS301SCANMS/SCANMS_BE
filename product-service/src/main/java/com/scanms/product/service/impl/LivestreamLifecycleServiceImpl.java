@@ -16,6 +16,7 @@ import java.util.List;
 public class LivestreamLifecycleServiceImpl implements LivestreamLifecycleService {
     private final LivestreamRepository repository;
     private final LivestreamSchedulePolicy schedule;
+    private final com.scanms.product.service.LivestreamBroadcastPolicy broadcast;
 
     @Override
     @Transactional
@@ -24,7 +25,8 @@ public class LivestreamLifecycleServiceImpl implements LivestreamLifecycleServic
         int count = 0;
         for (String id : ids) {
             var live = repository.lockById(id);
-            if (live.isPresent() && schedule.closeIfElapsed(live.get(), Instant.now())) count++;
+            if (live.isPresent() && (schedule.closeIfElapsed(live.get(), Instant.now()) || broadcast.closeIfDisconnected(live.get(), Instant.now())))
+                count++;
         }
         return count;
     }

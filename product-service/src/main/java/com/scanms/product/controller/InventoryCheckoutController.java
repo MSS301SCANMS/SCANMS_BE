@@ -162,12 +162,17 @@ public class InventoryCheckoutController {
             if (!preview) variant.setStockQuantity(variant.getStockQuantity() - line.quantity());
             var liveOffer = line.sourceLivestreamId() == null ? Map.<String, Object>of() : livePricing.apply(sources.get(line.sourceLivestreamId()), variant.getVariantId(), line.quantity(), !preview, line.livePurchaseToken(), input.buyerIdentitySubject());
             long unitPrice = liveOffer.isEmpty() ? variant.getPriceVnd() : ((Number) liveOffer.get("unitPriceVnd")).longValue();
+            if (unitPrice > variant.getPriceVnd())
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Live offer must be refreshed after the catalog price changed");
             Map<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("productId", p.getProductId());
             snapshot.put("variantId", variant.getVariantId());
             snapshot.put("sku", variant.getSku());
             snapshot.put("quantity", line.quantity());
             snapshot.put("unitPriceVnd", unitPrice);
+            snapshot.put("listUnitPriceVnd", variant.getPriceVnd());
+            snapshot.put("listAmountVnd", Math.multiplyExact(variant.getPriceVnd(), line.quantity()));
+            snapshot.put("directDiscountVnd", Math.multiplyExact(variant.getPriceVnd() - unitPrice, line.quantity()));
             snapshot.put("grossAmountVnd", Math.multiplyExact(unitPrice, line.quantity()));
             if (liveOffer.get("sourceLiveOfferId") != null)
                 snapshot.put("sourceLiveOfferId", liveOffer.get("sourceLiveOfferId"));

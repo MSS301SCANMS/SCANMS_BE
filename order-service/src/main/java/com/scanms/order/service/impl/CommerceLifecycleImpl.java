@@ -74,6 +74,9 @@ public class CommerceLifecycleImpl implements CommerceLifecycle {
     }
 
     private void paid(Order order) {
+        require(!(order.getSagaState() != null && order.getSagaState().get("cancellation") instanceof Map<?, ?> cancellation
+                        && "REQUESTED".equals(cancellation.get("state"))),
+                "Đơn đang chờ xử lý yêu cầu hủy. Vui lòng phản hồi yêu cầu trước khi giao hàng.");
         require(
                 Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(order.getStatus()),
                 "Order must be paid before fulfillment"

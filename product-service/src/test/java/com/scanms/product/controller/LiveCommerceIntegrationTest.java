@@ -95,7 +95,7 @@ class LiveCommerceIntegrationTest {
         productId = product.getProductId();
         variantId = variants.saveAndFlush(ProductVariant.builder().productId(productId).sku("WHITE-M").size("M").color("White").priceVnd(329000L).stockQuantity(10).status(ProductVariantStatus.ACTIVE).build()).getVariantId();
         images.saveAndFlush(ProductImage.builder().productId(productId).objectKey("shirt").imageUrl("https://example.test/shirt.webp").primaryImage(true).sortOrder(0).build());
-        liveId = lives.saveAndFlush(Livestream.builder().storeId(storeId).title("Live").status(LivestreamStatus.LIVE).productRefs(Map.of("productIds", List.of(productId))).participantRefs(Map.of()).build()).getLivestreamId();
+        liveId = lives.saveAndFlush(Livestream.builder().storeId(storeId).title("Live").status(LivestreamStatus.LIVE).productRefs(Map.of("productIds", List.of(productId))).participantRefs(Map.of("broadcast", Map.of("state", "LIVE", "lastHeartbeatAt", Instant.now().toString()))).build()).getLivestreamId();
         when(access.bearerToken()).thenReturn("owner-token");
         doAnswer(call -> {
             if (!"owner".equals(SecurityContextHolder.getContext().getAuthentication().getName()))
@@ -188,6 +188,20 @@ class LiveCommerceIntegrationTest {
 
     long unitPrice(Map<String, Object> result) {
         return ((Number) ((Map<?, ?>) ((List<?>) result.get("lines")).getFirst()).get("unitPriceVnd")).longValue();
+    }
+
+    @Test
+    void liveOfferAboveTheNewCatalogPriceMustBeRefreshedBeforeNewReservations() {
+        commerce.createOffer(liveId, offer(5));
+        String proof = purchases.issue(liveId, jwt("buyer", "USER"));
+        inventory.reserve("previous-price", input(proof, "buyer"), internal);
+        var variant = variants.findById(variantId).orElseThrow();
+        variant.setPriceVnd(250000L);
+        variants.saveAndFlush(variant);
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> inventory.reserve("new-price", input(proof, "buyer"), internal));
+        assertEquals(9, variants.findById(variantId).orElseThrow().getStockQuantity());
+        assertEquals(299000L, unitPrice(inventory.reserve("previous-price", input(proof, "buyer"), internal).result()));
     }
 
     @Test

@@ -48,6 +48,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final com.scanms.order.service.CheckoutShippingQuotes shippingQuotes;
     private final com.scanms.order.service.CheckoutAttribution attribution;
     private final com.scanms.order.client.InventoryCheckoutClient inventory;
+    private final com.scanms.order.service.CheckoutWalletPolicy walletPolicy;
     @Value("${clients.product.url:http://localhost:8082}")
     private String productUrl;
     @Value("${clients.promotion.url:http://localhost:8085}")
@@ -171,9 +172,21 @@ public class CheckoutServiceImpl implements CheckoutService {
         if (existing.isEmpty() || !"READY".equals(existing.get().getSagaState().get("checkoutState"))) {
             var quote = inventoryQuote(input.items(), jwt, token, null);
             var quotedLines = (List<Map<String, Object>>) quote.get("lines");
-            long expected = shippingQuotes.quote(quotedLines, input.shippingDestination()).total();
+            var previewShipping = shippingQuotes.quote(quotedLines, input.shippingDestination());
+            long expected = previewShipping.total();
             if (input.expectedShippingFeeVnd() != null && input.expectedShippingFeeVnd() != expected)
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Phí vận chuyển đã thay đổi. Vui lòng tính lại trước khi đặt hàng.");
+            long previewTotal = Math.addExact(quotedLines.stream().mapToLong(line -> number(line, "grossAmountVnd")).reduce(0L, Math::addExact), expected);
+            if (hasVoucher(input.couponCode(), input.shippingCouponCode())) {
+                var discount = post(promotionUrl + "/api/v1/checkout-vouchers/quote", token,
+                        voucherInput(input.couponCode(), input.shippingCouponCode(), customer, quotedLines, previewShipping.fees()));
+                previewTotal = Math.subtractExact(previewTotal, number(discount, "discountAmountVnd"));
+            }
+            if (input.expectedPayableVnd() != null && input.expectedPayableVnd() != previewTotal)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Giá hoặc ưu đãi đã thay đổi. Vui lòng kiểm tra lại tổng thanh toán.");
+            if (previewTotal <= 0)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Zero-value checkout requires a separate free-order policy");
+            if ("WALLET".equals(input.paymentMethod())) walletPolicy.requireFunds(jwt, previewTotal);
         }
         Order candidate = tx(() -> {
             Optional<Order> previous = orders.findByCustomerIdAndIdempotencyKey(customer, input.idempotencyKey());
