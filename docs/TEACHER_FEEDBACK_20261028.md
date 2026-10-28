@@ -46,6 +46,8 @@ With `JPA_DDL_AUTO=validate`, apply these additive Product scripts before restar
 
 Both were applied to local `localhost:5437/product_db` on 28 October; full Hibernate schema validation passed. Counts remained 24 products, 96 variants, 69 images and 1 store. Other machines/databases must apply the scripts themselves. Older schemas still need the previous statistics/short-video migrations.
 
+Order schema follow-up: apply `order-service/db/order-item-placement-time-upgrade.sql` in **Order DB** when `order_items.placed_at` is missing. A generated NOT NULL timestamp could not be added to a populated legacy table, so the field now uses `@PrePersist` for new rows and remains nullable for existing rows with no reliable absolute time. The local upgrade preserved 7 orders and 8 order items, quantities and monetary totals. Complete Order schema validation passed; checkout/cancellation regression tests passed (24 executed, 1 optional case skipped). The live public sales endpoint subsequently returned HTTP 200 with a real sold count.
+
 Restart Gateway, Product, Order, Payment and relay; refresh FE. Retain existing Order/Payment/Affiliate internal identities/roles for reconciliation. Product and relay must share `LIVE_METRICS_SECRET`, at least 32 characters; never commit secrets. Default heartbeat/grace can be changed with `scanms.live.heartbeat-timeout-seconds` / `scanms.live.reconnect-grace-seconds`.
 
 ## Validation limits

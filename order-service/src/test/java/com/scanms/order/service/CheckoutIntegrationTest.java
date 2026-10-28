@@ -53,6 +53,10 @@ class CheckoutIntegrationTest {
     @Autowired
     CheckoutService checkout;
     @Autowired
+    jakarta.persistence.EntityManager em;
+    @Autowired
+    org.springframework.transaction.PlatformTransactionManager transactions;
+    @Autowired
     FinanceDispatch financeDispatch;
     @Autowired
     OrderRepository orders;
@@ -363,6 +367,22 @@ class CheckoutIntegrationTest {
         var timestamp = item.getPlacedAt();
         checkout.checkout(input("deal-timestamp", 1), jwt);
         assertEquals(timestamp, items.findById(item.getOrderItemId()).orElseThrow().getPlacedAt());
+    }
+
+    @Test
+    void legacyItemWithoutAnAbsolutePlacementTimeRemainsReadable() {
+        checkout.checkout(input("legacy-timestamp", 1), jwt);
+        var item = items.findAll().getFirst();
+        var createdAt = item.getCreatedAt();
+        var amount = item.getNetPaidAmountVnd();
+        new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(tx ->
+                em.createNativeQuery("update order_items set placed_at=null where order_item_id=:id")
+                        .setParameter("id", item.getOrderItemId()).executeUpdate());
+        var legacy = items.findById(item.getOrderItemId()).orElseThrow();
+        assertNull(legacy.getPlacedAt());
+        assertEquals(createdAt, legacy.getCreatedAt());
+        assertEquals(amount, legacy.getNetPaidAmountVnd());
+        assertEquals(createdAt, itemMapper.toResponse(legacy).createdAt());
     }
 
 

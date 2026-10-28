@@ -6,13 +6,18 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.*;
 import org.hibernate.type.SqlTypes;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
 @Entity
 @Table(name = "order_items")
-@Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class OrderItem {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -57,8 +62,14 @@ public class OrderItem {
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
-    /** Absolute order time for product commission deals; legacy local dates have no zone. */
-    @CreationTimestamp
-    @Column(updatable = false)
+    /**
+     * Absolute order time for product commission deals; legacy local dates have no zone.
+     */
+    @Column(updatable = false, nullable = true)
     private java.time.Instant placedAt;
+
+    @PrePersist
+    void recordPlacementTime() {
+        if (placedAt == null) placedAt = java.time.Instant.now();
+    }
 }
