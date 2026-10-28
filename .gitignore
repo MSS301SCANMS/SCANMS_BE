@@ -2,6 +2,7 @@
 .m2/
 .idea/
 /.local/
+/.run-logs/
 .vscode/
 *.iml
 *.log

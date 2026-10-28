@@ -12,6 +12,8 @@ Nguồn nghiệp vụ để đối chiếu trong workspace: `SCANMS_Team_Assignm
 
 ## Chạy local
 
+PayOS: xem [cấu hình khóa backend, HTTPS webhook và kết quả kiểm tra](docs/PAYOS_LOCAL_20261028.md). Script `scripts/Start-PayosWebhook.ps1` tạo lại tunnel và đăng ký webhook cho Payment Service Spring; không cần đưa khóa vào FE.
+
 Sau cập nhật ngày 28/10, nếu dùng `JPA_DDL_AUTO=validate`, chạy hai script bổ sung trong Product DB: [lịch sử tìm kiếm](product-service/src/main/resources/db/manual/20261027_search_history.sql) và [bảng chat](product-service/src/main/resources/db/manual/20261028_store_chat.sql). Các script dùng `CREATE IF NOT EXISTS`, không xóa catalog. Xem [quy tắc hủy đơn, ví, giá checkout và mất mạng live](docs/TEACHER_FEEDBACK_20261028.md).
 
 Trong **Order DB**, chạy [bổ sung thời điểm đặt hàng](order-service/db/order-item-placement-time-upgrade.sql) nếu thiếu `order_items.placed_at`. Cột này cho phép dữ liệu cũ để trống; đơn mới tự ghi thời điểm UTC khi persist. Không gán giờ hiện tại hoặc suy đoán múi giờ cho đơn cũ để tránh làm sai thời điểm áp dụng hoa hồng.
