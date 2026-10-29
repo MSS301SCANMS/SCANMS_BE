@@ -12,12 +12,14 @@ import com.scanms.product.repository.ProductRepository;
 import com.scanms.product.repository.StoreRepository;
 import com.scanms.product.service.impl.FeedbackServiceImpl;
 import com.sun.net.httpserver.HttpServer;
+
 import java.net.InetSocketAddress;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -26,12 +28,14 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+
 import org.mapstruct.factory.Mappers;
 
 class FeedbackPurchaseVerificationTest {
     static HttpServer orderSource;
 
-    @BeforeAll static void start() throws Exception {
+    @BeforeAll
+    static void start() throws Exception {
         orderSource = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         respond("/api/v1/order-items/item-1", "{\"result\":{\"productId\":\"product-1\",\"sellerOrderId\":\"seller-1\"}}");
         respond("/api/v1/seller-orders/seller-1", "{\"result\":{\"orderId\":\"order-1\",\"storeId\":\"store-1\",\"status\":\"DELIVERED\"}}");
@@ -55,14 +59,18 @@ class FeedbackPurchaseVerificationTest {
         });
     }
 
-    @AfterAll static void stop() { orderSource.stop(0); }
+    @AfterAll
+    static void stop() {
+        orderSource.stop(0);
+    }
 
-    @Test void reviewUsesVerifiedBuyerAndUpdatesActiveStoreRating() {
+    @Test
+    void reviewUsesVerifiedBuyerAndUpdatesActiveStoreRating() {
         var feedbacks = mock(FeedbackRepository.class);
         var products = mock(ProductRepository.class);
         var stores = mock(StoreRepository.class);
         var access = mock(ProductAccess.class);
-        var service = new FeedbackServiceImpl(feedbacks, Mappers.getMapper(FeedbackMapper.class), access, products, stores);
+        var service = new FeedbackServiceImpl(feedbacks, Mappers.getMapper(FeedbackMapper.class), access, products, stores, org.mockito.Mockito.mock(FeedbackTextPolicy.class));
         ReflectionTestUtils.setField(service, "orderUrl", "http://127.0.0.1:" + orderSource.getAddress().getPort());
         var product = Product.builder().productId("product-1").storeId("store-1").build();
         var store = Store.builder().storeId("store-1").build();
@@ -71,7 +79,10 @@ class FeedbackPurchaseVerificationTest {
         when(stores.findById("store-1")).thenReturn(Optional.of(store));
         when(access.bearerToken()).thenReturn("buyer-token");
         var saved = new AtomicReference<Feedback>();
-        when(feedbacks.save(any(Feedback.class))).thenAnswer(call -> { saved.set(call.getArgument(0)); return saved.get(); });
+        when(feedbacks.save(any(Feedback.class))).thenAnswer(call -> {
+            saved.set(call.getArgument(0));
+            return saved.get();
+        });
         when(feedbacks.findByProductIdInAndStatus(any(), any())).thenAnswer(call -> List.of(saved.get()));
         var input = new CreateFeedbackRequest("product-1", "item-1", "forged-customer", 5, "Good", List.of(), FeedbackStatus.HIDDEN);
 

@@ -11,14 +11,17 @@ import com.scanms.product.repository.FeedbackRepository;
 import com.scanms.product.repository.ProductRepository;
 import com.scanms.product.repository.StoreRepository;
 import com.scanms.product.service.impl.FeedbackServiceImpl;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+
 import org.mapstruct.factory.Mappers;
 
 class FeedbackEditTest {
@@ -26,13 +29,14 @@ class FeedbackEditTest {
     private final ProductRepository products = mock(ProductRepository.class);
     private final StoreRepository stores = mock(StoreRepository.class);
     private final ProductAccess access = mock(ProductAccess.class);
-    private final FeedbackServiceImpl service = new FeedbackServiceImpl(feedbacks, Mappers.getMapper(FeedbackMapper.class), access, products, stores);
+    private final FeedbackServiceImpl service = new FeedbackServiceImpl(feedbacks, Mappers.getMapper(FeedbackMapper.class), access, products, stores, org.mockito.Mockito.mock(FeedbackTextPolicy.class));
     private final Feedback review = Feedback.builder().feedbackId("review-1").customerId("buyer-1")
             .productId("product-1").orderItemId("item-1").rating(4).status(FeedbackStatus.ACTIVE).build();
     private final Product product = Product.builder().productId("product-1").storeId("store-1").build();
     private final Store store = Store.builder().storeId("store-1").build();
 
-    @Test void reviewerCanEditAndRemoveFeedbackWithRatingRecalculated() {
+    @Test
+    void reviewerCanEditAndRemoveFeedbackWithRatingRecalculated() {
         when(access.userId()).thenReturn("buyer-1");
         when(feedbacks.findById("review-1")).thenReturn(Optional.of(review));
         when(products.findById("product-1")).thenReturn(Optional.of(product));
@@ -54,7 +58,8 @@ class FeedbackEditTest {
         assertThrows(AppException.class, () -> service.updateOwn("review-1", new UpdateFeedbackRequest(1, null, null)));
     }
 
-    @Test void anotherCustomerCannotEditFeedback() {
+    @Test
+    void anotherCustomerCannotEditFeedback() {
         when(access.userId()).thenReturn("another-buyer");
         when(feedbacks.findById("review-1")).thenReturn(Optional.of(review));
 
@@ -62,7 +67,8 @@ class FeedbackEditTest {
         verify(feedbacks, never()).save(any());
     }
 
-    @Test void suspendedStoreOwnerCanReadHiddenFeedback() {
+    @Test
+    void suspendedStoreOwnerCanReadHiddenFeedback() {
         review.setStatus(FeedbackStatus.HIDDEN);
         when(access.userId()).thenReturn("shop-owner");
         when(feedbacks.findById("review-1")).thenReturn(Optional.of(review));
@@ -73,7 +79,8 @@ class FeedbackEditTest {
         verify(access, never()).requireApprovedStore(any());
     }
 
-    @Test void managerCanListHiddenFeedbackForModeration() {
+    @Test
+    void managerCanListHiddenFeedbackForModeration() {
         review.setStatus(FeedbackStatus.HIDDEN);
         when(access.isManager()).thenReturn(true);
         when(feedbacks.findAll()).thenReturn(List.of(review));

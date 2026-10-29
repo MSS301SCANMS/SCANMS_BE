@@ -635,7 +635,7 @@ for p in products_data:
     for idx, img in enumerate(p['images'][1:], 1):
         image_refs_dict[f'gallery{idx}'] = img
     image_refs_json = json.dumps(image_refs_dict).replace("'", "''")
-    
+
     attributes_json = json.dumps({
         'color': p['color'],
         'material': p['material'],

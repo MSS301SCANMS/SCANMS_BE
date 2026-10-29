@@ -22,4 +22,6 @@ public interface LivestreamService {
     LivestreamResponse updateStats(String id, long viewers, long uniqueViewers, long concurrentViewers);
 
     LivestreamResponse respondInvite(String id, boolean accepted, Jwt jwt);
+
+    LivestreamResponse pinProduct(String id, String productId);
 }

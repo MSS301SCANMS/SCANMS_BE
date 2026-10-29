@@ -21,6 +21,7 @@ public class SecurityConfig {
                                 "/webjars/**", "/actuator/health", "/error")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/orders/track").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/store-sales/products").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
                 .build();

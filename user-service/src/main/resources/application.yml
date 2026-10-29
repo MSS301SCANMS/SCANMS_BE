@@ -75,7 +75,7 @@ app:
   auth:
     # false (mac dinh) = che do test: user moi tao duoc set emailVerified=true ngay, khong gui mail.
     # true = bat thuc su: user moi tao emailVerified=false + Keycloak tu gui mail xac minh (can da cau hinh SMTP trong Keycloak).
-    email-verification-enabled: ${EMAIL_VERIFICATION_ENABLED:true}
+    email-verification-enabled: ${EMAIL_VERIFICATION_ENABLED:false}
 google:
   # Default khớp VITE_GOOGLE_CLIENT_ID trên FE; override bằng env GOOGLE_CLIENT_ID khi cần.
   client-id: ${GOOGLE_CLIENT_ID:281102364785-etm73id59t8qvrbgrd16gpqg12plr21b.apps.googleusercontent.com}
