@@ -1892,13 +1892,13 @@
     "auth": "true",
     "envelopeFrom": "",
     "ssl": "false",
-    "password": "**********",
+    "password": "${MAIL_PASSWORD}",
     "port": "587",
     "host": "smtp.gmail.com",
     "replyTo": "",
-    "from": "thanhnhanguyen516@gmail.com",
+    "from": "${MAIL_USERNAME}",
     "fromDisplayName": "SCANMS Ecosystem",
-    "user": "thanhnhanguyen516@gmail.com"
+    "user": "${MAIL_USERNAME}"
   },
   "eventsEnabled": false,
   "eventsListeners": [
@@ -2070,8 +2070,10 @@
       }
     ]
   },
-  "internationalizationEnabled": false,
-  "supportedLocales": [],
+  "internationalizationEnabled": true,
+  "supportedLocales": ["vi", "en"],
+  "defaultLocale": "vi",
+  "loginTheme": "scanms",
   "authenticationFlows": [
     {
       "id": "c35fc9ad-0165-4013-b452-04ecea89fbba",

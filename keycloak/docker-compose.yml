@@ -105,10 +105,17 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       CLIENT_SECRET: ${CLIENT_SECRET:-sDltJpNlT8W2OppttardLZdiukTXotVN}
+    # MAIL_USERNAME / MAIL_PASSWORD (Gmail + App Password) lấy từ be/.env, dùng chung với user-service.
+    # realm-export.json đọc chúng qua ${MAIL_USERNAME} / ${MAIL_PASSWORD} khi import realm lần đầu.
+    env_file:
+      - path: ../.env
+        required: false
     ports:
       - "8180:8080"
     volumes:
       - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
+      # Theme giao diện SCANMS cho các trang Keycloak (xác minh email, đăng nhập, lỗi...)
+      - ./themes:/opt/keycloak/themes
     depends_on:
       - keycloak-db
 volumes:
