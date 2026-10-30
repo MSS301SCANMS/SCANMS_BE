@@ -3,6 +3,7 @@ package com.scanms.payment.controller;
 import com.scanms.payment.constant.*;
 import com.scanms.payment.dto.ApiResponse;
 import com.scanms.payment.dto.MoneyDtos.*;
+import com.scanms.payment.dto.request.ClosedDayInput;
 import com.scanms.payment.dto.request.CreateFeeConfigRequest;
 import com.scanms.payment.dto.response.*;
 import com.scanms.payment.exception.AppException;
@@ -12,7 +13,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.*;
 
 @RestController
@@ -20,8 +20,6 @@ import java.util.*;
 @RequiredArgsConstructor
 public class FinanceController {
     private final BankBusinessCalendar calendar;
-
-    public record ClosedDayInput(LocalDate date, String reason) {}
 
     @GetMapping("/bank-calendar")
     public ApiResponse<List<Map<String, Object>>> calendar() {

@@ -4,6 +4,7 @@ import com.scanms.order.constant.*;
 import com.scanms.order.entity.*;
 import com.scanms.order.entity.Order;
 import com.scanms.order.repository.*;
+import com.scanms.order.dto.request.RefundInput;
 import com.scanms.order.service.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -90,13 +91,13 @@ class CommerceLifecycleIntegrationTest {
         long amount=((Number)finance.refundBasis(id,internal).result().get("amountVnd")).longValue();assertEquals(33,amount);
         assertEquals(ReturnRequestStatus.REFUND_PENDING,returns.findById(id).orElseThrow().getStatus());
         assertNull(returns.findById(id).orElseThrow().getRefundReference());
-        assertThrows(ResponseStatusException.class,()->finance.refunded(id,new FinanceContractController.RefundInput("tx",34L),internal));
-        finance.refunded(id,new FinanceContractController.RefundInput("tx",amount),internal);finance.refunded(id,new FinanceContractController.RefundInput("tx",amount),internal);
+        assertThrows(ResponseStatusException.class,()->finance.refunded(id,new RefundInput("tx",34L),internal));
+        finance.refunded(id,new RefundInput("tx",amount),internal);finance.refunded(id,new RefundInput("tx",amount),internal);
         assertEquals(ReturnRequestStatus.REFUNDED,returns.findById(id).orElseThrow().getStatus());
     }
     @Test void partialRefundsAllocateRoundingExactlyOnceAndCannotExceedPaidValue() {
         delivered();long total=0;
-        for(int i=0;i<3;i++) { String id=create(1,"partial-"+i);returned(id);long amount=((Number)finance.refundBasis(id,internal).result().get("amountVnd")).longValue();total+=amount;finance.refunded(id,new FinanceContractController.RefundInput("tx-"+i,amount),internal); }
+        for(int i=0;i<3;i++) { String id=create(1,"partial-"+i);returned(id);long amount=((Number)finance.refundBasis(id,internal).result().get("amountVnd")).longValue();total+=amount;finance.refunded(id,new RefundInput("tx-"+i,amount),internal); }
         assertEquals(100,total);assertThrows(ResponseStatusException.class,()->create(1,"excess"));
     }
     @Test void requestRetriesCancellationRejectionAndExpiryRespectRemainingQuantity() {

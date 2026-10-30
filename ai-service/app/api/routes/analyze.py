@@ -3,6 +3,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from app.models.schemas import AnalysisResponse, ErrorResponse
 from app.services.analysis_service import analyze_product_image
 from app.services.detection_service import InferenceError, ModelUnavailableError
+from app.services.kafka_service import publish_analysis_completed
 from app.utils.image_utils import (
     ImageTooLargeError,
     InvalidImageError,
@@ -25,7 +26,9 @@ ERROR_RESPONSES = {
 async def analyze(image: UploadFile = File(...)) -> AnalysisResponse:
     try:
         decoded_image = await decode_upload(image)
-        return analyze_product_image(decoded_image)
+        result = analyze_product_image(decoded_image)
+        await publish_analysis_completed(result)
+        return result
     except UnsupportedImageTypeError as exception:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

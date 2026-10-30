@@ -1,309 +1,47 @@
 package com.scanms.order.controller;
 
-import com.scanms.order.constant.*;
 import com.scanms.order.dto.ApiResponse;
-import com.scanms.order.entity.*;
-import com.scanms.order.repository.*;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
+import com.scanms.order.dto.request.PaidInput;
+import com.scanms.order.dto.request.RefundInput;
+import com.scanms.order.service.FinanceContractService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.*;
-import java.math.BigInteger;
-import java.util.*;
+import java.util.Map;
 
-import com.scanms.order.service.RefundAllocation;
-
-import java.net.http.HttpClient;
-
-import org.springframework.http.client.JdkClientHttpRequestFactory;
-
-import java.math.BigDecimal;
-
-import tools.jackson.databind.json.JsonMapper;
-
-/**
- * Boundary owned by Order: Payment reads validated amounts, never client-supplied totals.
- */
-@Slf4j
-@RestController
-@RequestMapping("/api/v1/finance")
-@RequiredArgsConstructor
-@Transactional
+@RestController @RequestMapping("/api/v1/finance") @RequiredArgsConstructor
 public class FinanceContractController {
-    private final EntityManager em;
-    private final OrderRepository orders;
-    private final SellerOrderRepository sellers;
-    private final OrderItemRepository items;
-    private final ReturnRequestRepository returns;
-    private final DiscountAllocationRepository allocations;
-    @Value("${clients.promotion.url:http://localhost:8085}")
-    private String promotionUrl;
-    private final RestClient http = RestClient.builder()
-            .requestFactory(new JdkClientHttpRequestFactory(
-                    HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()))
-            .build();
-
-    private void trusted(Jwt jwt, boolean operatorAllowed) {
-        Set<String> roles = new HashSet<>();
-        Object realm = jwt.getClaim("realm_access");
-        if (realm instanceof Map<?, ?> map && map.get("roles") instanceof Collection<?> list)
-            list.forEach(r -> roles.add(r.toString()));
-        Object resources = jwt.getClaim("resource_access");
-        if (resources instanceof Map<?, ?> map) map.values().forEach(v -> {
-            if (v instanceof Map<?, ?> m && m.get("roles") instanceof Collection<?> list)
-                list.forEach(r -> roles.add(r.toString()));
-        });
-        if (!roles.contains("PAYMENT_INTERNAL") && !(operatorAllowed && roles.stream().anyMatch(Set.of("ADMIN", "MANAGER", "SYSTEM_ADMIN", "SYSTEM_MANAGER", "ORDER_INTERNAL", "AFFILIATE_INTERNAL")::contains)))
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-    }
-
-    private <T> T find(Class<T> type, String id, boolean lock) {
-        T result = lock ? em.find(type, id, LockModeType.PESSIMISTIC_WRITE) : em.find(type, id);
-        if (result == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        return result;
-    }
-
-    public record PaidInput(String paymentId, Long amountVnd, String currency, String verifiedAt) {
-    }
-
-    public record CommissionTimelineInput(List<String> orderItemIds) {
-    }
-
-    @PostMapping("/commission-timelines")
-    @Transactional(readOnly = true)
-    public ApiResponse<Map<String, Object>> commissionTimelines(@RequestBody CommissionTimelineInput input,
-                                                                @AuthenticationPrincipal Jwt jwt) {
-        trusted(jwt, true);
-        if (input.orderItemIds() == null || input.orderItemIds().size() > 500)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid commission timeline batch");
-        Map<String, Object> result = new LinkedHashMap<>();
-        Map<String, SellerOrder> sellerCache = new HashMap<>();
-        Map<String, Boolean> unresolvedCache = new HashMap<>();
-        for (OrderItem item : items.findAllById(input.orderItemIds())) {
-            SellerOrder seller = sellerCache.computeIfAbsent(item.getSellerOrderId(),
-                    id -> sellers.findById(id).orElse(null));
-            if (seller == null) continue;
-            boolean unresolved = unresolvedCache.computeIfAbsent(item.getSellerOrderId(), sellerId ->
-                    items.findBySellerOrderId(sellerId).stream()
-                            .flatMap(line -> returns.findByOrderItemId(line.getOrderItemId()).stream())
-                            .anyMatch(r -> !Set.of(ReturnRequestStatus.REJECTED, ReturnRequestStatus.CANCELLED,
-                                    ReturnRequestStatus.REFUNDED).contains(r.getStatus())));
-            Map<String, Object> timeline = new LinkedHashMap<>();
-            timeline.put("deliveredAt", seller.getDeliveredAt());
-            timeline.put("returnDeadline", seller.getReturnDeadline());
-            timeline.put("hasUnresolvedReturn", unresolved);
-            timeline.put("fulfillmentStatus", seller.getStatus());
-            result.put(item.getOrderItemId(), timeline);
-        }
-        return ApiResponse.success(result);
-    }
+    private final FinanceContractService service;
 
     @PostMapping("/orders/{id}/paid")
     public ApiResponse<Map<String, Object>> paid(@PathVariable String id, @RequestBody PaidInput input, @AuthenticationPrincipal Jwt jwt) {
-        trusted(jwt, false);
-        Order order = find(Order.class, id, true);
-        if (input.paymentId() == null || !Objects.equals(input.amountVnd(), order.getPayableVnd()) || !Objects.equals(input.currency(), order.getCurrency()))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Payment total mismatch");
-        Map<String, Object> saga = new LinkedHashMap<>(order.getSagaState() == null ? Map.of() : order.getSagaState());
-        if (saga.get("paymentId") != null && !input.paymentId().equals(saga.get("paymentId")))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A different payment already paid this order; reconcile excess payment");
-        if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.EXPIRED)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Late payment requires reconciliation");
-        saga.put("paymentId", input.paymentId());
-        saga.put("verifiedAt", input.verifiedAt());
-        order.setSagaState(saga);
-        if (order.getStatus() == OrderStatus.PENDING || order.getStatus() == OrderStatus.AWAITING_PAYMENT)
-            order.setStatus(OrderStatus.PAID);
-        orders.save(order);
-        // Payment SUCCESS → khởi tạo Commission PENDING cho mọi item có referral (idempotent phía promotion)
-        int initialized = 0;
-        for (SellerOrder seller : sellers.findByOrderId(id)) {
-            for (OrderItem item : items.findBySellerOrderId(seller.getSellerOrderId())) {
-                if (item.getReferralLinkId() == null || item.getReferralLinkId().isBlank()) continue;
-                try {
-                    http.post().uri(promotionUrl + "/api/v1/finance/commission-initializations/" + item.getOrderItemId())
-                            .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                            .body(Map.of("reason", "Payment verified; init pending commission"))
-                            .retrieve().toBodilessEntity();
-                    initialized++;
-                } catch (Exception ex) {
-                    log.warn("Commission init deferred for item {}: {}", item.getOrderItemId(), ex.getMessage());
-                }
-            }
-        }
-        return ApiResponse.success(Map.of("orderId", id, "status", order.getStatus(), "commissionsInitialized", initialized));
+        return ApiResponse.success(service.paid(id, input, jwt));
     }
 
     @GetMapping("/refund-basis/{id}")
     public ApiResponse<Map<String, Object>> refundBasis(@PathVariable String id, @AuthenticationPrincipal Jwt jwt) {
-        Object realm = jwt.getClaim("realm_access");
-        boolean orderInternal = realm instanceof Map<?, ?> roles && roles.get("roles") instanceof Collection<?> list && list.contains("ORDER_INTERNAL");
-        if (!orderInternal) trusted(jwt, true);
-        ReturnRequest request = find(ReturnRequest.class, id, false);
-        OrderItem item = find(OrderItem.class, request.getOrderItemId(), true);
-        em.refresh(request, LockModeType.PESSIMISTIC_WRITE);
-        SellerOrder seller = find(SellerOrder.class, item.getSellerOrderId(), false);
-        Order order = find(Order.class, seller.getOrderId(), false);
-        if (!Set.of(ReturnRequestStatus.RECEIVED, ReturnRequestStatus.REFUND_PENDING, ReturnRequestStatus.REFUNDED).contains(request.getStatus()))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Returned goods must be received before refund");
-        if (order.getStatus() != OrderStatus.PAID && order.getStatus() != OrderStatus.PROCESSING && order.getStatus() != OrderStatus.COMPLETED)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order has not been paid");
-        if (request.getRequestedAt() == null || seller.getReturnDeadline() == null || request.getRequestedAt().isAfter(seller.getReturnDeadline()))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Return is outside the delivery return window");
-        if (!"VND".equals(order.getCurrency()))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only VND refunds are supported");
-        long amount;
-        if (request.getStatus() == ReturnRequestStatus.REFUND_PENDING || request.getStatus() == ReturnRequestStatus.REFUNDED) {
-            if (request.getRefundAmountVnd() == null || request.getRefundAmountVnd() <= 0)
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Refund snapshot missing; reconcile legacy data");
-            amount = request.getRefundAmountVnd();
-        } else {
-            int reservedQuantity = 0;
-            long reservedAmount = 0;
-            for (ReturnRequest r : returns.findAll().stream().filter(r -> item.getOrderItemId().equals(r.getOrderItemId()) && !id.equals(r.getReturnRequestId())).toList()) {
-                if (r.getStatus() == ReturnRequestStatus.REFUND_PENDING || r.getStatus() == ReturnRequestStatus.REFUNDED || r.getRefundReference() != null) {
-                    if (r.getQuantity() == null || r.getRefundAmountVnd() == null)
-                        throw new ResponseStatusException(HttpStatus.CONFLICT, "Existing refund reservation is incomplete");
-                    reservedQuantity = Math.addExact(reservedQuantity, r.getQuantity());
-                    reservedAmount = Math.addExact(reservedAmount, r.getRefundAmountVnd());
-                }
-            }
-            try {
-                amount = RefundAllocation.allocate(item.getNetPaidAmountVnd(), item.getQuantity(), request.getQuantity(), reservedQuantity, reservedAmount);
-            } catch (IllegalArgumentException | NullPointerException ex) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Refund exceeds remaining paid quantity/value");
-            }
-            request.setRefundAmountVnd(amount);
-            request.setStatus(ReturnRequestStatus.REFUND_PENDING);
-            returns.save(request);
-        }
-        return ApiResponse.success(Map.of("returnRequestId", id, "orderItemId", item.getOrderItemId(), "customerId", order.getCustomerId(), "amountVnd", amount, "currency", order.getCurrency()));
-    }
-
-    public record RefundInput(String transactionId, Long amountVnd) {
+        return ApiResponse.success(service.refundBasis(id, jwt));
     }
 
     @GetMapping("/orders/{id}/unapplied-payment")
     public ApiResponse<Map<String, Object>> unapplied(@PathVariable String id, @RequestParam String paymentId, @AuthenticationPrincipal Jwt jwt) {
-        trusted(jwt, true);
-        Order order = find(Order.class, id, true);
-        Object applied = (order.getSagaState() == null ? Map.of() : order.getSagaState()).get("paymentId");
-        boolean refundable = (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.EXPIRED || (applied != null && !paymentId.equals(applied))) && !paymentId.equals(applied);
-        return ApiResponse.success(Map.of("refundable", refundable, "customerId", order.getCustomerId(), "amountVnd", order.getPayableVnd(), "currency", order.getCurrency()));
+        return ApiResponse.success(service.unapplied(id, paymentId, jwt));
     }
 
     @PostMapping("/returns/{id}/refunded")
     public ApiResponse<Map<String, Object>> refunded(@PathVariable String id, @RequestBody RefundInput input, @AuthenticationPrincipal Jwt jwt) {
-        trusted(jwt, false);
-        ReturnRequest request = find(ReturnRequest.class, id, true);
-        if (input.transactionId() == null || !Objects.equals(input.amountVnd(), request.getRefundAmountVnd()))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Refund reference mismatch");
-        if (request.getRefundReference() != null && !request.getRefundReference().equals(input.transactionId()))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Return already has another refund");
-        if (request.getStatus() != ReturnRequestStatus.REFUND_PENDING && request.getStatus() != ReturnRequestStatus.REFUNDED)
-            throw new ResponseStatusException(HttpStatus.CONFLICT);
-        request.setRefundReference(input.transactionId());
-        request.setStatus(ReturnRequestStatus.REFUNDED);
-        request.setResolvedAt(LocalDateTime.now(ZoneOffset.UTC));
-        returns.save(request);
-        return ApiResponse.success(Map.of("returnRequestId", id, "status", "REFUNDED"));
+        return ApiResponse.success(service.refunded(id, input, jwt));
     }
 
     @GetMapping("/settlement-basis/{id}")
     public ApiResponse<Map<String, Object>> settlementBasis(@PathVariable String id, @AuthenticationPrincipal Jwt jwt) {
-        trusted(jwt, true);
-        SellerOrder seller = find(SellerOrder.class, id, true);
-        Order order = find(Order.class, seller.getOrderId(), false);
-        if (seller.getStatus() != SellerOrderStatus.COMPLETED || seller.getDeliveredAt() == null || seller.getReturnDeadline() == null
-                || seller.getReturnDeadline().isBefore(seller.getDeliveredAt().plusDays(14)) || !seller.getReturnDeadline().isBefore(LocalDateTime.now(ZoneOffset.UTC))
-                || !Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(order.getStatus()))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Seller order is not eligible");
-        List<OrderItem> lines = items.findAll().stream().filter(i -> id.equals(i.getSellerOrderId())).toList();
-        if (lines.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Seller order has no items");
-        long gross = 0, refund = 0, sellerDiscount = 0, platformDiscount = 0, subsidy = 0, netPaid = 0;
-        List<String> refs = new ArrayList<>();
-        for (OrderItem item : lines) {
-            refs.add(item.getOrderItemId());
-            gross = Math.addExact(gross, item.getGrossAmountVnd());
-            netPaid = Math.addExact(netPaid, item.getNetPaidAmountVnd());
-            List<ReturnRequest> requests = returns.findAll().stream().filter(r -> item.getOrderItemId().equals(r.getOrderItemId())).toList();
-            int quantityReturned = 0;
-            for (ReturnRequest r : requests) {
-                if (!Set.of(ReturnRequestStatus.REJECTED, ReturnRequestStatus.CANCELLED, ReturnRequestStatus.REFUNDED).contains(r.getStatus()))
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Unresolved return blocks settlement");
-                if (r.getStatus() == ReturnRequestStatus.REFUNDED) {
-                    refund = Math.addExact(refund, r.getRefundAmountVnd());
-                    quantityReturned = Math.addExact(quantityReturned, r.getQuantity());
-                }
-            }
-            long allocated = 0;
-            for (DiscountAllocation a : allocations.findAll().stream().filter(a -> item.getOrderItemId().equals(a.getOrderItemId())).toList()) {
-                allocated = Math.addExact(allocated, a.getAllocatedAmountVnd());
-                long platformShare = a.getFundedBy() == DiscountFundingType.PLATFORM ? a.getAllocatedAmountVnd() : 0;
-                if (a.getFundedBy() == DiscountFundingType.SHARED) {
-                    Map<?, ?> rule = JsonMapper.builder().build().readValue(a.getRuleSnapshotJson(), Map.class);
-                    if (!(rule.get("platformFundedVnd") instanceof Number))
-                        throw new ResponseStatusException(HttpStatus.CONFLICT, "Shared funding snapshot missing");
-                    platformShare = new BigDecimal(rule.get("platformFundedVnd").toString()).longValueExact();
-                    if (platformShare < 0 || platformShare > a.getAllocatedAmountVnd())
-                        throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid shared funding");
-                }
-                platformDiscount = Math.addExact(platformDiscount, platformShare);
-                sellerDiscount = Math.addExact(sellerDiscount, a.getAllocatedAmountVnd() - platformShare);
-                subsidy = Math.addExact(subsidy, platformShare - portion(platformShare, quantityReturned, item.getQuantity()));
-            }
-            if (allocated != item.getDiscountAmountVnd() || item.getGrossAmountVnd() - allocated != item.getNetPaidAmountVnd())
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Discount allocation does not match paid snapshot");
-        }
-        // GrossRevenue here is gross before seller-funded discount, after platform-funded discount.
-        return ApiResponse.success(Map.of("sellerOrderId", id, "storeId", seller.getStoreId(), "orderItemIds", String.join(",", refs),
-                "grossRevenueVnd", gross - platformDiscount, "refundVnd", refund, "sellerDiscountVnd", sellerDiscount,
-                "platformSubsidyVnd", subsidy, "feeBasisVnd", netPaid - refund, "returnDeadline", seller.getReturnDeadline().toString()));
-    }
-
-    static long portion(Long total, int quantity, int purchased) {
-        if (total == null || total < 0 || purchased <= 0 || quantity < 0 || quantity > purchased)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Invalid item value/quantity");
-        return BigInteger.valueOf(total).multiply(BigInteger.valueOf(quantity)).divide(BigInteger.valueOf(purchased)).longValueExact();
+        return ApiResponse.success(service.settlementBasis(id, jwt));
     }
 
     @GetMapping("/commission-order-item/{id}")
     public ApiResponse<Map<String, Object>> commissionItem(@PathVariable String id, @AuthenticationPrincipal Jwt jwt) {
-        trusted(jwt, true);
-        OrderItem item = find(OrderItem.class, id, true);
-        settlementBasis(item.getSellerOrderId(), jwt);
-        return retainedCommissionItem(item);
-    }
-
-    @GetMapping("/commission-adjustment-item/{id}")
-    public ApiResponse<Map<String, Object>> commissionAdjustmentItem(@PathVariable String id, @AuthenticationPrincipal Jwt jwt) {
-        trusted(jwt, true);
-        OrderItem item = find(OrderItem.class, id, true);
-        SellerOrder seller = find(SellerOrder.class, item.getSellerOrderId(), false);
-        Order order = find(Order.class, seller.getOrderId(), false);
-        if (order.getStatus() == OrderStatus.CANCELLED)
-            return ApiResponse.success(Map.of("orderItemId", id, "basisAmountVnd", 0L, "refundedAmountVnd", 0L, "currency", "VND", "cancelled", true));
-        if (!Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(order.getStatus()))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order has not been paid");
-        return retainedCommissionItem(item);
-    }
-
-    private ApiResponse<Map<String, Object>> retainedCommissionItem(OrderItem item) {
-        long refund = 0;
-        for (ReturnRequest r : returns.findByOrderItemId(item.getOrderItemId()).stream().filter(r -> r.getStatus() == ReturnRequestStatus.REFUNDED).toList())
-            refund = Math.addExact(refund, r.getRefundAmountVnd());
-        long retained = Math.subtractExact(item.getNetPaidAmountVnd(), refund);
-        if (retained < 0) throw new ResponseStatusException(HttpStatus.CONFLICT, "Refund exceeds paid item value");
-        return ApiResponse.success(Map.of("orderItemId", item.getOrderItemId(), "basisAmountVnd", retained, "refundedAmountVnd", refund, "currency", "VND", "commissionApplicable", item.getReferralLinkId() != null || (item.getRuleSnapshot() != null && item.getRuleSnapshot().get("commissionPolicyId") != null)));
+        return ApiResponse.success(service.commissionItem(id, jwt));
     }
 }

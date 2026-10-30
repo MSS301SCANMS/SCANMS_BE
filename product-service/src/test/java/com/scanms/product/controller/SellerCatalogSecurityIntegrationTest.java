@@ -47,7 +47,10 @@ class SellerCatalogSecurityIntegrationTest {
     org.springframework.test.web.servlet.request.RequestPostProcessor actor(String subject,String role){return jwt().jwt(Jwt.withTokenValue(subject).header("alg","RS256").subject(subject).claim("realm_access",Map.of("roles",List.of(role))).build());}
     String json(Object value){return tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(value);}
     @Test void sellerCannotReadOrChangeAnotherShopsDraftImagesOrVariants()throws Exception{
-        mvc.perform(get("/api/v1/products").with(actor("seller-a","SHOP_OWNER"))).andExpect(status().isOk()).andExpect(jsonPath("$.result.length()").value(1)).andExpect(jsonPath("$.result[0].productId").value(pa.getProductId()));
+        mvc.perform(get("/api/v1/products").with(actor("seller-a","SHOP_OWNER"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.content.length()").value(1))
+                .andExpect(jsonPath("$.result.totalElements").value(1))
+                .andExpect(jsonPath("$.result.content[0].productId").value(pa.getProductId()));
         for(String path:List.of("products/"+pb.getProductId(),"product-images/"+ib.getImageId(),"product-variants/"+vb.getVariantId())){
             mvc.perform(get("/api/v1/"+path).with(actor("seller-a","SHOP_OWNER"))).andExpect(status().isForbidden());
             mvc.perform(patch("/api/v1/"+path).with(actor("seller-a","SHOP_OWNER")).contentType("application/json").content("{\"name\":\"Tampered\",\"stockQuantity\":0,\"sortOrder\":99}")).andExpect(status().isForbidden());
@@ -56,8 +59,8 @@ class SellerCatalogSecurityIntegrationTest {
         mvc.perform(get("/api/v1/product-images").with(actor("seller-a","SHOP_OWNER"))).andExpect(jsonPath("$.result").isEmpty());
         mvc.perform(get("/api/v1/product-variants").with(actor("seller-a","SHOP_OWNER"))).andExpect(jsonPath("$.result").isEmpty());
         assertEquals(10,variants.findById(vb.getVariantId()).orElseThrow().getStockQuantity());
-        mvc.perform(get("/api/v1/products").with(actor("customer","USER"))).andExpect(jsonPath("$.result").isEmpty());
-        mvc.perform(get("/api/v1/products").with(actor("manager","SYSTEM_MANAGER"))).andExpect(jsonPath("$.result.length()").value(2));
+        mvc.perform(get("/api/v1/products").with(actor("customer","USER"))).andExpect(jsonPath("$.result.content").isEmpty()).andExpect(jsonPath("$.result.totalElements").value(0));
+        mvc.perform(get("/api/v1/products").with(actor("manager","SYSTEM_MANAGER"))).andExpect(jsonPath("$.result.content.length()").value(2)).andExpect(jsonPath("$.result.totalElements").value(2));
         mvc.perform(get("/api/v1/products/"+pb.getProductId()).with(actor("order-service","ORDER_INTERNAL"))).andExpect(status().isOk());
     }
     @Test void ownerManagesPrimaryImageAndVariantButSuspensionBlocksWrites()throws Exception{

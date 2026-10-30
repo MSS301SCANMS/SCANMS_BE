@@ -21,4 +21,6 @@ public interface CollaboratorService {
      * MANAGER/ADMIN từ chối KOL — chuyển trạng thái sang REJECTED
      */
     CollaboratorProfileResponse reject(String id, String reason);
+
+    CollaboratorProfileResponse me();
 }

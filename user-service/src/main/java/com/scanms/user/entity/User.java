@@ -5,11 +5,15 @@ import com.scanms.user.constant.UserStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 @Entity
@@ -55,6 +59,12 @@ public class User {
 
     @Column(length = 500)
     private String bio;
+
+    /** Fashion AI prefs: preferredColors[], preferredStyles[], preferredGenderTarget. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> fashionPreferences = new HashMap<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

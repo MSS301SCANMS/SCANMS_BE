@@ -8,6 +8,10 @@ import com.scanms.order.repository.ReturnRequestRepository;
 import com.scanms.order.repository.SellerOrderRepository;
 import com.scanms.order.service.ShopReturnAccess;
 import com.scanms.order.service.ShopReturnService;
+import com.scanms.order.service.ShopReturnService.DecisionInput;
+import com.scanms.order.service.ShopReturnService.ManagerDecision;
+import com.scanms.order.service.ShopReturnService.ResponseInput;
+import com.scanms.order.service.ShopReturnService.View;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -47,6 +51,27 @@ public class ShopReturnServiceImpl implements ShopReturnService {
         }
         return returns.findAll().stream().sorted(Comparator.comparing(ReturnRequest::getRequestedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(row -> view(row, names)).toList();
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> managerDecide(String id, ManagerDecision input) {
+        if (!Set.of(ReturnRequestStatus.APPROVED, ReturnRequestStatus.REJECTED).contains(input.status())
+                || input.notes().trim().length() < 20)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chọn duyệt hoặc từ chối và nhập lý do ít nhất 20 ký tự.");
+        var row = returns.lockById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu đổi trả."));
+        if (row.getStatus() != ReturnRequestStatus.REQUESTED) {
+            if (row.getStatus() == input.status() && Objects.equals(row.getDecisionReason(), input.notes().trim()))
+                return Map.of("returnRequestId", id, "status", row.getStatus());
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu đã được xử lý. Vui lòng tải lại danh sách.");
+        }
+        if (row.getRefundReference() != null)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu đã có tham chiếu hoàn tiền, cần đối soát trước khi xử lý.");
+        row.setStatus(input.status());
+        row.setDecisionReason(input.notes().trim());
+        row.setResolvedAt(LocalDateTime.now());
+        returns.saveAndFlush(row);
+        return Map.of("returnRequestId", id, "status", row.getStatus());
     }
 
     @Override

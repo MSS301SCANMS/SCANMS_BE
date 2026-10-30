@@ -1,8 +1,11 @@
 package com.scanms.product.controller;
 
+import com.scanms.product.constant.ProductStatus;
 import com.scanms.product.dto.ApiResponse;
-import com.scanms.product.dto.ai.AiDetectionResponse;
+import com.scanms.product.dto.PageResponse;
+import com.scanms.product.dto.ai.ShopAiAnalyzeResponse;
 import com.scanms.product.dto.request.CreateProductRequest;
+import com.scanms.product.dto.request.UpdateProductRequest;
 import com.scanms.product.dto.response.ProductResponse;
 import com.scanms.product.service.AiAnalysisService;
 import com.scanms.product.service.ProductService;
@@ -11,8 +14,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import java.util.*;
-import com.scanms.product.dto.request.UpdateProductRequest;
 
 @RestController
 @RequestMapping("/api/v1/products")
@@ -32,8 +33,15 @@ public class ProductController {
     }
 
     @GetMapping
-    public ApiResponse<List<ProductResponse>> findAll() {
-        return ApiResponse.success(service.findAll());
+    public ApiResponse<PageResponse<ProductResponse>> findAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String storeId,
+            @RequestParam(required = false) ProductStatus status,
+            @RequestParam(required = false) String search) {
+        int pageSize = limit != null ? limit : size;
+        return ApiResponse.success(service.findAll(page, pageSize, storeId, status, search));
     }
 
     @PatchMapping("/{id}")
@@ -46,8 +54,9 @@ public class ProductController {
         return ApiResponse.success(service.deactivate(id));
     }
 
+    /** Shop owner: upload product cover image → AI detects clothing and returns form hints. */
     @PostMapping(value = "/ai-analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<AiDetectionResponse> analyzeImage(@RequestPart("image") MultipartFile image) {
+    public ApiResponse<ShopAiAnalyzeResponse> analyzeImage(@RequestPart("image") MultipartFile image) {
         return ApiResponse.success(aiAnalysisService.analyze(image));
     }
 }

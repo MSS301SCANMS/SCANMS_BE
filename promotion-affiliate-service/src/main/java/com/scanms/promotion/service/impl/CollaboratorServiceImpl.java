@@ -10,12 +10,16 @@ import com.scanms.promotion.mapper.CollaboratorProfileMapper;
 import com.scanms.promotion.repository.CollaboratorProfileRepository;
 import com.scanms.promotion.service.CollaboratorService;
 import com.scanms.promotion.service.KolRoleGranter;
+import com.scanms.promotion.service.VoucherAccess;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.Objects;
 import com.scanms.promotion.service.KolApplicationService;
 
 @Service
@@ -26,6 +30,7 @@ public class CollaboratorServiceImpl implements CollaboratorService {
     private final CollaboratorProfileRepository repository;
     private final CollaboratorProfileMapper mapper;
     private final KolRoleGranter roleGranter;
+    private final VoucherAccess access;
 
     public CollaboratorProfileResponse create(ApplyCollaboratorRequest request) {
         // Idempotent: user đã có hồ sơ thì trả về (không tạo trùng)
@@ -105,6 +110,15 @@ public class CollaboratorServiceImpl implements CollaboratorService {
         profile.setApprovalStatus(CollaboratorStatus.REJECTED);
         profile.setRejectionReason(reason);
         return mapper.toResponse(repository.save(profile));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CollaboratorProfileResponse me() {
+        String userId = access.userId();
+        return repository.findByUserId(Objects.toString(userId, null))
+                .map(mapper::toResponse)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Collaborator profile not found"));
     }
 
     private CollaboratorProfile findOrThrow(String id) {

@@ -8,29 +8,21 @@ import com.scanms.order.dto.response.OrderResponse;
 import com.scanms.order.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.server.ResponseStatusException;
-import java.util.*;
-import com.scanms.order.constant.OrderStatus;
-import com.scanms.order.constant.SellerOrderStatus;
-import com.scanms.order.repository.SellerOrderRepository;
-import org.springframework.security.access.prepost.PreAuthorize;
+
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
 public class OrderController {
     private final OrderService service;
-    private final SellerOrderRepository sellerOrders;
-    private final com.scanms.order.service.OrderCancellationPolicy cancellationPolicy;
-
-    @Value("${clients.user.url:http://localhost:8081}")
-    private String userUrl;
 
     @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @PostMapping("/checkout")
@@ -71,36 +63,11 @@ public class OrderController {
     public ApiResponse<List<OrderResponse>> getMyOrders(
             @RequestParam(required = false) String customerId,
             @AuthenticationPrincipal Jwt jwt) {
-        // Checkout lưu customerId = userId nghiệp vụ, không phải jwt.sub (identitySubject)
         String effectiveCustomerId = customerId;
         if ((effectiveCustomerId == null || effectiveCustomerId.isBlank()) && jwt != null) {
-            effectiveCustomerId = resolveBusinessUserId(jwt);
+            effectiveCustomerId = service.resolveBusinessUserId(jwt);
         }
         return ApiResponse.success(service.getMyOrders(effectiveCustomerId));
-    }
-
-    @SuppressWarnings("unchecked")
-    private String resolveBusinessUserId(Jwt jwt) {
-        try {
-            Map<?, ?> envelope = RestClient.create().get()
-                    .uri(userUrl + "/api/v1/users")
-                    .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                    .retrieve()
-                    .body(Map.class);
-            Object result = envelope == null ? null : envelope.get("result");
-            if (result instanceof Map<?, ?> user && user.get("userId") != null) {
-                Object identity = user.get("identitySubject");
-                if (identity != null && !jwt.getSubject().equals(String.valueOf(identity))) {
-                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Active customer profile required");
-                }
-                return String.valueOf(user.get("userId"));
-            }
-        } catch (ResponseStatusException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cannot resolve customer profile", ex);
-        }
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Active customer profile required");
     }
 
     @GetMapping("/{id}/checkout-details")
@@ -122,7 +89,7 @@ public class OrderController {
     @PreAuthorize("@financeBoundary.canWrite(authentication)")
     @GetMapping("/{id}/voucher-restoration-eligibility")
     public ApiResponse<Map<String, Boolean>> voucherRestorationEligibility(@PathVariable String id) {
-        return ApiResponse.success(Map.of("eligible", cancellationPolicy.canRestoreResources(id)));
+        return ApiResponse.success(service.voucherRestorationEligibility(id));
     }
 
     @GetMapping

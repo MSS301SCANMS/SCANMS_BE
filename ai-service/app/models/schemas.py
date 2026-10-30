@@ -61,6 +61,10 @@ class HealthResponse(ApiModel):
     model_loaded: bool
     model_path: str | None = None
     fashion_clip_loaded: bool = False
+    kafka_connected: bool = False
+    kafka_bootstrap: str | None = None
+    kafka_group_id: str | None = None
+    kafka_topic: str | None = None
 
 
 class ErrorResponse(BaseModel):

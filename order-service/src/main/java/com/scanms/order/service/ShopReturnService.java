@@ -26,6 +26,15 @@ public interface ShopReturnService {
     ) {
     }
 
+    /** Manager approve/reject with required notes (min 20 chars). */
+    record ManagerDecision(
+            @NotNull ReturnRequestStatus status,
+            @NotBlank
+            @Size(min = 20, max = 3000)
+            String notes
+    ) {
+    }
+
     record View(
             String returnRequestId,
             String orderId,
@@ -54,6 +63,8 @@ public interface ShopReturnService {
     List<View> list(Jwt jwt);
 
     List<View> managerList();
+
+    Map<String, Object> managerDecide(String id, ManagerDecision input);
 
     View respond(
             String id,
