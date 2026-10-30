@@ -16,7 +16,9 @@ import com.scanms.user.exception.AppException;
 import com.scanms.user.exception.ErrorCode;
 import com.scanms.user.event.UserRegisteredEvent;
 import org.springframework.context.ApplicationEventPublisher;
+
 import java.time.Instant;
+
 import com.scanms.user.repository.RoleRepository;
 import com.scanms.user.repository.UserRepository;
 import com.scanms.user.service.AuthService;
@@ -32,12 +34,15 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.*;
 
@@ -72,79 +77,139 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     @Override
     public void register(RegisterRequest request) {
-        // Bước A: Lấy Admin Token để có quyền gọi API tạo user
-        String adminToken = getAdminAccessToken();
-
-        // Bước B: Chuẩn bị dữ liệu tạo user gửi sang Keycloak
-        String createUserUrl = serverUrl + "/admin/realms/" + realm + "/users";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
-
-        Map<String, Object> userPayload = Map.of(
-                "username", request.username(),
-                "email", request.email(),
-                "enabled", true,
-                "emailVerified", !emailVerificationEnabled,
-                "firstName", request.firstName(),
-                "lastName", request.lastName(),
-                "requiredActions", emailVerificationEnabled ? List.of("VERIFY_EMAIL") : List.of(),
-                "credentials", List.of(Map.of(
-                        "type", "password",
-                        "value", request.password(),
-                        "temporary", false
-                ))
-        );
-
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(userPayload, headers);
-
+        String createdSubject = null;
+        String adminToken = null;
+        boolean cleanupOnRollback = false;
         try {
+            Set<Role> roles = roleRepository.findAllByNameIn(List.of(RoleName.USER));
+            if (roles.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "Đăng ký tạm thời chưa khả dụng. Vui lòng thử lại sau.");
+            }
+            // Bước A: Lấy Admin Token để có quyền gọi API tạo user
+            adminToken = getAdminAccessToken();
+
+            // Bước B: Chuẩn bị dữ liệu tạo user gửi sang Keycloak
+            String createUserUrl = serverUrl + "/admin/realms/" + realm + "/users";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(adminToken);
+
+            Map<String, Object> userPayload = Map.of(
+                    "username", request.username(),
+                    "email", request.email(),
+                    "enabled", true,
+                    "emailVerified", !emailVerificationEnabled,
+                    "firstName", request.firstName(),
+                    "lastName", request.lastName(),
+                    "requiredActions", emailVerificationEnabled ? List.of("VERIFY_EMAIL") : List.of(),
+                    "credentials", List.of(Map.of(
+                            "type", "password",
+                            "value", request.password(),
+                            "temporary", false
+                    ))
+            );
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(userPayload, headers);
+
             ResponseEntity<Void> response = restTemplate.exchange(createUserUrl, HttpMethod.POST, entity, Void.class);
 
             // Keycloak trả về status 201 Created khi thành công.
             if (response.getStatusCode().is2xxSuccessful()) {
                 // Lấy lại user vừa tạo từ Keycloak để lấy identitySubject (sub)
-                String getUserIdUrl = serverUrl + "/admin/realms/" + realm + "/users?username=" + request.username();
-
-                // SỬ DỤNG ParameterizedTypeReference ĐỂ KHẮC PHỤC LỖI ÉP KIỂU
-                ResponseEntity<List<Map<String, Object>>> userSearchResponse = restTemplate.exchange(
-                        getUserIdUrl,
-                        HttpMethod.GET,
-                        new HttpEntity<>(headers),
-                        new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                String identitySubject = createdRegistrationSubject(response, request.username(), headers);
+                createdSubject = identitySubject;
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                    String subject = identitySubject;
+                    String token = adminToken;
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCompletion(int status) {
+                            if (status == STATUS_ROLLED_BACK) deleteFailedRegistration(subject, token);
                         }
-                );
+                    });
+                    cleanupOnRollback = true;
+                }
 
-                if (userSearchResponse.getBody() != null && !userSearchResponse.getBody().isEmpty()) {
-                    Map<String, Object> kcUser = userSearchResponse.getBody().get(0);
-                    String identitySubject = (String) kcUser.get("id");
-
-                    if (emailVerificationEnabled) {
-                        sendVerifyEmail(identitySubject, adminToken);
-                    }
-                    // Lưu vào database của user-service
-                    // Public registration must never grant business or administrator roles.
-                    List<RoleName> rolesToQuery = List.of(RoleName.USER);
-                    for (RoleName roleNameEnum : rolesToQuery) {
-                        assignDefaultRoleToUser(identitySubject, adminToken, roleNameEnum.toString());
-                    }
-                    Set<Role> roles = roleRepository.findAllByNameIn(rolesToQuery);
-                    User localUser = User.builder()
-                            .identitySubject(identitySubject)
-                            .username(request.username())
-                            .email(request.email())
-                            .fullName(request.lastName() + " " + request.firstName())
-                            .status(UserStatus.ACTIVE)
-                            .roles(roles)
-                            .build();
-                    localUser = repository.save(localUser);
-                    events.publishEvent(new UserRegisteredEvent(localUser.getUserId(), identitySubject,
-                            localUser.getEmail(), UserRegisteredEvent.SOURCE_REGISTER, Instant.now()));
+                if (emailVerificationEnabled) {
+                    sendVerifyEmail(identitySubject, adminToken);
+                }
+                // Lưu vào database của user-service
+                // Public registration must never grant business or administrator roles.
+                List<RoleName> rolesToQuery = List.of(RoleName.USER);
+                for (RoleName roleNameEnum : rolesToQuery) {
+                    requireDefaultRoleToUser(identitySubject, adminToken, roleNameEnum.toString());
+                }
+                User localUser = User.builder()
+                        .identitySubject(identitySubject)
+                        .username(request.username())
+                        .email(request.email())
+                        .fullName(request.lastName() + " " + request.firstName())
+                        .status(UserStatus.ACTIVE)
+                        .roles(roles)
+                        .build();
+                localUser = repository.saveAndFlush(localUser);
+                events.publishEvent(new UserRegisteredEvent(localUser.getUserId(), identitySubject,
+                        localUser.getEmail(), UserRegisteredEvent.SOURCE_REGISTER, Instant.now()));
+            } else {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "Chưa thể tạo tài khoản. Vui lòng thử lại sau.");
+            }
+        } catch (RuntimeException exception) {
+            if (createdSubject != null && !cleanupOnRollback) deleteFailedRegistration(createdSubject, adminToken);
+            if (exception instanceof ResponseStatusException) throw exception;
+            if (createdSubject == null && exception instanceof HttpClientErrorException clientError) {
+                if (clientError.getStatusCode().value() == 409) {
+                    String detail = clientError.getResponseBodyAsString().toLowerCase(Locale.ROOT);
+                    String message = detail.contains("same email")
+                            ? "Email đã được sử dụng. Vui lòng đăng nhập hoặc chọn Quên mật khẩu."
+                            : detail.contains("username")
+                            ? "Tên đăng nhập đã tồn tại. Vui lòng chọn tên khác."
+                            : "Tên đăng nhập hoặc email đã tồn tại. Vui lòng đăng nhập hoặc dùng thông tin khác.";
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, message);
+                }
+                if (clientError.getStatusCode().value() == 400) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Thông tin đăng ký chưa hợp lệ. Vui lòng kiểm tra tên đăng nhập, email và yêu cầu mật khẩu.");
                 }
             }
-        } catch (Exception e) {
-            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Đăng ký thất bại: " + e.getMessage());
+            log.warn("Registration failed at provider or persistence step ({})", exception.getClass().getSimpleName());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Chưa thể hoàn tất đăng ký. Vui lòng thử lại sau.");
+        }
+    }
+
+    private String createdRegistrationSubject(ResponseEntity<Void> response, String username, HttpHeaders headers) {
+        if (response.getHeaders().getLocation() != null) {
+            String path = response.getHeaders().getLocation().getPath();
+            String subject = path.substring(path.lastIndexOf('/') + 1);
+            if (!subject.isBlank()) return subject;
+        }
+        String url = UriComponentsBuilder.fromUriString(serverUrl + "/admin/realms/" + realm + "/users")
+                .queryParam("username", username).queryParam("exact", true).build().encode().toUriString();
+        var found = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers),
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                });
+        if (found.getBody() != null) {
+            return found.getBody().stream().filter(user -> username.equalsIgnoreCase((String) user.get("username")))
+                    .map(user -> (String) user.get("id")).filter(id -> id != null && !id.isBlank()).findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                            "Chưa xác nhận được tài khoản vừa tạo. Vui lòng liên hệ hỗ trợ."));
+        }
+        throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Chưa xác nhận được tài khoản vừa tạo. Vui lòng liên hệ hỗ trợ.");
+    }
+
+    private void deleteFailedRegistration(String subject, String token) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(token);
+            restTemplate.exchange(serverUrl + "/admin/realms/" + realm + "/users/" + subject,
+                    HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
+        } catch (RestClientException exception) {
+            log.warn("Could not compensate incomplete registration for subject {} ({})", subject,
+                    exception.getClass().getSimpleName());
         }
     }
 
@@ -483,36 +548,43 @@ public class AuthServiceImpl implements AuthService {
      */
     private void assignDefaultRoleToUser(String userId, String adminToken, String roleName) {
         try {
-            // 1. Lấy thông tin chi tiết của Role từ Keycloak dựa vào roleName
-            String getRoleUrl = serverUrl + "/admin/realms/" + realm + "/roles/" + roleName;
+            requireDefaultRoleToUser(userId, adminToken, roleName);
+        } catch (RuntimeException exception) {
+            log.warn("Could not assign default role {} ({})", roleName, exception.getClass().getSimpleName());
+        }
+    }
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(adminToken);
+    private void requireDefaultRoleToUser(String userId, String adminToken, String roleName) {
+        // 1. Lấy thông tin chi tiết của Role từ Keycloak dựa vào roleName
+        String getRoleUrl = serverUrl + "/admin/realms/" + realm + "/roles/" + roleName;
 
-            ResponseEntity<Map> roleResponse = restTemplate.exchange(
-                    getRoleUrl,
-                    HttpMethod.GET,
-                    new HttpEntity<>(headers),
-                    Map.class
-            );
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(adminToken);
 
-            if (roleResponse.getBody() != null) {
-                Map<String, Object> roleData = roleResponse.getBody();
+        ResponseEntity<Map> roleResponse = restTemplate.exchange(
+                getRoleUrl,
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                Map.class
+        );
 
-                // 2. Đường dẫn API gán Realm Role cho user
-                String assignRoleUrl = serverUrl + "/admin/realms/" + realm + "/users/" + userId + "/role-mappings/realm";
+        if (roleResponse.getBody() != null) {
+            Map<String, Object> roleData = roleResponse.getBody();
 
-                headers.setContentType(MediaType.APPLICATION_JSON);
+            // 2. Đường dẫn API gán Realm Role cho user
+            String assignRoleUrl = serverUrl + "/admin/realms/" + realm + "/users/" + userId + "/role-mappings/realm";
 
-                // Payload yêu cầu là một List chứa thông tin role
-                List<Map<String, Object>> rolePayload = List.of(roleData);
+            headers.setContentType(MediaType.APPLICATION_JSON);
 
-                HttpEntity<List<Map<String, Object>>> requestEntity = new HttpEntity<>(rolePayload, headers);
+            // Payload yêu cầu là một List chứa thông tin role
+            List<Map<String, Object>> rolePayload = List.of(roleData);
 
-                restTemplate.postForEntity(assignRoleUrl, requestEntity, Void.class);
-            }
-        } catch (Exception e) {
-            System.err.println("Không thể gán role [" + roleName + "] cho user trên Keycloak: " + e.getMessage());
+            HttpEntity<List<Map<String, Object>>> requestEntity = new HttpEntity<>(rolePayload, headers);
+
+            restTemplate.postForEntity(assignRoleUrl, requestEntity, Void.class);
+        } else {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Chưa thể cấp quyền khách hàng. Vui lòng thử lại sau.");
         }
     }
 

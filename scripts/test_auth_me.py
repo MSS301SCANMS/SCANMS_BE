@@ -32,5 +32,3 @@ if token:
             print(f"GET {ep} error:", e)
             if hasattr(e, 'read'):
                 print(f"GET {ep} error body:", e.read().decode('utf-8'))
-
-

@@ -1,6 +1,7 @@
 package com.scanms.product.dto.response;
 
 import com.scanms.product.constant.LivestreamStatus;
+
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -22,5 +23,7 @@ public record LivestreamResponse(
         LocalDateTime startedAt,
         LocalDateTime endedAt,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
-) {}
+        LocalDateTime updatedAt,
+        Long likeCount
+) {
+}

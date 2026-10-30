@@ -8,15 +8,16 @@ import com.scanms.product.entity.Store;
 import com.scanms.product.repository.ProductRepository;
 import com.scanms.product.repository.StoreRepository;
 import com.scanms.product.service.PublicCatalogService;
+import com.scanms.product.service.PublicProductSalesService;
+import com.scanms.product.service.PublicReviewService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
-import com.scanms.product.service.PublicReviewService;
 
 /**
  * Public catalog endpoints consumed by SCANMS_FE marketplace / chat / storefront.
@@ -30,7 +31,10 @@ public class PublicProductController {
     private final ProductRepository products;
     private final StoreRepository stores;
     private final PublicCatalogService catalog;
-    @Autowired(required=false) private PublicReviewService reviewSummaries;
+    @Autowired(required = false)
+    private PublicReviewService reviewSummaries;
+    @Autowired(required = false)
+    private PublicProductSalesService sales;
 
     @Autowired
     public PublicProductController(ProductRepository products, StoreRepository stores, PublicCatalogService catalog) {
@@ -182,7 +186,11 @@ public class PublicProductController {
             stock = product.getSizesStock().values().stream()
                     .mapToLong(v -> {
                         if (v instanceof Number n) return n.longValue();
-                        try { return Long.parseLong(String.valueOf(v)); } catch (Exception e) { return 0L; }
+                        try {
+                            return Long.parseLong(String.valueOf(v));
+                        } catch (Exception e) {
+                            return 0L;
+                        }
                     })
                     .sum();
         }
@@ -209,11 +217,14 @@ public class PublicProductController {
         // Review totals stay current even when catalog rows are served from Redis.
         var ratings = reviewSummaries == null ? Map.<String, PublicReviewService.Rating>of()
                 : reviewSummaries.ratings(rows.stream().map(row -> str(row.get("productId"))).filter(Objects::nonNull).toList());
+        var counts = sales == null ? Map.<String, Long>of()
+                : sales.counts(rows.stream().map(row -> str(row.get("productId"))).filter(Objects::nonNull).toList());
         return rows.stream().map(row -> {
             var copy = new LinkedHashMap<String, Object>(row);
             var rating = ratings.get(str(row.get("productId")));
             copy.put("rating", rating == null ? null : rating.averageRating());
             copy.put("reviewCount", rating == null ? 0L : rating.reviewCount());
+            copy.put("soldCount", counts.get(str(row.get("productId"))));
             return (Map<String, Object>) copy;
         }).toList();
     }
@@ -230,7 +241,9 @@ public class PublicProductController {
         return p.get("priceVnd") instanceof Number n ? n.longValue() : 0L;
     }
 
-    /** null = giữ thứ tự cache (mới nhất trước). */
+    /**
+     * null = giữ thứ tự cache (mới nhất trước).
+     */
     private static Comparator<Map<String, Object>> productComparator(String sortBy) {
         if ("price_asc".equalsIgnoreCase(sortBy)) {
             return Comparator.comparingLong(PublicProductController::price);
