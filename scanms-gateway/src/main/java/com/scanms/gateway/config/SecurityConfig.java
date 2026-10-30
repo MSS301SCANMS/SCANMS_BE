@@ -68,6 +68,10 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.GET, "/api/v1/vouchers/public/**").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/finance/capabilities").permitAll()
 
+                        // Giám sát hệ thống: thông tin tiến trình và log chỉ dành cho quản trị viên
+                        .pathMatchers("/actuator/scanms*", "/api/v1/ops/**")
+                        .hasAnyAuthority("ROLE_ADMIN", "ROLE_SYSTEM_ADMIN")
+
                         // Các request còn lại bắt buộc phải có JWT hợp lệ
                         .anyExchange().authenticated()
                 )

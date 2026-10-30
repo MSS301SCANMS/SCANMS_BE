@@ -4,6 +4,8 @@
     <parent><groupId>com.scanms</groupId><artifactId>scanms-backend</artifactId><version>0.0.1-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
     <artifactId>promotion-affiliate-service</artifactId>
     <dependencies>
+        <!-- Thông tin tiến trình và log gần nhất cho trang Giám sát hệ thống -->
+        <dependency><groupId>com.scanms</groupId><artifactId>scanms-ops-starter</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-jpa</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-validation</artifactId></dependency>

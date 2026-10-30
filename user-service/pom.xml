@@ -25,6 +25,8 @@
         <java.version>21</java.version>
     </properties>
     <dependencies>
+        <!-- Thông tin tiến trình và log gần nhất cho trang Giám sát hệ thống -->
+        <dependency><groupId>com.scanms</groupId><artifactId>scanms-ops-starter</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
