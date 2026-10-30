@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     allowed_origins: str = (
         "http://localhost:3000,http://localhost:5173,http://localhost:8080"
     )
+    # Kafka (cùng broker docker-compose với user/payment). Tắt bằng KAFKA_ENABLED=false.
+    kafka_enabled: bool = True
+    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_group_id: str = "ai-service"
+    kafka_analysis_topic: str = "ai.analysis.completed.v1"
+    kafka_client_id: str = "ai-service"
 
     @property
     def cors_origins(self) -> list[str]:

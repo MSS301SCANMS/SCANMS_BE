@@ -26,6 +26,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class KafkaHealthService {
     static final String TOPIC = "user.registered.v1";
+    static final String AI_TOPIC = "ai.analysis.completed.v1";
+    static final String AI_GROUP = "ai-service";
     private static final int TIMEOUT_MS = 3000;
     private final KafkaAdmin admin;
     @Value("${spring.kafka.consumer.group-id:payment-service}")
@@ -48,6 +50,7 @@ public class KafkaHealthService {
             out.put("latencyMs", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             out.put("consumerGroups", client.listConsumerGroups().all().get(TIMEOUT_MS, TimeUnit.MILLISECONDS).size());
             groupDetails(client, out);
+            aiGroupDetails(client, out);
         } catch (Exception e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             log.warn("Khong doc duoc trang thai Kafka: {}", e.toString());
@@ -77,6 +80,29 @@ public class KafkaHealthService {
         } catch (Exception e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             log.debug("Khong doc duoc consumer group {}: {}", groupId, e.toString());
+        }
+    }
+
+    /** Consumer group của ai-service trên topic phân tích ảnh (nếu đã join cluster). */
+    private void aiGroupDetails(Admin client, Map<String, Object> out) {
+        try {
+            var group = client.describeConsumerGroups(List.of(AI_GROUP)).describedGroups().get(AI_GROUP)
+                    .get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            out.put("aiGroupId", AI_GROUP);
+            out.put("aiTopic", AI_TOPIC);
+            out.put("aiGroupState", group.groupState().toString());
+            out.put("aiGroupMembers", group.members().size());
+            Map<TopicPartition, OffsetAndMetadata> committed = client.listConsumerGroupOffsets(AI_GROUP)
+                    .partitionsToOffsetAndMetadata().get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            Map<TopicPartition, OffsetSpec> latest = new HashMap<>();
+            committed.keySet().stream().filter(tp -> AI_TOPIC.equals(tp.topic())).forEach(tp -> latest.put(tp, OffsetSpec.latest()));
+            long lag = 0;
+            for (var e : client.listOffsets(latest).all().get(TIMEOUT_MS, TimeUnit.MILLISECONDS).entrySet())
+                lag += Math.max(0, e.getValue().offset() - committed.get(e.getKey()).offset());
+            out.put("aiLag", lag);
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            log.debug("Khong doc duoc consumer group {}: {}", AI_GROUP, e.toString());
         }
     }
 }

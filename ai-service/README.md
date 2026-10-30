@@ -37,8 +37,14 @@ The service has no database, does not train models, and does not persist product
 | `FASHION_CLIP_DEVICE` | `auto` | `auto`, `cpu`, or a Torch device such as `cuda` |
 | `RANKING_*_WEIGHT` | `0.60/0.20/0.10/0.10` | Visual/style/color/metadata ranking weights |
 | `ALLOWED_ORIGINS` | Local frontend/gateway origins | Comma-separated CORS allowlist |
+| `KAFKA_ENABLED` | `true` | Connect to SCANMS Kafka (docker-compose `kafka`) |
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Broker address |
+| `KAFKA_GROUP_ID` | `ai-service` | Consumer group shown on Admin → Giám sát |
+| `KAFKA_ANALYSIS_TOPIC` | `ai.analysis.completed.v1` | Topic phát sau `/analyze` |
 
 Copy `.env.example` to `.env` when local overrides are needed.
+
+Kafka is optional at runtime: if the broker is down, the HTTP API still serves detection/analyze and health reports `kafkaConnected=false`.
 
 ## Local setup
 
@@ -105,10 +111,20 @@ If the Python menus are absent, install/enable JetBrains' Python plugin and rest
 
 ## Endpoints
 
-- `GET /api/v1/ai/health`
+- `GET /api/v1/ai/health` (includes `kafkaConnected`, group, topic)
 - `POST /api/v1/ai/detect` with multipart field `image`
-- `POST /api/v1/ai/analyze` with multipart field `image` (recommended full pipeline)
+- `POST /api/v1/ai/analyze` with multipart field `image` (recommended full pipeline; publishes Kafka event when connected)
 - Swagger UI: `GET /docs`
+
+### Kafka
+
+With `KAFKA_ENABLED=true` and broker at `KAFKA_BOOTSTRAP_SERVERS`:
+
+1. Creates topic `ai.analysis.completed.v1` (3 partitions) if missing
+2. Joins consumer group `ai-service` (visible on Admin system health)
+3. After each successful `/analyze`, produces a compact JSON event (class, colors, style, latency)
+
+Start broker first: `docker compose up -d kafka` from `SCANMS_BE`.
 
 Example request:
 

@@ -12,3 +12,5 @@ def test_health_returns_valid_state() -> None:
     assert payload["service"] == "ai-service"
     assert payload["status"] in {"UP", "DEGRADED"}
     assert isinstance(payload["modelLoaded"], bool)
+    assert "kafkaConnected" in payload
+    assert isinstance(payload["kafkaConnected"], bool)

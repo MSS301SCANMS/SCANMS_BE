@@ -1,32 +1,5 @@
 services:
   # Database for Keycloak
-  keycloak-db:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: keycloak_db
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak
-    ports:
-      - "5454:5432"
-    volumes:
-      - keycloak-db-data:/var/lib/postgresql/data
-
-  # Keycloak authentication server
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.0.0
-    command: start-dev
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak_db
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-    ports:
-      - "8180:8080"
-    depends_on:
-      - keycloak-db
-
   # Redis: cache dùng chung + OTP (user/product/order-service)
   redis:
     image: redis:7.4-alpine
@@ -41,7 +14,7 @@ services:
     volumes:
       - redis-data:/data
 
-  # Kafka (KRaft, 1 node): user-service phát user.registered.v1, payment-service tạo ví
+  # Kafka (KRaft, 1 node): user→payment (user.registered.v1), ai-service (ai.analysis.completed.v1)
   kafka:
     image: apache/kafka:3.9.0
     environment:
@@ -63,7 +36,5 @@ services:
 volumes:
   kafka-data:
     name: scanms-kafka-data
-  keycloak-db-data:
-    name: scanms-keycloak_keycloak-db-data
   redis-data:
     name: scanms-redis-data

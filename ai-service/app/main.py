@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.models.model_loader import load_model
 from app.models.fashion_clip_loader import load_fashion_clip
 from app.models.schemas import ErrorResponse
+from app.services.kafka_service import start_kafka, stop_kafka
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -21,7 +22,11 @@ settings = get_settings()
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     load_model()
     load_fashion_clip()
-    yield
+    await start_kafka()
+    try:
+        yield
+    finally:
+        await stop_kafka()
 
 
 app = FastAPI(
