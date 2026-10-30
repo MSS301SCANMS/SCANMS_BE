@@ -6,6 +6,7 @@
     <groupId>com.scanms</groupId><artifactId>scanms-backend</artifactId><version>0.0.1-SNAPSHOT</version><packaging>pom</packaging>
     <name>SCANMS Backend</name>
     <modules>
+        <module>scanms-ops-starter</module>
         <module>user-service</module><module>scanms-gateway</module><module>product-service</module><module>order-service</module>
         <module>payment-service</module><module>promotion-affiliate-service</module>
     </modules>

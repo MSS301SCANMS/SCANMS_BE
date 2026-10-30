@@ -84,3 +84,19 @@ cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}
   api-key: ${CLOUDINARY_API_KEY:demo}
   api-secret: ${CLOUDINARY_API_SECRET:demo}
+
+# Trang Giám sát hệ thống: chỉ mở các endpoint cần thiết; health không lộ chi tiết, hai endpoint scanms* chỉ cho ADMIN/SYSTEM_ADMIN.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,scanmsinfo,scanmslogs
+  endpoint:
+    health:
+      show-details: never
+  # Redis và mail chỉ là phần phụ (cache, gửi thư): lỗi thì service hạ cấp chứ không "DOWN". Trạng thái Redis xem ở scanmsinfo.
+  health:
+    redis:
+      enabled: false
+    mail:
+      enabled: false

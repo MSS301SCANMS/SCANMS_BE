@@ -79,6 +79,45 @@ spring:
               uri: ${PROMOTION_SERVICE_URL:http://localhost:8085}
               predicates:
                 - "Path=/api/v1/vouchers/**,/api/v1/voucher-redemptions/**,/api/v1/checkout-vouchers/**,/api/v1/collaborators/**,/api/v1/referrals/**,/api/v1/commission-policies/**,/api/v1/commissions/**"
+            # Trang Giám sát hệ thống: /api/v1/ops/{service}/x  ->  /actuator/x của service đó (chỉ ADMIN/SYSTEM_ADMIN, kiểm tra ở SecurityConfig)
+            - id: ops-user
+              uri: ${USER_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - "Path=/api/v1/ops/user/**"
+              filters:
+                - 'RewritePath=/api/v1/ops/user/(?<segment>.*), /actuator/$\{segment}'
+            - id: ops-product
+              uri: ${PRODUCT_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - "Path=/api/v1/ops/product/**"
+              filters:
+                - 'RewritePath=/api/v1/ops/product/(?<segment>.*), /actuator/$\{segment}'
+            - id: ops-order
+              uri: ${ORDER_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - "Path=/api/v1/ops/order/**"
+              filters:
+                - 'RewritePath=/api/v1/ops/order/(?<segment>.*), /actuator/$\{segment}'
+            - id: ops-payment
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+              predicates:
+                - "Path=/api/v1/ops/payment/**"
+              filters:
+                - 'RewritePath=/api/v1/ops/payment/(?<segment>.*), /actuator/$\{segment}'
+            - id: ops-promotion
+              uri: ${PROMOTION_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - "Path=/api/v1/ops/promotion/**"
+              filters:
+                - 'RewritePath=/api/v1/ops/promotion/(?<segment>.*), /actuator/$\{segment}'
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,scanmsinfo,scanmslogs,scanmsroutes
+  endpoint:
+    health:
+      show-details: never
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

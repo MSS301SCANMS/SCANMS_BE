@@ -44,3 +44,19 @@ scanms:
     client-id: ${AFFILIATE_SERVICE_CLIENT_ID:promotion-affiliate-service}
     client-secret: ${AFFILIATE_SERVICE_CLIENT_SECRET:}
     dispatch-delay-ms: ${FINANCE_DISPATCH_DELAY_MS:60000}
+
+# Trang Giám sát hệ thống: chỉ mở các endpoint cần thiết; health không lộ chi tiết, hai endpoint scanms* chỉ cho ADMIN/SYSTEM_ADMIN.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,scanmsinfo,scanmslogs
+  endpoint:
+    health:
+      show-details: never
+  # Redis và mail chỉ là phần phụ (cache, gửi thư): lỗi thì service hạ cấp chứ không "DOWN". Trạng thái Redis xem ở scanmsinfo.
+  health:
+    redis:
+      enabled: false
+    mail:
+      enabled: false

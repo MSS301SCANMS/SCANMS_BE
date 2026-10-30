@@ -63,3 +63,19 @@ scanms:
       length-cm: ${GHN_SANDBOX_PARCEL_LENGTH_CM:25}
       width-cm: ${GHN_SANDBOX_PARCEL_WIDTH_CM:20}
       height-cm: ${GHN_SANDBOX_PARCEL_HEIGHT_CM:8}
+
+# Trang Giám sát hệ thống: chỉ mở các endpoint cần thiết; health không lộ chi tiết, hai endpoint scanms* chỉ cho ADMIN/SYSTEM_ADMIN.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,scanmsinfo,scanmslogs
+  endpoint:
+    health:
+      show-details: never
+  # Redis và mail chỉ là phần phụ (cache, gửi thư): lỗi thì service hạ cấp chứ không "DOWN". Trạng thái Redis xem ở scanmsinfo.
+  health:
+    redis:
+      enabled: false
+    mail:
+      enabled: false

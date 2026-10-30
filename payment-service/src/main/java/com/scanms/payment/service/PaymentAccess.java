@@ -112,4 +112,9 @@ public class PaymentAccess {
     public void trustedOnly() {
         if (!operator() && !internal()) throw new AppException(ErrorCode.FORBIDDEN);
     }
+
+    /** Thông tin giám sát hệ thống chỉ dành cho ADMIN và SYSTEM_ADMIN, không gồm MANAGER. */
+    public void systemAdminOnly() {
+        if (!role("ADMIN") && !role("SYSTEM_ADMIN")) throw new AppException(ErrorCode.FORBIDDEN);
+    }
 }
