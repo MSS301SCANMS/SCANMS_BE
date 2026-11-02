@@ -30,11 +30,12 @@ public class LiveCommerceServiceImpl implements LiveCommerceService, LiveOfferPr
     private final LivePurchaseAccess purchases;
     private final LivestreamSchedulePolicy schedule;
     private final LivestreamBroadcastPolicy broadcast;
+    private final LivePinPolicy pins;
 
-    @Transactional(readOnly = true)
     public LiveCommerceResponse get(String id, boolean management) {
-        var live = lives.findById(id).orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+        var live = lives.lockById(id).orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
         if (management) access.requireApprovedStore(live.getStoreId());
+        pins.clearUnavailable(live);
         return response(live, management);
     }
 
@@ -72,8 +73,8 @@ public class LiveCommerceServiceImpl implements LiveCommerceService, LiveOfferPr
         offers.add(offer);
         var refs = copy(live.getProductRefs());
         refs.put("offers", offers);
-        refs.put("pinnedProductId", request.productId());
         live.setProductRefs(refs);
+        pins.set(live, request.productId());
         return response(live, true);
     }
 
@@ -176,7 +177,7 @@ public class LiveCommerceServiceImpl implements LiveCommerceService, LiveOfferPr
                     return row;
                 })
                 .filter(row -> management || "PUBLISHED".equals(row.get("status"))).map(mapper::toVoucherDrop).toList();
-        return new LiveCommerceResponse(offers, drops, Objects.toString(live.getProductRefs() == null ? null : live.getProductRefs().get("pinnedProductId"), null));
+        return new LiveCommerceResponse(offers, drops, Objects.toString(live.getProductRefs() == null ? null : live.getProductRefs().get("pinnedProductId"), null), pins.revision(live));
     }
 
     private Map<String, Object> findVoucher(Livestream live, String id) {

@@ -31,6 +31,7 @@ public class LivestreamServiceImpl implements LivestreamService {
     private final LivestreamSchedulePolicy schedule;
     private final LivestreamLifecycleService lifecycle;
     private final LivestreamBroadcastPolicy broadcast;
+    private final LivePinPolicy pins;
 
     public LivestreamResponse create(CreateLivestreamRequest request) {
         access.requireApprovedStore(request.storeId());
@@ -53,7 +54,9 @@ public class LivestreamServiceImpl implements LivestreamService {
     }
 
     public LivestreamResponse getById(String id) {
-        return mapper.toResponse(locked(id));
+        var live = locked(id);
+        pins.clearUnavailable(live);
+        return mapper.toResponse(live);
     }
 
     public List<LivestreamResponse> findAll() {
@@ -89,6 +92,7 @@ public class LivestreamServiceImpl implements LivestreamService {
             var refs = new LinkedHashMap<String, Object>(live.getProductRefs() == null ? Map.of() : live.getProductRefs());
             refs.put("productIds", request.productRefs().getOrDefault("productIds", List.of()));
             live.setProductRefs(refs);
+            pins.clearUnavailable(live);
         }
         live.setParticipantRefs(participants);
         live.setScheduledAt(schedule);
@@ -166,17 +170,22 @@ public class LivestreamServiceImpl implements LivestreamService {
     }
 
     public LivestreamResponse pinProduct(String id, String productId) {
+        return pinProduct(id, productId, null);
+    }
+
+    public LivestreamResponse pinProduct(String id, String productId, Long expectedRevision) {
         var live = locked(id);
         requireHost(live);
         if (live.getStatus() != LivestreamStatus.LIVE) throw conflict("Phiên chưa phát sóng.");
+        if (expectedRevision != null && expectedRevision != pins.revision(live))
+            throw conflict("Sản phẩm ghim đã thay đổi. Vui lòng thử lại từ trạng thái mới nhất.");
         if (productId != null) {
             if (live.getProductRefs() == null || !(live.getProductRefs().get("productIds") instanceof Collection<?> ids) || !ids.contains(productId))
                 throw invalid("Sản phẩm không thuộc phiên live.");
             validateProducts(live.getStoreId(), Map.of("productIds", List.of(productId)));
+            if (!pins.available(live, productId)) throw conflict("Sản phẩm hiện không có phân loại còn hàng để bán.");
         }
-        var refs = new LinkedHashMap<String, Object>(live.getProductRefs() == null ? Map.of() : live.getProductRefs());
-        refs.put("pinnedProductId", productId);
-        live.setProductRefs(refs);
+        pins.set(live, productId);
         return mapper.toResponse(repository.save(live));
     }
 

@@ -1,6 +1,7 @@
 package com.scanms.promotion.service.impl;
 
 import com.scanms.promotion.constant.CollaboratorStatus;
+import com.scanms.promotion.dto.request.CommissionNegotiationRequest;
 import com.scanms.promotion.entity.CollaboratorProfile;
 import com.scanms.promotion.entity.CommissionPolicy;
 import com.scanms.promotion.entity.ProductCommissionDeal;
@@ -12,6 +13,8 @@ import com.scanms.promotion.service.ProductCommissionDealService;
 import com.scanms.promotion.service.ReferralProductAccess;
 import com.scanms.promotion.service.VoucherAccess;
 import lombok.RequiredArgsConstructor;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -20,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,6 +36,8 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class ProductCommissionDealServiceImpl implements ProductCommissionDealService {
+
+    private final EntityManager em;
 
     private final ProductCommissionDealRepository deals;
     private final CollaboratorProfileRepository profiles;
@@ -90,7 +96,8 @@ public class ProductCommissionDealServiceImpl implements ProductCommissionDealSe
         if (access.ownsStore(storeId)) {
             throw fail(HttpStatus.FORBIDDEN, "Không thể tự đề xuất hoa hồng cho sản phẩm của mình.");
         }
-        if (deals.existsByCollaboratorIdAndProductIdAndStatus(profile.getCollaboratorId(), productId, "PENDING")) {
+        if (deals.existsByCollaboratorIdAndProductIdAndStatus(profile.getCollaboratorId(), productId, "PENDING")
+                || deals.existsByCollaboratorIdAndProductIdAndStatus(profile.getCollaboratorId(), productId, "COUNTERED")) {
             throw fail(HttpStatus.CONFLICT, "Sản phẩm đã có đề xuất chờ shop phản hồi.");
         }
 
@@ -111,6 +118,8 @@ public class ProductCommissionDealServiceImpl implements ProductCommissionDealSe
         deal.setMessage(text);
         deal.setStatus("PENDING");
         deal.setCreatedAt(Instant.now());
+        deal.setProposedByUserId(profile.getUserId());
+        recordNegotiation(deal, profile.getUserId(), "PROPOSE", text);
 
         return deals.saveAndFlush(deal);
     }
@@ -118,11 +127,22 @@ public class ProductCommissionDealServiceImpl implements ProductCommissionDealSe
     @Override
     @Transactional
     public ProductCommissionDeal respond(String id, String decision, String response) {
+        return respond(id, decision, response, false);
+    }
+
+    private ProductCommissionDeal respond(String id, String decision, String response, boolean versionChecked) {
         // Lock theo đúng thứ tự profile trước, deal sau để tránh deadlock
         var target = deals.findById(id).orElseThrow(() -> fail(HttpStatus.NOT_FOUND, "Không tìm thấy đề xuất."));
-        access.requireStoreOwner(target.getStoreId());
+        String actor = access.userId();
+        boolean kolReply = "COUNTERED".equals(target.getStatus()) && profiles.findById(target.getCollaboratorId())
+                .map(p -> actor.equals(p.getUserId())).orElse(false);
+        if (!kolReply) access.requireStoreOwner(target.getStoreId());
         var profile = profiles.lockById(target.getCollaboratorId()).orElseThrow(() -> fail(HttpStatus.NOT_FOUND, "Không tìm thấy KOL."));
         var d = deals.locked(id).orElseThrow();
+        if (!versionChecked && Set.of("PENDING", "COUNTERED").contains(d.getStatus()) && d.getNegotiationHistory() != null && d.getNegotiationHistory().size() > 1)
+            throw fail(HttpStatus.CONFLICT, "Hãy mở đề xuất mới nhất trong chat để phản hồi.");
+        if (!"ENDED".equals(decision) && actor.equals(d.getProposedByUserId()))
+            throw fail(HttpStatus.FORBIDDEN, "Không thể tự chấp nhận hoặc từ chối đề xuất của mình.");
 
         if (!Set.of("APPROVED", "REJECTED", "ENDED").contains(decision)) {
             throw fail(HttpStatus.BAD_REQUEST, "Phản hồi không hợp lệ.");
@@ -141,7 +161,7 @@ public class ProductCommissionDealServiceImpl implements ProductCommissionDealSe
             }
             d.setEndedAt(now);
         } else {
-            if (!"PENDING".equals(d.getStatus())) {
+            if (!Set.of("PENDING", "COUNTERED").contains(d.getStatus())) {
                 throw fail(HttpStatus.CONFLICT, "Đề xuất đã được xử lý. Vui lòng cập nhật.");
             }
             if ("APPROVED".equals(decision)) {
@@ -172,8 +192,50 @@ public class ProductCommissionDealServiceImpl implements ProductCommissionDealSe
         d.setStatus(decision);
         d.setResponse(response == null ? null : response.trim());
         d.setRespondedAt(now);
+        recordNegotiation(d, actor, decision, response);
 
         return deals.saveAndFlush(d);
+    }
+
+    @Override
+    @Transactional
+    public ProductCommissionDeal negotiate(String id, CommissionNegotiationRequest request) {
+        var target = deals.findById(id).orElseThrow(() -> fail(HttpStatus.NOT_FOUND, "Không tìm thấy đề xuất."));
+        var profile = profiles.lockById(target.getCollaboratorId()).orElseThrow();
+        String actor = access.userId();
+        boolean kol = actor.equals(profile.getUserId());
+        if (!kol) access.requireStoreOwner(target.getStoreId());
+        if (profile.getApprovalStatus() != CollaboratorStatus.APPROVED)
+            throw fail(HttpStatus.FORBIDDEN, "KOL chưa hoạt động.");
+        em.refresh(target, LockModeType.PESSIMISTIC_WRITE);
+        var d = target;
+        if (!Objects.equals(request.expectedVersion(), d.getVersion()) || !Set.of("PENDING", "COUNTERED").contains(d.getStatus()))
+            throw fail(HttpStatus.CONFLICT, "Đề xuất đã thay đổi. Vui lòng tải lại phiên bản mới nhất.");
+        String proposer = d.getProposedByUserId() == null ? profile.getUserId() : d.getProposedByUserId();
+        if (actor.equals(proposer)) throw fail(HttpStatus.FORBIDDEN, "Đề xuất đang chờ bên còn lại phản hồi.");
+        if (!"COUNTER".equals(request.action()))
+            return respond(id, "ACCEPT".equals(request.action()) ? "APPROVED" : "REJECTED", request.note(), true);
+        if (request.extraPoints() == null || request.extraPoints() < 1 || request.extraPoints() > 3)
+            throw fail(HttpStatus.BAD_REQUEST, "Mức tăng phải từ 1 đến 3 điểm phần trăm.");
+        var policy = policy(d.getCollaboratorId(), d.getProductId(), d.getStoreId());
+        validateTotal(policy.getCommissionRate(), request.extraPoints());
+        d.setBaseRate(policy.getCommissionRate());
+        d.setBasePolicyId(policy.getPolicyId());
+        d.setExtraPoints(request.extraPoints());
+        d.setProposedByUserId(actor);
+        d.setStatus(kol ? "PENDING" : "COUNTERED");
+        d.setResponse(request.note());
+        d.setRespondedAt(Instant.now());
+        recordNegotiation(d, actor, "COUNTER", request.note());
+        return deals.saveAndFlush(d);
+    }
+
+    private void recordNegotiation(ProductCommissionDeal deal, String actor, String action, String note) {
+        var history = new ArrayList<>(deal.getNegotiationHistory() == null ? List.<Map<String, Object>>of() : deal.getNegotiationHistory());
+        if (history.size() >= 100) throw fail(HttpStatus.CONFLICT, "Đã đạt giới hạn thương lượng cho đề xuất này.");
+        history.add(Map.of("actorId", actor, "action", action, "extraPoints", deal.getExtraPoints(),
+                "baseRate", deal.getBaseRate(), "note", Objects.toString(note, ""), "at", Instant.now().toString()));
+        deal.setNegotiationHistory(history);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.scanms.promotion.service;
 
+import com.scanms.promotion.dto.request.CommissionNegotiationRequest;
 import com.scanms.promotion.entity.CommissionPolicy;
 import com.scanms.promotion.entity.ProductCommissionDeal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -21,7 +22,8 @@ public interface ProductCommissionDealService {
             String dealId,
             String policyId,
             BigDecimal currentPolicyRate
-    ) {}
+    ) {
+    }
 
     List<ProductCommissionDeal> mine();
 
@@ -34,6 +36,8 @@ public interface ProductCommissionDealService {
     ProductCommissionDeal respond(String id, String decision, String response);
 
     ProductCommissionDeal cancel(String id);
+
+    ProductCommissionDeal negotiate(String id, CommissionNegotiationRequest request);
 
     Rate rate(
             String collaboratorId,

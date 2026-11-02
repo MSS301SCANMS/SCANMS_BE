@@ -7,18 +7,16 @@ import com.scanms.product.mapper.LivestreamMapper;
 import com.scanms.product.repository.LivestreamRepository;
 import com.scanms.product.repository.ProductRepository;
 import com.scanms.product.service.impl.LivestreamServiceImpl;
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
-
-import org.mapstruct.factory.Mappers;
 
 class LivestreamReferenceUpdateTest {
     private final LivestreamRepository livestreams = mock(LivestreamRepository.class);
@@ -27,7 +25,7 @@ class LivestreamReferenceUpdateTest {
     private final LivestreamServiceImpl service = new LivestreamServiceImpl(livestreams,
             Mappers.getMapper(LivestreamMapper.class), access, products,
             mock(com.scanms.product.client.LivestreamAffiliateClient.class),
-            new LivestreamSchedulePolicy(), mock(LivestreamLifecycleService.class), new LivestreamBroadcastPolicy());
+            new LivestreamSchedulePolicy(), mock(LivestreamLifecycleService.class), new LivestreamBroadcastPolicy(), mock(LivePinPolicy.class));
 
     @Test
     void sellerCanUpdateParticipantsAndApprovedCollaboratorReferences() {

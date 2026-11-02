@@ -78,7 +78,7 @@ spring:
             - id: promotion-service
               uri: ${PROMOTION_SERVICE_URL:http://localhost:8085}
               predicates:
-                - "Path=/api/v1/vouchers/**,/api/v1/voucher-redemptions/**,/api/v1/checkout-vouchers/**,/api/v1/collaborators/**,/api/v1/referrals/**,/api/v1/commission-policies/**,/api/v1/commissions/**"
+                - "Path=/api/v1/vouchers/**,/api/v1/voucher-redemptions/**,/api/v1/checkout-vouchers/**,/api/v1/collaborators/**,/api/v1/referrals/**,/api/v1/commission-policies/**,/api/v1/commissions/**,/api/v1/sample-requests/**"
             # Trang Giám sát hệ thống: /api/v1/ops/{service}/x  ->  /actuator/x của service đó (chỉ ADMIN/SYSTEM_ADMIN, kiểm tra ở SecurityConfig)
             - id: ops-user
               uri: ${USER_SERVICE_URL:http://localhost:8081}

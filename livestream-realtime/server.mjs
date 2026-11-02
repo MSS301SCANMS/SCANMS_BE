@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { Server } from 'socket.io';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createHmac, randomUUID } from 'node:crypto';
+import { registerStoreChat } from './store-chat.mjs';
 
 const idPattern = /^[A-Za-z0-9_-]{1,100}$/;
 const emojis = new Set(['❤️','👍','😂','😮','😢','😡','🔥','🎁','🎉','💯','⭐']);
@@ -34,6 +35,7 @@ export function createLiveServer({
     allowRequest: (request, callback) => callback(null, !request.headers.origin || origins.includes(request.headers.origin)),
   });
   const live = io.of('/live-stream');
+  registerStoreChat(io, { apiUrl, verify, fetcher });
   const rooms = new Map();
   const reactionStates = new Map();
   let joiningCount = 0;
@@ -246,7 +248,9 @@ export function createLiveServer({
         if (requestedRole !== 'host' && [...room.members].filter(id => subscriber(live.sockets.get(id))).length >= maxViewers) {const error=new Error('Phòng live đã đủ kết nối xem cho cấu hình hiện tại. Vui lòng thử lại sau.');error.code='ROOM_FULL';throw error;}
         leave(socket); rooms.set(sessionId, room);
         socket.data.sessionId = sessionId; socket.data.role = requestedRole;
-        room.members.add(socket.id); room.session = session; socket.join(sessionId);
+        room.members.add(socket.id);
+        if(Number(session.productRefs?.pinRevision || 0)>=Number(room.session.productRefs?.pinRevision || 0)) room.session = session;
+        socket.join(sessionId);
         if (requestedRole === 'host') {
           room.hostId = socket.id;socket.to(sessionId).emit('live_host_available');
           for (const id of room.members) if (subscriber(live.sockets.get(id))) socket.emit('live_viewer_joined', { viewerSocketId: id });
@@ -258,7 +262,7 @@ export function createLiveServer({
           pendingViews.set(key,{id:sessionId,visitId:socket.id,token:socket.data.token,expiresAt:socket.data.claims.exp});
           socket.data.viewQueuedSession=sessionId;void flushViews();
         }
-        if (room.pinnedProductId !== undefined) socket.emit('product_pinned_changed', { productIndex: (room.session.productRefs?.productIds || []).indexOf(room.pinnedProductId), productId: room.pinnedProductId });
+        if (room.pinnedProductId !== undefined) socket.emit('product_pinned_changed', { productIndex: (room.session.productRefs?.productIds || []).indexOf(room.pinnedProductId), productId: room.pinnedProductId, pinRevision: Number(room.session.productRefs?.pinRevision || 0) });
         const purchaseToken=await purchaseAccess(socket);
         return { hostOnline: Boolean(room.hostId), streamActive: room.publishing, viewerCount:audienceCount(room), likesCount:reactionsFor(sessionId,session,socket.data.token).count, purchaseToken, broadcast:session.participantRefs?.broadcast };
       } finally { socket.data.joining = false;joiningCount--; }
@@ -317,17 +321,26 @@ export function createLiveServer({
       return { message };
     });
     on('host_pin_product', async ({ sessionId, productIndex, productId }) => {
-      const room = roomFor(socket); const ids = room.session.productRefs?.productIds || [];
+      const room = roomFor(socket);
+      if (sessionId !== room.id || (room.hostId !== socket.id && socket.data.role !== 'moderator')) throw new Error('Bạn không có quyền ghim sản phẩm.');
+      const current = await authorize(socket, room.id, socket.data.role);
+      if(Number(current.productRefs?.pinRevision || 0)>=Number(room.session.productRefs?.pinRevision || 0)) room.session=current;
+      const ids = room.session.productRefs?.productIds || [];
       if (sessionId !== room.id || (room.hostId !== socket.id && socket.data.role !== 'moderator') || !Number.isInteger(productIndex) || productIndex < -1 || productIndex >= ids.length || (productId && ids[productIndex] !== productId)) throw new Error('Sản phẩm ghim không hợp lệ.');
       const pinned=productIndex === -1 ? null : ids[productIndex];
-      const response=await fetcher(`${apiUrl}/livestreams/${encodeURIComponent(sessionId)}/pin`,{method:'POST',headers:{Authorization:`Bearer ${socket.data.token}`,'Content-Type':'application/json'},body:JSON.stringify({productId:pinned}),signal:AbortSignal.timeout(6000)});
+      const response=await fetcher(`${apiUrl}/livestreams/${encodeURIComponent(sessionId)}/pin`,{method:'POST',headers:{Authorization:`Bearer ${socket.data.token}`,'Content-Type':'application/json'},body:JSON.stringify({productId:pinned,expectedRevision:Number(room.session.productRefs?.pinRevision || 0)}),signal:AbortSignal.timeout(6000)});
       if(!response.ok){
         const detail=await response.json().catch(()=>null);
         throw new Error(response.status===404?'Chức năng ghim chưa sẵn sàng ở máy chủ. Cần cập nhật dịch vụ rồi thử lại.':detail?.message||'Chưa lưu được sản phẩm ghim. Hãy thử lại.');
       }
-      room.pinnedProductId = pinned;
-      room.session.productRefs={...room.session.productRefs,pinnedProductId:pinned};
-      live.to(room.id).emit('product_pinned_changed', { productIndex, productId: room.pinnedProductId });
+      const saved=unpack(await response.json());
+      const revision=Number(saved?.productRefs?.pinRevision || 0);
+      if(revision < Number(room.session.productRefs?.pinRevision || 0)) return {};
+      room.pinnedProductId = saved?.productRefs && Object.hasOwn(saved.productRefs,'pinnedProductId') ? saved.productRefs.pinnedProductId : pinned;
+      room.session.productRefs={...room.session.productRefs,...saved?.productRefs,pinnedProductId:room.pinnedProductId,pinRevision:revision};
+      const event={ productIndex:(room.session.productRefs.productIds || ids).indexOf(room.pinnedProductId), productId:room.pinnedProductId,pinRevision:revision };
+      live.to(room.id).emit('product_pinned_changed', event);
+      return event;
     });
     on('send_reaction', ({ sessionId, emoji, clientReactionId }) => {
       const room = roomFor(socket);
@@ -360,13 +373,14 @@ export function createLiveServer({
         if (!member) continue;
         try {
           const session = await authorize(member, room.id, member.data.role);
+          if(Number(session.productRefs?.pinRevision || 0)<Number(room.session.productRefs?.pinRevision || 0)) session.productRefs=room.session.productRefs;
           room.session = session;
           const publisher = live.sockets.get(room.hostId);
           if (publisher && room.publishing) await broadcastPresence(publisher, 'LIVE');
           if(room.serviceUnavailable){room.serviceUnavailable=false;live.to(room.id).emit('live_service_ready');}
-          if(Object.hasOwn(session.productRefs || {},'pinnedProductId') && room.pinnedProductId!==session.productRefs.pinnedProductId){
+          if(Number(session.productRefs?.pinRevision || 0)>=Number(room.session.productRefs?.pinRevision || 0) && Object.hasOwn(session.productRefs || {},'pinnedProductId') && room.pinnedProductId!==session.productRefs.pinnedProductId){
             room.pinnedProductId=session.productRefs.pinnedProductId;
-            live.to(room.id).emit('product_pinned_changed',{productId:room.pinnedProductId,productIndex:(session.productRefs.productIds || []).indexOf(room.pinnedProductId)});
+            live.to(room.id).emit('product_pinned_changed',{productId:room.pinnedProductId,productIndex:(session.productRefs.productIds || []).indexOf(room.pinnedProductId),pinRevision:Number(session.productRefs.pinRevision || 0)});
           }
           if(session.status==='LIVE')for(const id of room.members){
             const viewer=live.sockets.get(id);

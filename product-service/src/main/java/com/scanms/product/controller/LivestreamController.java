@@ -1,8 +1,10 @@
 package com.scanms.product.controller;
 
+import com.scanms.product.constant.LivestreamStatus;
 import com.scanms.product.dto.ApiResponse;
 import com.scanms.product.dto.request.CreateLivestreamRequest;
 import com.scanms.product.dto.request.UpdateLivestreamReactionCountRequest;
+import com.scanms.product.dto.request.UpdateLivestreamRequest;
 import com.scanms.product.dto.response.LivestreamReactionCountResponse;
 import com.scanms.product.dto.response.LivestreamResponse;
 import com.scanms.product.service.LiveMetricsSignature;
@@ -10,26 +12,24 @@ import com.scanms.product.service.LivestreamReactionService;
 import com.scanms.product.service.LivestreamService;
 import com.scanms.product.service.LivestreamViewerService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
-
-import java.util.List;
-
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.PatchMapping;
-import com.scanms.product.constant.LivestreamStatus;
-import com.scanms.product.dto.request.UpdateLivestreamRequest;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/livestreams")
@@ -109,12 +109,13 @@ public class LivestreamController {
     }
 
     public record PinRequest(
-            @Pattern(regexp = "[A-Za-z0-9_-]{1,100}") String productId) {
+            @Pattern(regexp = "[A-Za-z0-9_-]{1,100}") String productId,
+            @Min(0) Long expectedRevision) {
     }
 
     @PostMapping("/{id}/pin")
     public ApiResponse<LivestreamResponse> pin(@PathVariable String id, @Valid @RequestBody PinRequest request) {
-        return ApiResponse.success(service.pinProduct(id, request.productId()));
+        return ApiResponse.success(service.pinProduct(id, request.productId(), request.expectedRevision()));
     }
 
     /**

@@ -120,6 +120,54 @@ class LiveCommerceIntegrationTest {
     }
 
     @Test
+    void pinRevisionRejectsStaleWritesAndClearsUnavailableOrEndedProducts() {
+        var first = livestreams.pinProduct(liveId, productId, 0L);
+        long revision = ((Number) first.productRefs().get("pinRevision")).longValue();
+        assertEquals(1L, revision);
+        assertEquals(productId, first.productRefs().get("pinnedProductId"));
+        assertThrows(AppException.class, () -> livestreams.pinProduct(liveId, null, 0L));
+        var unpinned = livestreams.pinProduct(liveId, null, revision);
+        assertNull(unpinned.productRefs().get("pinnedProductId"));
+        var pinned = livestreams.pinProduct(liveId, productId, 2L);
+        assertEquals(3L, ((Number) pinned.productRefs().get("pinRevision")).longValue());
+        var variant = variants.findById(variantId).orElseThrow();
+        variant.setStockQuantity(0); variant = variants.saveAndFlush(variant);
+        var unavailable = livestreams.getById(liveId);
+        assertNull(unavailable.productRefs().get("pinnedProductId"));
+        assertEquals(4L, ((Number) unavailable.productRefs().get("pinRevision")).longValue());
+        assertThrows(AppException.class, () -> livestreams.pinProduct(liveId, productId, 4L));
+        variant.setStockQuantity(2); variants.saveAndFlush(variant);
+        livestreams.pinProduct(liveId, productId, 4L);
+        var live = lives.findById(liveId).orElseThrow(); live.setStatus(LivestreamStatus.ENDED); lives.saveAndFlush(live);
+        assertNull(livestreams.getById(liveId).productRefs().get("pinnedProductId"));
+        assertThrows(AppException.class, () -> livestreams.pinProduct(liveId, productId, 6L));
+    }
+
+    @Test
+    void concurrentPinsAcceptOnlyOneWriterForTheSameRevision() throws Exception {
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var gate = new java.util.concurrent.CountDownLatch(1);
+            var results = new ArrayList<java.util.concurrent.Future<Boolean>>();
+            for (String selection : Arrays.asList(productId, null)) results.add(pool.submit(() -> {
+                actor("owner");
+                try {
+                    gate.await();
+                    livestreams.pinProduct(liveId, selection, 0L);
+                    return true;
+                } catch (AppException ex) {
+                    assertEquals(ErrorCode.CONFLICT, ex.getErrorCode());
+                    return false;
+                } finally { SecurityContextHolder.clearContext(); }
+            }));
+            gate.countDown();
+            int successes = 0;
+            for (var result : results) if (result.get(20, java.util.concurrent.TimeUnit.SECONDS)) successes++;
+            assertEquals(1, successes);
+            assertEquals(1L, ((Number) lives.findById(liveId).orElseThrow().getProductRefs().get("pinRevision")).longValue());
+        }
+    }
+
+    @Test
     void livePricesRequireRoomProofAndKeepCapturedOrdersAfterShopHidesProduct() {
         var state = commerce.createOffer(liveId, offer(2));
         assertEquals(productId, state.pinnedProductId());
