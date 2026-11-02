@@ -2,6 +2,8 @@ package com.scanms.product.controller;
 
 import com.scanms.product.constant.*;
 import com.scanms.product.dto.request.CreateLiveOfferRequest;
+import com.scanms.product.dto.request.InventoryReservationInput;
+import com.scanms.product.dto.request.InventoryReservationLine;
 import com.scanms.product.entity.*;
 import com.scanms.product.repository.*;
 import com.scanms.product.service.*;
@@ -92,7 +94,7 @@ class LivestreamLifecycleIntegrationTest {
         assertThrows(com.scanms.product.exception.AppException.class, () -> commerce.createOffer(missed.getLivestreamId(), new CreateLiveOfferRequest(productId, variantId, 900L, 1L, null, null)));
         var overdue = live("Overdue LIVE", LivestreamStatus.LIVE, Instant.now().minusSeconds(10));
         var token = Jwt.withTokenValue("internal").header("alg", "RS256").subject("order-service").claim("realm_access", Map.of("roles", List.of("ORDER_INTERNAL"))).build();
-        var request = new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId, variantId, 1, overdue.getLivestreamId())));
+        var request = new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, 1, overdue.getLivestreamId())));
         assertThrows(org.springframework.web.server.ResponseStatusException.class, () -> inventory.quote(request, token));
         assertEquals(10, variants.findById(variantId).orElseThrow().getStockQuantity());
     }

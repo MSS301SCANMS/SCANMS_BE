@@ -10,9 +10,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.server.ResponseStatusException;
+
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
+
 import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:refund-reservations;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000","spring.datasource.driver-class-name=org.h2.Driver","spring.datasource.username=sa","spring.datasource.password=","spring.jpa.hibernate.ddl-auto=create-drop","logging.level.root=WARN","scanms.finance.client-secret="})
 class RefundReservationIntegrationTest {
@@ -75,7 +77,7 @@ class RefundReservationIntegrationTest {
     @Test void fullRefundHasZeroCommissionBasisBeforeReturnWindowClosesButCannotBeFinalizedEarly() {
         var returned=request(3,ReturnRequestStatus.RECEIVED,0);
         long amount=basis(returned.getReturnRequestId()); assertEquals(100,amount);
-        finance.refunded(returned.getReturnRequestId(),new FinanceContractController.RefundInput("full-refund-ledger",amount),jwt);
+        finance.refunded(returned.getReturnRequestId(),new RefundInput("full-refund-ledger",amount),jwt);
         assertEquals(0L,finance.commissionAdjustmentItem(itemId,jwt).result().get("basisAmountVnd"));
         assertEquals(100L,finance.commissionAdjustmentItem(itemId,jwt).result().get("refundedAmountVnd"));
         assertThrows(ResponseStatusException.class,()->finance.commissionItem(itemId,jwt));

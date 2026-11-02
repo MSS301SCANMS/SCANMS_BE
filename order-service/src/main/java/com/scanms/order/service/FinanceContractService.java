@@ -18,4 +18,6 @@ public interface FinanceContractService {
     Map<String, Object> settlementBasis(String id, Jwt jwt);
 
     Map<String, Object> commissionItem(String id, Jwt jwt);
+
+    Map<String, Object> commissionAdjustmentItem(String id, Jwt jwt);
 }

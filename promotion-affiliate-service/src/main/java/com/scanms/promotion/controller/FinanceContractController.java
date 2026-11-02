@@ -16,6 +16,16 @@ import java.util.Map;
 public class FinanceContractController {
     private final FinanceContractService financeContractService;
 
+    @GetMapping("/commission-reconciliation-basis/{id}")
+    public ApiResponse<Map<String, Object>> reconciliationBasis(@PathVariable String id, @AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.success(financeContractService.reconciliationBasis(id, jwt));
+    }
+
+    @PostMapping("/commissions/{id}/reconciled")
+    public ApiResponse<Map<String, Object>> reconciled(@PathVariable String id, @RequestBody CreditInput input, @AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.success(financeContractService.reconciled(id, input, jwt));
+    }
+
     @GetMapping("/commission-basis/{id}")
     public ApiResponse<Map<String, Object>> basis(@PathVariable String id, @AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.success(financeContractService.basis(id, jwt));

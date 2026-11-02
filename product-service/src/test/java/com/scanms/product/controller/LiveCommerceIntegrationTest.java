@@ -8,6 +8,7 @@ import com.scanms.product.entity.*;
 import com.scanms.product.exception.*;
 import com.scanms.product.repository.*;
 import com.scanms.product.service.*;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,7 +18,6 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import jakarta.persistence.EntityManager;
 
 import java.time.*;
 import java.util.*;
@@ -115,8 +115,8 @@ class LiveCommerceIntegrationTest {
         return new CreateLiveOfferRequest(productId, variantId, 299000L, quantity, null, Instant.now().plusSeconds(600));
     }
 
-    InventoryCheckoutController.Input input(String token, String subject) {
-        return new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId, variantId, 1, liveId, token)), subject);
+    InventoryReservationInput input(String token, String subject) {
+        return new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, 1, liveId, token)), subject);
     }
 
     @Test
@@ -167,8 +167,8 @@ class LiveCommerceIntegrationTest {
         commerce.createOffer(liveId, offer(5));
         var other = lives.saveAndFlush(Livestream.builder().storeId(storeId).title("Other live").status(LivestreamStatus.LIVE).productRefs(Map.of("productIds", List.of(productId))).build());
         String proof = purchases.issue(liveId, jwt("buyer", "USER"));
-        var regular = new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId, variantId, 1)), "buyer");
-        var elsewhere = new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId, variantId, 1, other.getLivestreamId())), "buyer");
+        var regular = new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, 1)), "buyer");
+        var elsewhere = new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, 1, other.getLivestreamId())), "buyer");
         assertEquals(329000L, unitPrice(inventory.quote(regular, internal).result()));
         assertEquals(329000L, unitPrice(inventory.quote(elsewhere, internal).result()));
         assertEquals(299000L, unitPrice(inventory.reserve("fixed-live-price", input(proof, "buyer"), internal).result()));

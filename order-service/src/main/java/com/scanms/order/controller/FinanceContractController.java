@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-@RestController @RequestMapping("/api/v1/finance") @RequiredArgsConstructor
+@RestController
+@RequestMapping("/api/v1/finance")
+@RequiredArgsConstructor
 public class FinanceContractController {
     private final FinanceContractService service;
 
@@ -43,5 +45,10 @@ public class FinanceContractController {
     @GetMapping("/commission-order-item/{id}")
     public ApiResponse<Map<String, Object>> commissionItem(@PathVariable String id, @AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.success(service.commissionItem(id, jwt));
+    }
+
+    @GetMapping("/commission-adjustment-item/{id}")
+    public ApiResponse<Map<String, Object>> commissionAdjustmentItem(@PathVariable String id, @AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.success(service.commissionAdjustmentItem(id, jwt));
     }
 }
