@@ -13,6 +13,11 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    ResponseEntity<ApiResponse<Void>> handleUploadTooLarge(Exception exception) {
+        return ResponseEntity.status(413).body(ApiResponse.error(413, "Tệp đính kèm không được vượt quá 10 MB."));
+    }
+
     @ExceptionHandler({org.springframework.dao.DataIntegrityViolationException.class,org.springframework.dao.OptimisticLockingFailureException.class})
     ResponseEntity<ApiResponse<Void>> handleConflictingData(Exception exception){
         return ResponseEntity.status(409).body(ApiResponse.error(409,"Dữ liệu bị trùng, đang được sử dụng hoặc đã thay đổi. Vui lòng tải lại và thử lại."));

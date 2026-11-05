@@ -154,6 +154,7 @@ public class StoreChatServiceImpl implements StoreChatService {
             throw error(HttpStatus.BAD_REQUEST, "Mã tin nhắn không hợp lệ.");
         }
 
+        trimmed = cards.validateAttachment(trimmed, id, userId, key);
         var existing = messages.findById(key);
         if (existing.isPresent()) {
             StoreChatMessage m = existing.get();

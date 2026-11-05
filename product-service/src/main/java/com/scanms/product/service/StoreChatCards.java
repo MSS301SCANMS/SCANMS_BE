@@ -5,6 +5,7 @@ import com.scanms.product.entity.ProductImage;
 import com.scanms.product.mapper.StoreChatMapper;
 import com.scanms.product.repository.ProductImageRepository;
 import com.scanms.product.repository.ProductRepository;
+import com.scanms.product.repository.StoreChatAttachmentRepository;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,7 @@ public class StoreChatCards {
     private final ProductRepository products;
     private final ProductImageRepository images;
     private final StoreChatMapper mapper;
+    private final StoreChatAttachmentRepository attachments;
     private final JsonMapper json = JsonMapper.builder().build();
 
     public String validate(String text, String storeId, String customerId) {
@@ -50,6 +52,22 @@ public class StoreChatCards {
         if (!storeId.equals(resource.get("storeId")) || !customerId.equals(resource.get("customerId")))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Đề xuất không thuộc cuộc trò chuyện.");
         return json.writeValueAsString(Map.of("type", type, "resourceId", card.get("resourceId")));
+    }
+
+    public String validateAttachment(String text, String conversationId, String userId, String messageId) {
+        if (!text.startsWith("{")) return text;
+        Map<?, ?> card;
+        try {
+            card = json.readValue(text, Map.class);
+        } catch (RuntimeException exception) {
+            return text;
+        }
+        if (!"ATTACHMENT".equals(card.get("type"))) return text;
+        var file = attachments.findById(String.valueOf(card.get("attachmentId")))
+                .filter(row -> conversationId.equals(row.getConversationId()) && userId.equals(row.getUploaderId())
+                        && row.getId().equals(messageId))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Tệp không thuộc tin nhắn của bạn trong cuộc trò chuyện."));
+        return json.writeValueAsString(mapper.attachmentCard(file));
     }
 
     public Map<?, ?> resource(String type, String id) {
