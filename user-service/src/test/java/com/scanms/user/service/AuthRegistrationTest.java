@@ -81,6 +81,13 @@ class AuthRegistrationTest {
                 .andExpect(jsonPath("$.emailVerified").value(!verifyEmail))
                 .andExpect(jsonPath("$.requiredActions.length()").value(verifyEmail ? 1 : 0))
                 .andRespond(withStatus(HttpStatus.CREATED).location(URI.create(USERS + "/new-subject")));
+        if (!verifyEmail) {
+            server.expect(requestTo(USERS + "/new-subject")).andExpect(method(HttpMethod.GET))
+                    .andRespond(withSuccess("{\"emailVerified\":true,\"requiredActions\":[\"VERIFY_EMAIL\"]}", MediaType.APPLICATION_JSON));
+            server.expect(requestTo(USERS + "/new-subject")).andExpect(method(HttpMethod.PUT))
+                    .andExpect(jsonPath("$.requiredActions.length()").value(0))
+                    .andRespond(withStatus(HttpStatus.NO_CONTENT));
+        }
     }
 
     private void grantRole() {
@@ -117,6 +124,34 @@ class AuthRegistrationTest {
         grantRole();
         service.register(request());
         verify(users).saveAndFlush(any(User.class));
+        server.verify();
+    }
+
+    @Test
+    void clearingSatisfiedEmailVerificationPreservesOtherRequiredActions() {
+        token();
+        server.expect(requestTo(USERS)).andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.CREATED).location(URI.create(USERS + "/new-subject")));
+        server.expect(requestTo(USERS + "/new-subject")).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"emailVerified\":true,\"requiredActions\":[\"VERIFY_EMAIL\",\"UPDATE_PROFILE\"]}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(USERS + "/new-subject")).andExpect(method(HttpMethod.PUT))
+                .andExpect(jsonPath("$.requiredActions.length()").value(1))
+                .andExpect(jsonPath("$.requiredActions[0]").value("UPDATE_PROFILE"))
+                .andRespond(withStatus(HttpStatus.NO_CONTENT));
+        grantRole();
+        service.register(request());
+        server.verify();
+    }
+
+    @Test
+    void unverifiedEmailRequiredActionIsNeverRemoved() {
+        token();
+        server.expect(requestTo(USERS)).andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.CREATED).location(URI.create(USERS + "/new-subject")));
+        server.expect(requestTo(USERS + "/new-subject")).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"emailVerified\":false,\"requiredActions\":[\"VERIFY_EMAIL\"]}", MediaType.APPLICATION_JSON));
+        grantRole();
+        service.register(request());
         server.verify();
     }
 

@@ -2,6 +2,7 @@ import urllib.request
 import json
 
 accounts = [
+    ("customer01@scanms.com", "123456", "USER"),
     ("admin@scanms.com", "123456", "ADMIN"),
     ("shopowner01@scanms.com", "123456", "SHOP_OWNER"),
     ("kolctv01@scanms.com", "123456", "KOL_CTV"),

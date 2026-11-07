@@ -134,6 +134,8 @@ public class AuthServiceImpl implements AuthService {
 
                 if (emailVerificationEnabled) {
                     sendVerifyEmail(identitySubject, adminToken);
+                } else {
+                    clearSatisfiedEmailVerification(identitySubject, adminToken);
                 }
                 // Lưu vào database của user-service
                 // Public registration must never grant business or administrator roles.
@@ -201,6 +203,24 @@ public class AuthServiceImpl implements AuthService {
                 "Chưa xác nhận được tài khoản vừa tạo. Vui lòng liên hệ hỗ trợ.");
     }
 
+    private void clearSatisfiedEmailVerification(String subject, String token) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        String url = serverUrl + "/admin/realms/" + realm + "/users/" + subject;
+        var response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {});
+        var user = response.getBody();
+        // Keycloak can append its default VERIFY_EMAIL action even when the new
+        // account was already verified by the explicitly configured registration mode.
+        // Preserve all other required actions and never bypass an unverified email.
+        if (user != null && Boolean.TRUE.equals(user.get("emailVerified"))
+                && user.get("requiredActions") instanceof List<?> actions && actions.contains("VERIFY_EMAIL")) {
+            var remaining = actions.stream().filter(action -> !"VERIFY_EMAIL".equals(action)).toList();
+            restTemplate.exchange(url, HttpMethod.PUT,
+                    new HttpEntity<>(Map.of("requiredActions", remaining), headers), Void.class);
+        }
+    }
+
     private void deleteFailedRegistration(String subject, String token) {
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -248,11 +268,11 @@ public class AuthServiceImpl implements AuthService {
                 throw new AppException(ErrorCode.INVALID_CREDENTIALS,
                         "Tài khoản chưa hoàn tất thiết lập trên Keycloak (cần đổi mật khẩu / xác minh email). Liên hệ admin.");
             }
-            if (detail.contains("invalid_client") || detail.contains("unauthorized_client") || e.getStatusCode().value() == 401) {
+            if (detail.contains("invalid_client") || detail.contains("unauthorized_client")) {
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                         "Dịch vụ đăng nhập chưa sẵn sàng do cấu hình xác thực. Vui lòng liên hệ quản trị viên.");
             }
-            if (detail.contains("invalid_grant")) {
+            if (detail.contains("invalid_grant") || e.getStatusCode().value() == 401) {
                 throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai tên đăng nhập hoặc mật khẩu!");
             }
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Dịch vụ đăng nhập chưa sẵn sàng. Vui lòng thử lại.");

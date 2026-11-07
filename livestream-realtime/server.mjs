@@ -12,6 +12,7 @@ const subscriber = socket => ['viewer','moderator'].includes(socket?.data.role);
 export function createLiveServer({
   apiUrl = process.env.API_URL || 'http://localhost:8080/api/v1',
   issuer = process.env.KEYCLOAK_ISSUER || 'http://localhost:8180/realms/scanms',
+  jwksUrl = process.env.KEYCLOAK_JWKS_URL,
   origins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(value => value.trim()),
   maxViewers = Number(process.env.MAX_VIEWERS_PER_ROOM || 20),
   maxConcurrentJoins = Number(process.env.MAX_CONCURRENT_JOINS || 32),
@@ -22,7 +23,7 @@ export function createLiveServer({
   reactionFlushMs = 500,
 } = {}) {
   if (!Number.isInteger(maxViewers) || maxViewers < 1 || !Number.isInteger(maxConcurrentJoins) || maxConcurrentJoins < 1) throw new Error('Livestream connection limits must be positive integers.');
-  const jwks = createRemoteJWKSet(new URL(`${issuer}/protocol/openid-connect/certs`));
+  const jwks = createRemoteJWKSet(new URL(jwksUrl || `${issuer}/protocol/openid-connect/certs`));
   const verify = verifyToken || (async token => (await jwtVerify(token, jwks, {
     issuer, algorithms: ['RS256'], requiredClaims: ['sub', 'exp'],
   })).payload);

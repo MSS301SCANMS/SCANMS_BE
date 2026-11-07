@@ -52,6 +52,15 @@ except Exception as e:
 
 test_users = [
     {
+        'username': 'customer01',
+        'email': 'customer01@scanms.com',
+        'fullName': 'Customer Demo',
+        'firstName': 'Customer',
+        'lastName': 'Demo',
+        'roles': ['USER'],
+        'phone': '0900000001'
+    },
+    {
         'username': 'kolctv01',
         'email': 'kolctv01@scanms.com',
         'fullName': 'Le Van KOLCTV',

@@ -41,8 +41,22 @@ class AuthLoginTest {
         response(HttpStatus.UNAUTHORIZED,"{\"error\":\"invalid_client\",\"error_description\":\"private-detail\"}");
         var error=assertThrows(ResponseStatusException.class,()->service.login(request())); assertEquals(503,error.getStatusCode().value()); assertFalse(error.getReason().contains("private-detail"));
     }
+    @Test void unauthorizedInvalidGrantIsBadUserPasswordNotClientConfigurationFailure() {
+        response(HttpStatus.UNAUTHORIZED,"{\"error\":\"invalid_grant\",\"error_description\":\"private-detail\"}");
+        var error=assertThrows(AppException.class,()->service.login(request()));
+        assertEquals(ErrorCode.INVALID_CREDENTIALS,error.getErrorCode());
+        assertEquals(401,error.getErrorCode().getHttpStatus().value());
+        assertFalse(error.getMessage().contains("private-detail"));
+        server.verify();
+    }
     @Test void providerOutageIsServiceUnavailable() {
         response(HttpStatus.INTERNAL_SERVER_ERROR,"{}");
         assertEquals(503,assertThrows(ResponseStatusException.class,()->service.login(request())).getStatusCode().value());
+    }
+    @Test void unauthorizedWithoutProviderBodyRemainsAuthenticationFailure() {
+        response(HttpStatus.UNAUTHORIZED, "");
+        var error=assertThrows(AppException.class,()->service.login(request()));
+        assertEquals(ErrorCode.INVALID_CREDENTIALS,error.getErrorCode());
+        server.verify();
     }
 }
