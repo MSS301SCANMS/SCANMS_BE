@@ -53,7 +53,7 @@ export function createLiveServer({
     const session = await read(`/livestreams/${id}`, socket.data.token);
     const plannedEnd=session.participantRefs?.endsAt || session.endsAt;
     const endTime=plannedEnd ? Date.parse(/(Z|[+-]\d{2}:\d{2})$/.test(plannedEnd) ? plannedEnd : `${plannedEnd}Z`) : NaN;
-    if ((session.livestreamId || session.id) !== id || !['LIVE','SCHEDULED'].includes(session.status) || Number.isFinite(endTime) && endTime<=Date.now()) {const error=new Error('Phiên livestream đã kết thúc hoặc hết lịch phát.');error.closed=true;throw error;}
+    if ((session.livestreamId || session.id) !== id || !['LIVE','SCHEDULED'].includes(session.status) || session.status === 'LIVE' && Number.isFinite(endTime) && endTime<=Date.now()) {const error=new Error('Phiên livestream đã kết thúc hoặc hết thời lượng phát.');error.closed=true;throw error;}
     if (role === 'host' || role === 'moderator') {
       const realmRoles = socket.data.claims.realm_access?.roles || [];
       let authorized = false;

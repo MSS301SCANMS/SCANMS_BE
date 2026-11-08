@@ -22,7 +22,7 @@ import java.util.*;
 @RequiredArgsConstructor
 @Transactional
 public class LivestreamServiceImpl implements LivestreamService {
-    private static final Set<String> CONSENT_KEYS = Set.of("inviteStatus", "collaboratorResponses", "respondedBySubject", "respondedAt", "voucherDrops", "lifecycle", "broadcast");
+    private static final Set<String> CONSENT_KEYS = Set.of("inviteStatus", "collaboratorResponses", "respondedBySubject", "respondedAt", "voucherDrops", "lifecycle", "broadcast", "scheduledEndsAt");
     private final LivestreamRepository repository;
     private final LivestreamMapper mapper;
     private final ProductAccess access;
@@ -102,10 +102,8 @@ public class LivestreamServiceImpl implements LivestreamService {
 
     public LivestreamResponse transition(String id, LivestreamStatus next) {
         var live = owned(id);
-        var now = LocalDateTime.now(ZoneOffset.UTC);
+        var now = LocalDateTime.now(ZoneOffset.UTC).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         if (next == LivestreamStatus.LIVE && live.getStatus() == LivestreamStatus.SCHEDULED) {
-            if (live.getScheduledAt() != null && live.getScheduledAt().isAfter(now))
-                throw conflict("The scheduled start time has not arrived");
             var accepted = responses(live);
             for (String kol : collaborators(live.getCollaboratorRefs())) {
                 if (!"ACCEPTED".equals(accepted.get(kol)))
@@ -113,9 +111,16 @@ public class LivestreamServiceImpl implements LivestreamService {
                 partnership(live.getStoreId(), kol);
             }
             validateProducts(live.getStoreId(), live.getProductRefs());
-            var refs = live.getParticipantRefs();
-            if (refs != null && refs.get("endsAt") != null && !parseEnd(refs.get("endsAt")).isAfter(now))
-                throw conflict("Livestream end time has passed");
+            var refs = new LinkedHashMap<String, Object>(live.getParticipantRefs() == null ? Map.of() : live.getParticipantRefs());
+            if (refs.get("endsAt") != null) {
+                var plannedEnd = parseEnd(refs.get("endsAt"));
+                var duration = Duration.between(live.getScheduledAt() == null ? now : live.getScheduledAt(), plannedEnd);
+                if (duration.isNegative() || duration.isZero()) throw conflict("Livestream duration must be positive");
+                // Preserve the scheduled duration when the shop starts before or after its appointment.
+                refs.put("scheduledEndsAt", plannedEnd.toInstant(ZoneOffset.UTC).toString());
+                refs.put("endsAt", now.plus(duration).toInstant(ZoneOffset.UTC).toString());
+            }
+            live.setParticipantRefs(refs);
             live.setStatus(next);
             live.setStartedAt(now);
             broadcast.start(live, now.toInstant(ZoneOffset.UTC));

@@ -9,7 +9,6 @@ import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 @Component
 public class LivestreamSchedulePolicy {
@@ -29,20 +28,20 @@ public class LivestreamSchedulePolicy {
     }
 
     public boolean hasElapsed(Livestream live) {
-        return plannedEnd(live).map(end -> !end.isAfter(Instant.now())).orElse(false);
+        return live.getStatus() == LivestreamStatus.LIVE
+                && plannedEnd(live).map(end -> !end.isAfter(Instant.now())).orElse(false);
     }
 
     public boolean closeIfElapsed(Livestream live, Instant now) {
-        if (!Set.of(LivestreamStatus.SCHEDULED, LivestreamStatus.LIVE).contains(live.getStatus())) return false;
+        if (live.getStatus() != LivestreamStatus.LIVE) return false;
         var deadline = plannedEnd(live);
         if (deadline.isEmpty() || deadline.get().isAfter(now)) return false;
 
-        boolean broadcast = live.getStatus() == LivestreamStatus.LIVE || live.getStartedAt() != null;
-        live.setStatus(broadcast ? LivestreamStatus.ENDED : LivestreamStatus.CANCELLED);
+        live.setStatus(LivestreamStatus.ENDED);
         live.setEndedAt(LocalDateTime.ofInstant(deadline.get(), ZoneOffset.UTC));
         var refs = new LinkedHashMap<String, Object>(live.getParticipantRefs() == null ? Map.of() : live.getParticipantRefs());
         refs.put("lifecycle", Map.of(
-                "reason", broadcast ? "TIME_LIMIT_REACHED" : "SCHEDULE_EXPIRED",
+                "reason", "TIME_LIMIT_REACHED",
                 "closedBy", "SYSTEM",
                 "closedAt", now.toString()));
         live.setParticipantRefs(refs);

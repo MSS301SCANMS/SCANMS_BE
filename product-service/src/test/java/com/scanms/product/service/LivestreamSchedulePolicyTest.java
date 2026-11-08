@@ -14,14 +14,15 @@ class LivestreamSchedulePolicyTest {
     private final Instant now = Instant.parse("2026-10-26T18:00:00Z");
 
     @Test
-    void missedScheduleExpiresAtTheExactEndAndKeepsInviteHistory() {
+    void missedAppointmentRemainsAvailableUntilTheShopStartsIt() {
         var live = Livestream.builder().status(LivestreamStatus.SCHEDULED)
                 .participantRefs(Map.of("endsAt", "2026-10-27T01:00:00+07:00", "inviteStatus", "PENDING")).build();
-        assertTrue(policy.closeIfElapsed(live, now));
-        assertEquals(LivestreamStatus.CANCELLED, live.getStatus());
-        assertEquals(LocalDateTime.of(2026, 10, 26, 18, 0), live.getEndedAt());
+        assertFalse(policy.closeIfElapsed(live, now));
+        assertEquals(LivestreamStatus.SCHEDULED, live.getStatus());
+        assertNull(live.getEndedAt());
         assertEquals("PENDING", live.getParticipantRefs().get("inviteStatus"));
-        assertEquals("SCHEDULE_EXPIRED", ((Map<?, ?>) live.getParticipantRefs().get("lifecycle")).get("reason"));
+        assertFalse(live.getParticipantRefs().containsKey("lifecycle"));
+        assertFalse(policy.hasElapsed(live));
         assertFalse(policy.closeIfElapsed(live, now.plusSeconds(60)));
     }
 
