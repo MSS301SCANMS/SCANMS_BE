@@ -2,6 +2,8 @@ package com.scanms.product.controller;
 
 import com.scanms.product.constant.*;
 import com.scanms.product.dto.request.CreateLiveOfferRequest;
+import com.scanms.product.dto.request.InventoryReservationInput;
+import com.scanms.product.dto.request.InventoryReservationLine;
 import com.scanms.product.entity.*;
 import com.scanms.product.repository.*;
 import com.scanms.product.service.*;
@@ -64,12 +66,12 @@ class LivestreamLifecycleIntegrationTest {
     }
 
     @Test
-    void sweepClosesOverdueRecordsAndKeepsFutureSessions() {
+    void sweepClosesOverdueBroadcastsAndKeepsUnstartedAppointments() {
         var missed = live("Missed", LivestreamStatus.SCHEDULED, Instant.now().minusSeconds(60));
         var running = live("Running", LivestreamStatus.LIVE, Instant.now().minusSeconds(60));
         var future = live("Future", LivestreamStatus.SCHEDULED, Instant.now().plusSeconds(3600));
-        assertEquals(2, lifecycle.closeElapsedSessions());
-        assertEquals(LivestreamStatus.CANCELLED, lives.findById(missed.getLivestreamId()).orElseThrow().getStatus());
+        assertEquals(1, lifecycle.closeElapsedSessions());
+        assertEquals(LivestreamStatus.SCHEDULED, lives.findById(missed.getLivestreamId()).orElseThrow().getStatus());
         assertEquals(LivestreamStatus.ENDED, lives.findById(running.getLivestreamId()).orElseThrow().getStatus());
         assertEquals(LivestreamStatus.SCHEDULED, lives.findById(future.getLivestreamId()).orElseThrow().getStatus());
         assertEquals(0, lifecycle.closeElapsedSessions());
@@ -78,22 +80,56 @@ class LivestreamLifecycleIntegrationTest {
     @Test
     void aReadRepairsStaleStatusWithoutWaitingForTheScheduler() {
         var missed = live("Read repair", LivestreamStatus.SCHEDULED, Instant.now().minusSeconds(30));
-        assertEquals(LivestreamStatus.CANCELLED, service.getById(missed.getLivestreamId()).status());
-        assertEquals(LivestreamStatus.CANCELLED, lives.findById(missed.getLivestreamId()).orElseThrow().getStatus());
+        assertEquals(LivestreamStatus.SCHEDULED, service.getById(missed.getLivestreamId()).status());
+        assertEquals(LivestreamStatus.SCHEDULED, lives.findById(missed.getLivestreamId()).orElseThrow().getStatus());
         var overdue = live("List repair", LivestreamStatus.LIVE, Instant.now().minusSeconds(30));
         assertTrue(service.findAll().stream().anyMatch(row -> row.livestreamId().equals(overdue.getLivestreamId()) && row.status() == LivestreamStatus.ENDED));
     }
 
     @Test
-    void expiredSessionsCannotStartAcceptInvitesOrReceiveNewInventoryReservations() {
-        var missed = live("Missed", LivestreamStatus.SCHEDULED, Instant.now().minusSeconds(10));
-        assertThrows(com.scanms.product.exception.AppException.class, () -> service.transition(missed.getLivestreamId(), LivestreamStatus.LIVE));
-        assertThrows(com.scanms.product.exception.AppException.class, () -> service.respondInvite(missed.getLivestreamId(), true, null));
-        assertThrows(com.scanms.product.exception.AppException.class, () -> commerce.createOffer(missed.getLivestreamId(), new CreateLiveOfferRequest(productId, variantId, 900L, 1L, null, null)));
+    void expiredBroadcastsCannotReceiveNewOffersOrInventoryReservations() {
         var overdue = live("Overdue LIVE", LivestreamStatus.LIVE, Instant.now().minusSeconds(10));
+        assertThrows(com.scanms.product.exception.AppException.class, () -> commerce.createOffer(overdue.getLivestreamId(), new CreateLiveOfferRequest(productId, variantId, 900L, 1L, null, null)));
         var token = Jwt.withTokenValue("internal").header("alg", "RS256").subject("order-service").claim("realm_access", Map.of("roles", List.of("ORDER_INTERNAL"))).build();
-        var request = new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId, variantId, 1, overdue.getLivestreamId())));
+        var request = new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, 1, overdue.getLivestreamId())));
         assertThrows(org.springframework.web.server.ResponseStatusException.class, () -> inventory.quote(request, token));
         assertEquals(10, variants.findById(variantId).orElseThrow().getStockQuantity());
+    }
+
+    @Test
+    void startingEarlyOrAfterTheWholeAppointmentPreservesItsDuration() {
+        for (int hours : List.of(2, -3)) {
+            var plannedStart = LocalDateTime.now(ZoneOffset.UTC).plusHours(hours).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+            var plannedEnd = plannedStart.plusMinutes(45).toInstant(ZoneOffset.UTC);
+            var pending = live("Flexible start", LivestreamStatus.SCHEDULED, plannedEnd);
+            pending.setScheduledAt(plannedStart);
+            lives.saveAndFlush(pending);
+            var before = LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1);
+            var started = service.transition(pending.getLivestreamId(), LivestreamStatus.LIVE);
+            assertEquals(LivestreamStatus.LIVE, started.status());
+            var stored = lives.findById(pending.getLivestreamId()).orElseThrow();
+            assertFalse(stored.getStartedAt().isBefore(before));
+            assertFalse(stored.getStartedAt().isAfter(LocalDateTime.now(ZoneOffset.UTC)));
+            var effectiveEnd = Instant.parse(stored.getParticipantRefs().get("endsAt").toString());
+            assertEquals(45, Duration.between(stored.getStartedAt().toInstant(ZoneOffset.UTC), effectiveEnd).toMinutes());
+            assertEquals(plannedEnd, Instant.parse(stored.getParticipantRefs().get("scheduledEndsAt").toString()));
+            assertEquals(plannedStart.truncatedTo(java.time.temporal.ChronoUnit.MICROS), stored.getScheduledAt());
+            assertThrows(com.scanms.product.exception.AppException.class, () -> service.transition(pending.getLivestreamId(), LivestreamStatus.LIVE));
+            assertEquals(effectiveEnd, Instant.parse(lives.findById(pending.getLivestreamId()).orElseThrow().getParticipantRefs().get("endsAt").toString()));
+        }
+    }
+
+    @Test
+    void closedSessionsRemainClosedAndShopOwnershipIsStillRequired() {
+        for (var status : List.of(LivestreamStatus.ENDED, LivestreamStatus.CANCELLED)) {
+            var closed = live("Closed", status, Instant.now().minusSeconds(60));
+            assertThrows(com.scanms.product.exception.AppException.class, () -> service.transition(closed.getLivestreamId(), LivestreamStatus.LIVE));
+            assertEquals(status, lives.findById(closed.getLivestreamId()).orElseThrow().getStatus());
+        }
+        var pending = live("Not your store", LivestreamStatus.SCHEDULED, Instant.now().plusSeconds(3600));
+        org.mockito.Mockito.doThrow(new com.scanms.product.exception.AppException(com.scanms.product.exception.ErrorCode.FORBIDDEN))
+                .when(access).requireApprovedStore(storeId);
+        assertThrows(com.scanms.product.exception.AppException.class, () -> service.transition(pending.getLivestreamId(), LivestreamStatus.LIVE));
+        assertEquals(LivestreamStatus.SCHEDULED, lives.findById(pending.getLivestreamId()).orElseThrow().getStatus());
     }
 }

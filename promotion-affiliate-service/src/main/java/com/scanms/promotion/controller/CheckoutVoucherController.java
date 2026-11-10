@@ -16,14 +16,12 @@ import java.util.Map;
 public class CheckoutVoucherController {
     private final CheckoutVoucherService checkoutVoucherService;
 
-    @PostMapping("/{orderId}")
     public ApiResponse<Map<String, Object>> reserve(
-            @PathVariable String orderId, @RequestBody CheckoutVoucherInput input, @AuthenticationPrincipal Jwt jwt) {
+            String orderId, CheckoutVoucherInput input, Jwt jwt) {
         return ApiResponse.success(checkoutVoucherService.reserve(orderId, input, jwt));
     }
 
-    @PostMapping("/quote")
-    public ApiResponse<Map<String, Object>> quote(@RequestBody CheckoutVoucherInput input, @AuthenticationPrincipal Jwt jwt) {
+    public ApiResponse<Map<String, Object>> quote(CheckoutVoucherInput input, Jwt jwt) {
         return ApiResponse.success(checkoutVoucherService.quote(input, jwt));
     }
 
@@ -40,5 +38,24 @@ public class CheckoutVoucherController {
     @PostMapping("/{orderId}/restore")
     public ApiResponse<Map<String, Object>> restore(@PathVariable String orderId, @AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.success(checkoutVoucherService.restore(orderId, jwt));
+    }
+
+    @PostMapping("/{orderId}")
+    public ApiResponse<Map<String, Object>> reserve(
+            @PathVariable String orderId, @RequestBody CheckoutVoucherInput input, @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = "X-Shipping-Fee-Per-Store-Vnd", required = false) Long shippingFee) {
+        return ApiResponse.success(checkoutVoucherService.reserve(orderId, input, jwt, shippingFee));
+    }
+
+    @PostMapping("/quote")
+    public ApiResponse<Map<String, Object>> quote(
+            @RequestBody CheckoutVoucherInput input, @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = "X-Shipping-Fee-Per-Store-Vnd", required = false) Long shippingFee) {
+        return ApiResponse.success(checkoutVoucherService.quote(input, jwt, shippingFee));
+    }
+
+    @PostMapping("/{orderId}/cancel")
+    public ApiResponse<Map<String, Object>> cancel(@PathVariable String orderId, @AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.success(checkoutVoucherService.cancel(orderId, jwt));
     }
 }

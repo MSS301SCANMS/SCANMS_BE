@@ -8,6 +8,7 @@ import com.scanms.product.entity.*;
 import com.scanms.product.exception.*;
 import com.scanms.product.repository.*;
 import com.scanms.product.service.*;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,7 +18,6 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import jakarta.persistence.EntityManager;
 
 import java.time.*;
 import java.util.*;
@@ -115,8 +115,56 @@ class LiveCommerceIntegrationTest {
         return new CreateLiveOfferRequest(productId, variantId, 299000L, quantity, null, Instant.now().plusSeconds(600));
     }
 
-    InventoryCheckoutController.Input input(String token, String subject) {
-        return new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId, variantId, 1, liveId, token)), subject);
+    InventoryReservationInput input(String token, String subject) {
+        return new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, 1, liveId, token)), subject);
+    }
+
+    @Test
+    void pinRevisionRejectsStaleWritesAndClearsUnavailableOrEndedProducts() {
+        var first = livestreams.pinProduct(liveId, productId, 0L);
+        long revision = ((Number) first.productRefs().get("pinRevision")).longValue();
+        assertEquals(1L, revision);
+        assertEquals(productId, first.productRefs().get("pinnedProductId"));
+        assertThrows(AppException.class, () -> livestreams.pinProduct(liveId, null, 0L));
+        var unpinned = livestreams.pinProduct(liveId, null, revision);
+        assertNull(unpinned.productRefs().get("pinnedProductId"));
+        var pinned = livestreams.pinProduct(liveId, productId, 2L);
+        assertEquals(3L, ((Number) pinned.productRefs().get("pinRevision")).longValue());
+        var variant = variants.findById(variantId).orElseThrow();
+        variant.setStockQuantity(0); variant = variants.saveAndFlush(variant);
+        var unavailable = livestreams.getById(liveId);
+        assertNull(unavailable.productRefs().get("pinnedProductId"));
+        assertEquals(4L, ((Number) unavailable.productRefs().get("pinRevision")).longValue());
+        assertThrows(AppException.class, () -> livestreams.pinProduct(liveId, productId, 4L));
+        variant.setStockQuantity(2); variants.saveAndFlush(variant);
+        livestreams.pinProduct(liveId, productId, 4L);
+        var live = lives.findById(liveId).orElseThrow(); live.setStatus(LivestreamStatus.ENDED); lives.saveAndFlush(live);
+        assertNull(livestreams.getById(liveId).productRefs().get("pinnedProductId"));
+        assertThrows(AppException.class, () -> livestreams.pinProduct(liveId, productId, 6L));
+    }
+
+    @Test
+    void concurrentPinsAcceptOnlyOneWriterForTheSameRevision() throws Exception {
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var gate = new java.util.concurrent.CountDownLatch(1);
+            var results = new ArrayList<java.util.concurrent.Future<Boolean>>();
+            for (String selection : Arrays.asList(productId, null)) results.add(pool.submit(() -> {
+                actor("owner");
+                try {
+                    gate.await();
+                    livestreams.pinProduct(liveId, selection, 0L);
+                    return true;
+                } catch (AppException ex) {
+                    assertEquals(ErrorCode.CONFLICT, ex.getErrorCode());
+                    return false;
+                } finally { SecurityContextHolder.clearContext(); }
+            }));
+            gate.countDown();
+            int successes = 0;
+            for (var result : results) if (result.get(20, java.util.concurrent.TimeUnit.SECONDS)) successes++;
+            assertEquals(1, successes);
+            assertEquals(1L, ((Number) lives.findById(liveId).orElseThrow().getProductRefs().get("pinRevision")).longValue());
+        }
     }
 
     @Test
@@ -167,8 +215,8 @@ class LiveCommerceIntegrationTest {
         commerce.createOffer(liveId, offer(5));
         var other = lives.saveAndFlush(Livestream.builder().storeId(storeId).title("Other live").status(LivestreamStatus.LIVE).productRefs(Map.of("productIds", List.of(productId))).build());
         String proof = purchases.issue(liveId, jwt("buyer", "USER"));
-        var regular = new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId, variantId, 1)), "buyer");
-        var elsewhere = new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId, variantId, 1, other.getLivestreamId())), "buyer");
+        var regular = new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, 1)), "buyer");
+        var elsewhere = new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, 1, other.getLivestreamId())), "buyer");
         assertEquals(329000L, unitPrice(inventory.quote(regular, internal).result()));
         assertEquals(329000L, unitPrice(inventory.quote(elsewhere, internal).result()));
         assertEquals(299000L, unitPrice(inventory.reserve("fixed-live-price", input(proof, "buyer"), internal).result()));

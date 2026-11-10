@@ -10,6 +10,10 @@ public interface FinanceContractService {
 
     Map<String, Object> credited(String id, CreditInput input, Jwt jwt);
 
+    Map<String, Object> reconciliationBasis(String id, Jwt jwt);
+
+    Map<String, Object> reconciled(String id, CreditInput input, Jwt jwt);
+
     Map<String, Object> total(String orderItemIds, Jwt jwt);
 
     Map<String, Object> initializeCommission(String itemId, InitInput input, Jwt jwt);

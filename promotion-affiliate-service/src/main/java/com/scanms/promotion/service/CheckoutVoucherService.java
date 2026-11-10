@@ -10,6 +10,12 @@ public interface CheckoutVoucherService {
 
     Map<String, Object> quote(CheckoutVoucherInput input, Jwt jwt);
 
+    Map<String, Object> reserve(String orderId, CheckoutVoucherInput input, Jwt jwt, Long shippingFee);
+
+    Map<String, Object> quote(CheckoutVoucherInput input, Jwt jwt, Long shippingFee);
+
+    Map<String, Object> cancel(String orderId, Jwt jwt);
+
     Map<String, Object> release(String orderId, Jwt jwt);
 
     Map<String, Object> commit(String orderId, Jwt jwt);

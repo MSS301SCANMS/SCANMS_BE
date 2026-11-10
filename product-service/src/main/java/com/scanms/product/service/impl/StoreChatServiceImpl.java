@@ -1,14 +1,15 @@
 package com.scanms.product.service.impl;
 
 import com.scanms.product.constant.StoreStatus;
-import com.scanms.product.service.ProductAccess;
 import com.scanms.product.entity.Store;
 import com.scanms.product.entity.StoreChatConversation;
 import com.scanms.product.entity.StoreChatMessage;
 import com.scanms.product.repository.StoreChatConversationRepository;
 import com.scanms.product.repository.StoreChatMessageRepository;
 import com.scanms.product.repository.StoreRepository;
+import com.scanms.product.service.ProductAccess;
 import com.scanms.product.service.PublicCatalogService;
+import com.scanms.product.service.StoreChatCards;
 import com.scanms.product.service.StoreChatService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -40,6 +41,7 @@ public class StoreChatServiceImpl implements StoreChatService {
     private final StoreChatMessageRepository messages;
     private final StoreRepository stores;
     private final ProductAccess access;
+    private final StoreChatCards cards;
 
     @Override
     @Transactional(readOnly = true)
@@ -53,17 +55,31 @@ public class StoreChatServiceImpl implements StoreChatService {
     @Override
     @Transactional
     public Map<String, Object> open(String storeId) {
+        return open(storeId, null);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> open(String storeId, String customerId) {
         String userId = access.userId();
         Store store = store(storeId);
+        String partnerName = null;
         if (store.getApprovalStatus() != StoreStatus.APPROVED) {
             throw error(HttpStatus.CONFLICT, "Gian hàng chưa hoạt động.");
         }
-        if (Objects.equals(store.getOwnerUserId(), userId)) {
+        if (customerId != null && !customerId.equals(userId)) {
+            if (!Objects.equals(store.getOwnerUserId(), userId))
+                throw error(HttpStatus.FORBIDDEN, "Chỉ chủ shop được mở chat với đối tác.");
+            partnerName = Objects.toString(cards.requirePartner(storeId, customerId).get("name"), "Đối tác KOL");
+        } else {
+            customerId = userId;
+        }
+        if (Objects.equals(store.getOwnerUserId(), customerId)) {
             throw error(HttpStatus.BAD_REQUEST, "Bạn không thể nhắn tin cho chính gian hàng của mình.");
         }
 
         // Định danh ID cố định từ storeId + userId đảm bảo không sinh lặp khi mở nhiều tab
-        String id = UUID.nameUUIDFromBytes((storeId + ":" + userId).getBytes(StandardCharsets.UTF_8)).toString();
+        String id = UUID.nameUUIDFromBytes((storeId + ":" + customerId).getBytes(StandardCharsets.UTF_8)).toString();
         String name = "Khách hàng";
         if (SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken auth) {
             String claim = auth.getToken().getClaimAsString("name");
@@ -71,9 +87,34 @@ public class StoreChatServiceImpl implements StoreChatService {
                 name = claim;
             }
         }
-        conversations.openIfAbsent(id, storeId, userId, name);
+        if (partnerName != null) name = partnerName;
+        // Serialize creation on the existing store row; the unique pair remains the database guard.
+        stores.lockById(storeId).orElseThrow();
+        if (!conversations.existsById(id)) {
+            var created = new StoreChatConversation();
+            created.setId(id);
+            created.setStoreId(storeId);
+            created.setCustomerId(customerId);
+            created.setCustomerName(name);
+            created.setCreatedAt(Instant.now());
+            created.setUpdatedAt(created.getCreatedAt());
+            conversations.saveAndFlush(created);
+        }
         StoreChatConversation c = conversations.findById(id).orElseThrow();
         return conversationDto(c, userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Object> identity() {
+        return Map.of("userId", access.userId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Object> subscription(String id) {
+        var c = participant(id, access.userId(), false);
+        return Map.of("id", id, "participantIds", List.of(c.getCustomerId(), store(c.getStoreId()).getOwnerUserId()));
     }
 
     @Override
@@ -104,6 +145,7 @@ public class StoreChatServiceImpl implements StoreChatService {
         if (trimmed.isEmpty() || trimmed.length() > 10000) {
             throw error(HttpStatus.BAD_REQUEST, "Tin nhắn cần có nội dung, tối đa 10.000 ký tự.");
         }
+        trimmed = cards.validate(trimmed, c.getStoreId(), c.getCustomerId());
 
         String key;
         try {
@@ -112,10 +154,11 @@ public class StoreChatServiceImpl implements StoreChatService {
             throw error(HttpStatus.BAD_REQUEST, "Mã tin nhắn không hợp lệ.");
         }
 
+        trimmed = cards.validateAttachment(trimmed, id, userId, key);
         var existing = messages.findById(key);
         if (existing.isPresent()) {
             StoreChatMessage m = existing.get();
-            if (!id.equals(m.getConversationId()) || !userId.equals(m.getSenderId()) || !trimmed.equals(m.getMessageText())) {
+            if (!id.equals(m.getConversationId()) || !userId.equals(m.getSenderId()) || !cards.sameReference(trimmed, m.getMessageText())) {
                 throw error(HttpStatus.CONFLICT, "Mã tin nhắn đã được sử dụng.");
             }
             return m;
@@ -160,6 +203,7 @@ public class StoreChatServiceImpl implements StoreChatService {
         row.put("id", c.getId());
         row.put("storeId", c.getStoreId());
         row.put("customerId", c.getCustomerId());
+        row.put("isStoreOwner", userId.equals(s.getOwnerUserId()));
         row.put("customer", Map.of("id", c.getCustomerId(), "fullName", Objects.toString(c.getCustomerName(), "Khách hàng")));
         row.put("store", PublicCatalogService.toPublicStore(s));
         row.put("lastMessageAt", c.getUpdatedAt());

@@ -1,10 +1,10 @@
 package com.scanms.order.controller;
 
 import com.scanms.order.constant.*;
+import com.scanms.order.dto.request.RefundInput;
 import com.scanms.order.entity.*;
 import com.scanms.order.entity.Order;
 import com.scanms.order.repository.*;
-import com.scanms.order.dto.request.RefundInput;
 import com.scanms.order.service.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,9 +12,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.server.ResponseStatusException;
+
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -50,7 +52,7 @@ class CommerceLifecycleIntegrationTest {
     CommerceLifecycle.ReturnInput input(int quantity,String key) { return new CommerceLifecycle.ReturnInput(item.getOrderItemId(),quantity,key,"DAMAGED",evidence); }
     String create(int quantity,String key) { return lifecycle.createReturn(input(quantity,key),buyer).get("returnRequestId").toString(); }
     void delivered() { lifecycle.dispatch(sid(),new CommerceLifecycle.Dispatch("TEST",null,null),shop); lifecycle.simulate(sid(),true,buyer); }
-    void approve(String id) { manager.decide(id,new ManagerReturnController.Decision(ReturnRequestStatus.APPROVED,"Valid evidence: approved physical return for QA."),shop); }
+    void approve(String id) { manager.decide(id,new ShopReturnService.ManagerDecision(ReturnRequestStatus.APPROVED,"Valid evidence: approved physical return for QA."),shop); }
     void returned(String id) { approve(id); lifecycle.sendReturn(id,new CommerceLifecycle.Dispatch("TEST",null,null),buyer); lifecycle.simulateReturn(id,"picked",buyer); lifecycle.simulateReturn(id,"delivered",buyer); lifecycle.receiveReturn(id,shop); }
     @Test void paidOrderDispatchDeliveryReceiptAndFourteenDayWindowAreIdempotent() {
         lifecycle.confirm(sid(),shop); lifecycle.confirm(sid(),shop);
@@ -105,7 +107,7 @@ class CommerceLifecycleIntegrationTest {
         assertThrows(ResponseStatusException.class,()->create(1,"same"));
         assertThrows(ResponseStatusException.class,()->lifecycle.cancelReturn(id,other));
         lifecycle.cancelReturn(id,buyer);lifecycle.cancelReturn(id,buyer);
-        String rejected=create(3,"reject");manager.decide(rejected,new ManagerReturnController.Decision(ReturnRequestStatus.REJECTED,"Insufficient evidence to approve this QA request."),shop);
+        String rejected=create(3,"reject");manager.decide(rejected,new ShopReturnService.ManagerDecision(ReturnRequestStatus.REJECTED,"Insufficient evidence to approve this QA request."),shop);
         assertThrows(ResponseStatusException.class,()->finance.refundBasis(rejected,internal));
         assertNotNull(create(3,"remaining"));
         var saved=sellers.findById(sid()).orElseThrow();saved.setReturnDeadline(LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1));sellers.saveAndFlush(saved);

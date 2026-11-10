@@ -70,7 +70,7 @@ spring:
             - id: order-service
               uri: ${ORDER_SERVICE_URL:http://localhost:8083}
               predicates:
-                - "Path=/api/v1/commerce/**,/api/v1/checkout,/api/v1/checkout/**,/api/v1/orders/**,/api/v1/order-items/**,/api/v1/seller-orders/**,/api/v1/returns/**,/api/v1/shipments/**,/api/v1/discount-allocations/**,/api/v1/livestream-sales/**,/api/v1/store-sales/**"
+                - "Path=/api/v1/notifications/**,/api/v1/notifications,/api/v1/commerce/**,/api/v1/checkout,/api/v1/checkout/**,/api/v1/orders/**,/api/v1/order-items/**,/api/v1/seller-orders/**,/api/v1/returns/**,/api/v1/shipments/**,/api/v1/discount-allocations/**,/api/v1/livestream-sales/**,/api/v1/store-sales/**"
             - id: payment-service
               uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
               predicates:
@@ -78,7 +78,7 @@ spring:
             - id: promotion-service
               uri: ${PROMOTION_SERVICE_URL:http://localhost:8085}
               predicates:
-                - "Path=/api/v1/vouchers/**,/api/v1/voucher-redemptions/**,/api/v1/checkout-vouchers/**,/api/v1/collaborators/**,/api/v1/referrals/**,/api/v1/commission-policies/**,/api/v1/commissions/**"
+                - "Path=/api/v1/vouchers/**,/api/v1/voucher-redemptions/**,/api/v1/checkout-vouchers/**,/api/v1/collaborators/**,/api/v1/referrals/**,/api/v1/commission-policies/**,/api/v1/commissions/**,/api/v1/sample-requests/**"
             # Trang Giám sát hệ thống: /api/v1/ops/{service}/x  ->  /actuator/x của service đó (chỉ ADMIN/SYSTEM_ADMIN, kiểm tra ở SecurityConfig)
             - id: ops-user
               uri: ${USER_SERVICE_URL:http://localhost:8081}

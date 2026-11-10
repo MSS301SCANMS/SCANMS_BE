@@ -1,7 +1,9 @@
 package com.scanms.product.controller;
 
-import com.scanms.product.entity.*;
 import com.scanms.product.constant.*;
+import com.scanms.product.dto.request.InventoryReservationInput;
+import com.scanms.product.dto.request.InventoryReservationLine;
+import com.scanms.product.entity.*;
 import com.scanms.product.repository.*;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,8 +80,8 @@ class InventoryCheckoutIntegrationTest {
         variantId = variants.saveAndFlush(ProductVariant.builder().productId(productId).sku("sku").priceVnd(100L).stockQuantity(3).status(ProductVariantStatus.ACTIVE).build()).getVariantId();
     }
 
-    InventoryCheckoutController.Input input(int quantity) {
-        return new InventoryCheckoutController.Input(List.of(new InventoryCheckoutController.Line(productId, variantId, quantity)));
+    InventoryReservationInput input(int quantity) {
+        return new InventoryReservationInput(List.of(new InventoryReservationLine(productId, variantId, quantity)));
     }
 
     int stock() {

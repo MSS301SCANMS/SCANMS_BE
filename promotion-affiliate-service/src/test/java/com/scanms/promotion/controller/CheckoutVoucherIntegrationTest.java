@@ -1,25 +1,27 @@
 package com.scanms.promotion.controller;
-import com.scanms.promotion.dto.request.CheckoutVoucherInput;
+import com.scanms.promotion.constant.*;
+import com.scanms.promotion.dto.request.*;
 import com.scanms.promotion.dto.request.FinalizeInput;
 import com.scanms.promotion.entity.*;
-import com.scanms.promotion.constant.*;
 import com.scanms.promotion.repository.*;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.AfterAll;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.oauth2.jwt.*;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
+
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
+
 import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:checkout-vouchers;MODE=PostgreSQL;NON_KEYWORDS=VALUE;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000","spring.datasource.driver-class-name=org.h2.Driver","spring.datasource.username=sa","spring.datasource.password=","spring.jpa.hibernate.ddl-auto=create-drop","logging.level.root=WARN","scanms.finance.client-secret="})
 class CheckoutVoucherIntegrationTest {
@@ -99,22 +101,22 @@ class CheckoutVoucherIntegrationTest {
         shippingVoucher();
         var lines=List.<Map<String,Object>>of(Map.of("variantId","a","storeId","shop-a","productId","a","grossAmountVnd",100000),Map.of("variantId","b","storeId","shop-b","productId","b","grossAmountVnd",100000));
         var fees=Map.of("shop-a",25000L,"shop-b",35000L);
-        var command=new CheckoutVoucherController.Input("SHIP","customer",lines,null,fees);
+        var command=new CheckoutVoucherInput("SHIP","customer",lines,null,fees);
         var result=checkout.quote(command,jwt,null).result();
         assertEquals(50000L,result.get("discountAmountVnd"));
         @SuppressWarnings("unchecked") var shares=(List<Map<String,Object>>)result.get("allocations");
         assertEquals(50000L,shares.stream().mapToLong(row->((Number)row.get("allocatedAmountVnd")).longValue()).sum());
         for(var row:shares)assertTrue(((Number)row.get("allocatedAmountVnd")).longValue()<=fees.get(row.get("storeId")));
         checkout.reserve("ghn-shipping-voucher",command,jwt,null);checkout.reserve("ghn-shipping-voucher",command,jwt,null);
-        var changed=new CheckoutVoucherController.Input("SHIP","customer",lines,null,Map.of("shop-a",30000L,"shop-b",35000L));
+        var changed=new CheckoutVoucherInput("SHIP","customer",lines,null,Map.of("shop-a",30000L,"shop-b",35000L));
         assertThrows(ResponseStatusException.class,()->checkout.reserve("ghn-shipping-voucher",changed,jwt,null));
-        var missing=new CheckoutVoucherController.Input("SHIP","customer",lines,null,Map.of("shop-a",25000L));
+        var missing=new CheckoutVoucherInput("SHIP","customer",lines,null,Map.of("shop-a",25000L));
         assertThrows(ResponseStatusException.class,()->checkout.quote(missing,jwt,null));
     }
 
     @Test void pairReservesExactlyTwoRedemptionsAndReleasesBothWithoutLosingQuota() {
         shippingVoucher();
-        var pair=new CheckoutVoucherController.Input("SAVE","customer",input().lines(),"SHIP");
+        var pair=new CheckoutVoucherInput("SAVE","customer",input().lines(),"SHIP");
         assertEquals(30099L,checkout.quote(pair,jwt,30000L).result().get("discountAmountVnd"));
         assertTrue(redemptions.findAll().isEmpty());
         checkout.reserve("pair",pair,jwt,30000L); checkout.reserve("pair",pair,jwt,30000L);
@@ -130,9 +132,9 @@ class CheckoutVoucherIntegrationTest {
 
     @Test void pairRestoresBothUsesOnlyAfterOrderEligibilityAndRejectsWrongBenefitSlots() {
         shippingVoucher();
-        var pair=new CheckoutVoucherController.Input("SAVE","customer",input().lines(),"SHIP");
-        assertThrows(ResponseStatusException.class,()->checkout.reserve("wrong",new CheckoutVoucherController.Input("SHIP","customer",input().lines(),"SAVE"),jwt,30000L));
-        assertThrows(ResponseStatusException.class,()->checkout.reserve("same",new CheckoutVoucherController.Input("SAVE","customer",input().lines(),"save"),jwt,30000L));
+        var pair=new CheckoutVoucherInput("SAVE","customer",input().lines(),"SHIP");
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("wrong",new CheckoutVoucherInput("SHIP","customer",input().lines(),"SAVE"),jwt,30000L));
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("same",new CheckoutVoucherInput("SAVE","customer",input().lines(),"save"),jwt,30000L));
         assertTrue(redemptions.findAll().isEmpty());
         checkout.reserve("restorable",pair,jwt,30000L); checkout.commit("restorable",jwt);
         checkout.restore("restorable",jwt); checkout.restore("restorable",jwt);
@@ -143,10 +145,10 @@ class CheckoutVoucherIntegrationTest {
 
     @Test void invalidSecondVoucherRollsBackTheWholePairAndShippingCanBeUsedAlone() {
         shippingVoucher();
-        assertThrows(ResponseStatusException.class,()->checkout.reserve("invalid",new CheckoutVoucherController.Input("MISSING","customer",input().lines(),"SHIP"),jwt,30000L));
+        assertThrows(ResponseStatusException.class,()->checkout.reserve("invalid",new CheckoutVoucherInput("MISSING","customer",input().lines(),"SHIP"),jwt,30000L));
         assertTrue(redemptions.findAll().isEmpty());
-        assertEquals(30000L,checkout.quote(new CheckoutVoucherController.Input("","customer",input().lines(),"SHIP"),jwt,30000L).result().get("discountAmountVnd"));
-        checkout.reserve("shipping-only",new CheckoutVoucherController.Input("","customer",input().lines(),"SHIP"),jwt,30000L);
+        assertEquals(30000L,checkout.quote(new CheckoutVoucherInput("","customer",input().lines(),"SHIP"),jwt,30000L).result().get("discountAmountVnd"));
+        checkout.reserve("shipping-only",new CheckoutVoucherInput("","customer",input().lines(),"SHIP"),jwt,30000L);
         assertEquals(1,redemptions.findAllByOrderId("shipping-only").size());
     }
 
@@ -156,7 +158,7 @@ class CheckoutVoucherIntegrationTest {
                 .discountType(VoucherDiscountType.FIXED).value(BigDecimal.valueOf(100000)).cap(50000L)
                 .minimumSubtotal(100L).validFrom(LocalDateTime.now(ZoneOffset.UTC).minusDays(1))
                 .validUntil(LocalDateTime.now(ZoneOffset.UTC).plusDays(1)).build());
-        var input=new CheckoutVoucherController.Input("SHIP","customer",List.of(
+        var input=new CheckoutVoucherInput("SHIP","customer",List.of(
                 Map.of("variantId","a","storeId","store-a","productId","p-a","grossAmountVnd",200),
                 Map.of("variantId","b","storeId","store-b","productId","p-b","grossAmountVnd",300)));
         var result=checkout.quote(input,jwt,30000L).result();
@@ -224,7 +226,7 @@ class CheckoutVoucherIntegrationTest {
         var ship=vouchers.saveAndFlush(Voucher.builder().code("SHIP-PAIR").issuerType(VoucherIssuerType.PLATFORM).scopeType(VoucherScopeType.PLATFORM)
                 .discountType(VoucherDiscountType.FIXED).value(BigDecimal.valueOf(50)).scope(Map.of("benefitType","SHIPPING"))
                 .validFrom(LocalDateTime.now(ZoneOffset.UTC).minusDays(1)).validUntil(LocalDateTime.now(ZoneOffset.UTC).plusDays(1)).build());
-        var pair=new CheckoutVoucherController.Input("SAVE","customer",input().lines(),"SHIP-PAIR");
+        var pair=new CheckoutVoucherInput("SAVE","customer",input().lines(),"SHIP-PAIR");
         checkout.reserve("restorable",pair,jwt,30000L);checkout.commit("restorable",jwt);
         restorationAllowed.set(false);assertThrows(ResponseStatusException.class,()->checkout.cancel("restorable",jwt));
         assertTrue(redemptions.findAllByOrderId("restorable").stream().allMatch(r->r.getStatus()==VoucherRedemptionStatus.USED));
@@ -258,12 +260,12 @@ class CheckoutVoucherIntegrationTest {
     @Test void finalizationKeepsOriginalAndRefundSnapshotWhenAdjustmentWorkerWasDelayed() {
         commissions.saveAndFlush(Commission.builder().orderItemId("item").collaboratorId("owner").rateSnapshot(BigDecimal.TEN).basisAmountVnd(1000L).commissionAmountVnd(100L).status(CommissionStatus.PENDING).build());
         retained.set(0);
-        finance.finalizeItem("item",new FinanceContractController.FinalizeInput("Refund completed before delayed adjustment"),jwt);
+        finance.finalizeItem("item",new FinalizeInput("Refund completed before delayed adjustment"),jwt);
         var row=commissions.findAll().getFirst();
         assertEquals(CommissionStatus.CANCELLED,row.getStatus()); assertEquals(0L,row.getCommissionAmountVnd());
         assertEquals(100L,((Number)row.getAdjustmentHistory().get("originalAmountVnd")).longValue());
         assertEquals(1000L,((Number)row.getAdjustmentHistory().get("refundedAmountVnd")).longValue());
-        finance.adjustCommission("item",new FinanceContractController.AdjustInput("Delayed retry"),jwt);
+        finance.adjustCommission("item",new AdjustInput("Delayed retry"),jwt);
         assertEquals(0L,finance.total("item",jwt).result().get("amountVnd"));
     }
     @Test void referralPaymentInitializesPendingAmountAndFullRefundCancelsIt() {
@@ -271,15 +273,15 @@ class CheckoutVoucherIntegrationTest {
         var link=links.saveAndFlush(ReferralLink.builder().collaboratorId(profile.getCollaboratorId()).productId("product").token("ref").status(ReferralLinkStatus.ACTIVE).build());
         referralId.set(link.getReferralLinkId());
         policies.saveAndFlush(CommissionPolicy.builder().policyName("Platform 10%").scopeType(CommissionPolicyScope.PLATFORM).commissionRate(BigDecimal.TEN).status(CommissionPolicyStatus.ACTIVE).validFrom(Instant.now().minusSeconds(60)).returnWindowDays(14).priority(0).build());
-        finance.initializeCommission("item",new FinanceContractController.InitInput("Payment confirmed"),jwt);
-        finance.initializeCommission("item",new FinanceContractController.InitInput("Retry"),jwt);
+        finance.initializeCommission("item",new InitInput("Payment confirmed"),jwt);
+        finance.initializeCommission("item",new InitInput("Retry"),jwt);
         assertEquals(1,commissions.count()); var row=commissions.findAll().getFirst();
         assertEquals(100L,row.getCommissionAmountVnd()); assertEquals(CommissionStatus.PENDING,row.getStatus());
         String commissionId = row.getCommissionId();
         assertThrows(ResponseStatusException.class,()->finance.basis(commissionId,jwt));
-        retained.set(0); finance.adjustCommission("item",new FinanceContractController.AdjustInput("Full return refunded"),jwt);
+        retained.set(0); finance.adjustCommission("item",new AdjustInput("Full return refunded"),jwt);
         row=commissions.findAll().getFirst(); assertEquals(0L,row.getCommissionAmountVnd()); assertEquals(CommissionStatus.CANCELLED,row.getStatus());
-        attributed.set(true); finance.finalizeItem("item",new FinanceContractController.FinalizeInput("Return window closed"),jwt);
+        attributed.set(true); finance.finalizeItem("item",new FinalizeInput("Return window closed"),jwt);
         assertEquals(0L,finance.total("item",jwt).result().get("amountVnd"));
     }
     @org.junit.jupiter.params.ParameterizedTest
@@ -290,7 +292,7 @@ class CheckoutVoucherIntegrationTest {
         referralId.set(link.getReferralLinkId());
         var policy=policies.saveAndFlush(CommissionPolicy.builder().policyName("Platform 10%").scopeType(CommissionPolicyScope.PLATFORM).commissionRate(BigDecimal.TEN).status(CommissionPolicyStatus.ACTIVE).validFrom(Instant.now().minusSeconds(120)).returnWindowDays(14).priority(0).build());
         var deal=new ProductCommissionDeal(); deal.setCollaboratorId(profile.getCollaboratorId());deal.setProductId("product");deal.setStoreId("store");deal.setProductName("Test shirt");deal.setExtraPoints(3);deal.setBaseRate(BigDecimal.TEN);deal.setBasePolicyId(policy.getPolicyId());deal.setTotalRate(BigDecimal.valueOf(13));deal.setMessage("Product agreement");deal.setStatus("APPROVED");deal.setCreatedAt(Instant.now().minusSeconds(90));deal.setApprovedAt(Instant.now().minusSeconds(60));productDeals.saveAndFlush(deal);
-        finance.initializeCommission("item",new FinanceContractController.InitInput("Paid"),jwt);
+        finance.initializeCommission("item",new InitInput("Paid"),jwt);
         var row=commissions.findAll().getFirst();
         assertEquals(0,row.getRateSnapshot().compareTo(BigDecimal.valueOf(13)));assertEquals(130L,row.getCommissionAmountVnd());
         assertEquals(3,((Number)row.getAdjustmentHistory().get("extraPoints")).intValue());
@@ -302,37 +304,37 @@ class CheckoutVoucherIntegrationTest {
         }
         policy.setCommissionRate(BigDecimal.valueOf(30));policies.saveAndFlush(policy);
         deal.setStatus("ENDED");deal.setEndedAt(Instant.now());productDeals.saveAndFlush(deal);
-        finance.initializeCommission("item",new FinanceContractController.InitInput("Retry after policy changed"),jwt);
+        finance.initializeCommission("item",new InitInput("Retry after policy changed"),jwt);
         row=commissions.findById(row.getCommissionId()).orElseThrow();assertEquals(130L,row.getCommissionAmountVnd());
-        retained.set(0);finance.adjustCommission("item",new FinanceContractController.AdjustInput("Full refund"),jwt);
+        retained.set(0);finance.adjustCommission("item",new AdjustInput("Full refund"),jwt);
         row=commissions.findById(row.getCommissionId()).orElseThrow();assertEquals(0L,row.getCommissionAmountVnd());assertEquals(CommissionStatus.CANCELLED,row.getStatus());
         assertEquals(0,row.getRateSnapshot().compareTo(BigDecimal.valueOf(13)));
         if(alreadyCredited) {
             assertEquals(0L,finance.reconciliationBasis(row.getCommissionId(),jwt).result().get("amountVnd"));
-            finance.reconciled(row.getCommissionId(),new FinanceContractController.CreditInput("qa-reversal-ledger",0L),jwt);
-            finance.reconciled(row.getCommissionId(),new FinanceContractController.CreditInput("qa-reversal-ledger",0L),jwt);
+            finance.reconciled(row.getCommissionId(),new CreditInput("qa-reversal-ledger",0L),jwt);
+            finance.reconciled(row.getCommissionId(),new CreditInput("qa-reversal-ledger",0L),jwt);
             assertEquals("qa-original-ledger",commissions.findById(row.getCommissionId()).orElseThrow().getTransferReference());
         }
-        finance.adjustCommission("item",new FinanceContractController.AdjustInput("Refund retry"),jwt);
+        finance.adjustCommission("item",new AdjustInput("Refund retry"),jwt);
         assertEquals(1,commissions.count());
     }
 
     @Test void duplicateCreditAcknowledgementKeepsOriginalDateAndNoOpReconciliationHasNoReversal() {
         var paidAt=java.time.LocalDateTime.now(ZoneOffset.UTC).minusDays(2).withNano(0);
         var row=commissions.saveAndFlush(Commission.builder().orderItemId("item").collaboratorId("kol").rateSnapshot(BigDecimal.TEN).basisAmountVnd(1000L).commissionAmountVnd(100L).status(CommissionStatus.CREDITED).transferReference("original-ledger").paidAt(paidAt).build());
-        finance.reconciled(row.getCommissionId(),new FinanceContractController.CreditInput("original-ledger",100L),jwt);
-        finance.credited(row.getCommissionId(),new FinanceContractController.CreditInput("original-ledger",100L),jwt);
+        finance.reconciled(row.getCommissionId(),new CreditInput("original-ledger",100L),jwt);
+        finance.credited(row.getCommissionId(),new CreditInput("original-ledger",100L),jwt);
         row=commissions.findById(row.getCommissionId()).orElseThrow();
         assertFalse(row.getAdjustmentHistory().containsKey("reversalTransactionId"));
         assertEquals(paidAt,row.getPaidAt());
     }
     @Test void creditedFullRefundHasZeroTargetAndDelayedAcknowledgementsNeverRestoreCommission() {
         var row=commissions.saveAndFlush(Commission.builder().orderItemId("item").collaboratorId("kol").rateSnapshot(BigDecimal.TEN).basisAmountVnd(1000L).commissionAmountVnd(100L).status(CommissionStatus.CREDITED).transferReference("original-ledger").adjustmentHistory(Map.of("ledgerReconciledAmountVnd",100)).build());
-        retained.set(0); finance.adjustCommission("item",new FinanceContractController.AdjustInput("Full return"),jwt);
+        retained.set(0); finance.adjustCommission("item",new AdjustInput("Full return"),jwt);
         assertEquals(0L,finance.reconciliationBasis(row.getCommissionId(),jwt).result().get("amountVnd"));
-        finance.reconciled(row.getCommissionId(),new FinanceContractController.CreditInput("reversal-ledger",0L),jwt);
-        assertEquals("CANCELLED",finance.credited(row.getCommissionId(),new FinanceContractController.CreditInput("original-ledger",100L),jwt).result().get("status"));
-        finance.reconciled(row.getCommissionId(),new FinanceContractController.CreditInput("older-reversal",40L),jwt);
+        finance.reconciled(row.getCommissionId(),new CreditInput("reversal-ledger",0L),jwt);
+        assertEquals("CANCELLED",finance.credited(row.getCommissionId(),new CreditInput("original-ledger",100L),jwt).result().get("status"));
+        finance.reconciled(row.getCommissionId(),new CreditInput("older-reversal",40L),jwt);
         row=commissions.findById(row.getCommissionId()).orElseThrow();
         assertEquals(CommissionStatus.CANCELLED,row.getStatus()); assertEquals(0L,((Number)row.getAdjustmentHistory().get("ledgerReconciledAmountVnd")).longValue());
         assertEquals("reversal-ledger",row.getAdjustmentHistory().get("reversalTransactionId"));

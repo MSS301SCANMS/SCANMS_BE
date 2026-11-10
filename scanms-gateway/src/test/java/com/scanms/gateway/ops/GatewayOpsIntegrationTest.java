@@ -57,6 +57,7 @@ class GatewayOpsIntegrationTest {
     @DynamicPropertySource
     static void routes(DynamicPropertyRegistry registry) {
         registry.add("USER_SERVICE_URL", () -> "http://localhost:" + stub.getAddress().getPort());
+        registry.add("ORDER_SERVICE_URL", () -> "http://localhost:" + stub.getAddress().getPort());
     }
 
     @AfterAll
@@ -77,6 +78,19 @@ class GatewayOpsIntegrationTest {
 
     private WebTestClient as(String role) {
         return client.mutateWith(mockJwt().authorities(new SimpleGrantedAuthority("ROLE_" + role)));
+    }
+
+    @Test
+    void customerNotificationRoutesReachOrderAndRequireLogin() {
+        client.get().uri("/api/v1/notifications").exchange().expectStatus().isUnauthorized();
+        for (String path : new String[]{"/api/v1/notifications?category=ORDER", "/api/v1/notifications/unread-count"}) {
+            as("CUSTOMER").get().uri(path).exchange().expectStatus().isOk();
+            org.junit.jupiter.api.Assertions.assertEquals(path, receivedPath.get());
+        }
+        for (String path : new String[]{"/api/v1/notifications/delivery-parcel/read", "/api/v1/notifications/read-all"}) {
+            as("CUSTOMER").patch().uri(path).exchange().expectStatus().isOk();
+            org.junit.jupiter.api.Assertions.assertEquals(path, receivedPath.get());
+        }
     }
 
     @Test

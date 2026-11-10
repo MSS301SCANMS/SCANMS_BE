@@ -22,7 +22,7 @@ import java.util.*;
 @RequiredArgsConstructor
 @Transactional
 public class LivestreamServiceImpl implements LivestreamService {
-    private static final Set<String> CONSENT_KEYS = Set.of("inviteStatus", "collaboratorResponses", "respondedBySubject", "respondedAt", "voucherDrops", "lifecycle", "broadcast");
+    private static final Set<String> CONSENT_KEYS = Set.of("inviteStatus", "collaboratorResponses", "respondedBySubject", "respondedAt", "voucherDrops", "lifecycle", "broadcast", "scheduledEndsAt");
     private final LivestreamRepository repository;
     private final LivestreamMapper mapper;
     private final ProductAccess access;
@@ -31,6 +31,7 @@ public class LivestreamServiceImpl implements LivestreamService {
     private final LivestreamSchedulePolicy schedule;
     private final LivestreamLifecycleService lifecycle;
     private final LivestreamBroadcastPolicy broadcast;
+    private final LivePinPolicy pins;
 
     public LivestreamResponse create(CreateLivestreamRequest request) {
         access.requireApprovedStore(request.storeId());
@@ -53,7 +54,9 @@ public class LivestreamServiceImpl implements LivestreamService {
     }
 
     public LivestreamResponse getById(String id) {
-        return mapper.toResponse(locked(id));
+        var live = locked(id);
+        pins.clearUnavailable(live);
+        return mapper.toResponse(live);
     }
 
     public List<LivestreamResponse> findAll() {
@@ -89,6 +92,7 @@ public class LivestreamServiceImpl implements LivestreamService {
             var refs = new LinkedHashMap<String, Object>(live.getProductRefs() == null ? Map.of() : live.getProductRefs());
             refs.put("productIds", request.productRefs().getOrDefault("productIds", List.of()));
             live.setProductRefs(refs);
+            pins.clearUnavailable(live);
         }
         live.setParticipantRefs(participants);
         live.setScheduledAt(schedule);
@@ -98,10 +102,8 @@ public class LivestreamServiceImpl implements LivestreamService {
 
     public LivestreamResponse transition(String id, LivestreamStatus next) {
         var live = owned(id);
-        var now = LocalDateTime.now(ZoneOffset.UTC);
+        var now = LocalDateTime.now(ZoneOffset.UTC).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         if (next == LivestreamStatus.LIVE && live.getStatus() == LivestreamStatus.SCHEDULED) {
-            if (live.getScheduledAt() != null && live.getScheduledAt().isAfter(now))
-                throw conflict("The scheduled start time has not arrived");
             var accepted = responses(live);
             for (String kol : collaborators(live.getCollaboratorRefs())) {
                 if (!"ACCEPTED".equals(accepted.get(kol)))
@@ -109,9 +111,16 @@ public class LivestreamServiceImpl implements LivestreamService {
                 partnership(live.getStoreId(), kol);
             }
             validateProducts(live.getStoreId(), live.getProductRefs());
-            var refs = live.getParticipantRefs();
-            if (refs != null && refs.get("endsAt") != null && !parseEnd(refs.get("endsAt")).isAfter(now))
-                throw conflict("Livestream end time has passed");
+            var refs = new LinkedHashMap<String, Object>(live.getParticipantRefs() == null ? Map.of() : live.getParticipantRefs());
+            if (refs.get("endsAt") != null) {
+                var plannedEnd = parseEnd(refs.get("endsAt"));
+                var duration = Duration.between(live.getScheduledAt() == null ? now : live.getScheduledAt(), plannedEnd);
+                if (duration.isNegative() || duration.isZero()) throw conflict("Livestream duration must be positive");
+                // Preserve the scheduled duration when the shop starts before or after its appointment.
+                refs.put("scheduledEndsAt", plannedEnd.toInstant(ZoneOffset.UTC).toString());
+                refs.put("endsAt", now.plus(duration).toInstant(ZoneOffset.UTC).toString());
+            }
+            live.setParticipantRefs(refs);
             live.setStatus(next);
             live.setStartedAt(now);
             broadcast.start(live, now.toInstant(ZoneOffset.UTC));
@@ -166,17 +175,22 @@ public class LivestreamServiceImpl implements LivestreamService {
     }
 
     public LivestreamResponse pinProduct(String id, String productId) {
+        return pinProduct(id, productId, null);
+    }
+
+    public LivestreamResponse pinProduct(String id, String productId, Long expectedRevision) {
         var live = locked(id);
         requireHost(live);
         if (live.getStatus() != LivestreamStatus.LIVE) throw conflict("Phiên chưa phát sóng.");
+        if (expectedRevision != null && expectedRevision != pins.revision(live))
+            throw conflict("Sản phẩm ghim đã thay đổi. Vui lòng thử lại từ trạng thái mới nhất.");
         if (productId != null) {
             if (live.getProductRefs() == null || !(live.getProductRefs().get("productIds") instanceof Collection<?> ids) || !ids.contains(productId))
                 throw invalid("Sản phẩm không thuộc phiên live.");
             validateProducts(live.getStoreId(), Map.of("productIds", List.of(productId)));
+            if (!pins.available(live, productId)) throw conflict("Sản phẩm hiện không có phân loại còn hàng để bán.");
         }
-        var refs = new LinkedHashMap<String, Object>(live.getProductRefs() == null ? Map.of() : live.getProductRefs());
-        refs.put("pinnedProductId", productId);
-        live.setProductRefs(refs);
+        pins.set(live, productId);
         return mapper.toResponse(repository.save(live));
     }
 

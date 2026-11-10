@@ -45,10 +45,12 @@ public class FinanceContractServiceImpl implements FinanceContractService {
     private void trusted(Jwt jwt, boolean operatorAllowed) {
         Set<String> roles = new HashSet<>();
         Object realm = jwt.getClaim("realm_access");
-        if (realm instanceof Map<?, ?> map && map.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString()));
+        if (realm instanceof Map<?, ?> map && map.get("roles") instanceof Collection<?> list)
+            list.forEach(r -> roles.add(r.toString()));
         Object resources = jwt.getClaim("resource_access");
         if (resources instanceof Map<?, ?> map) map.values().forEach(v -> {
-            if (v instanceof Map<?, ?> m && m.get("roles") instanceof Collection<?> list) list.forEach(r -> roles.add(r.toString()));
+            if (v instanceof Map<?, ?> m && m.get("roles") instanceof Collection<?> list)
+                list.forEach(r -> roles.add(r.toString()));
         });
         if (!roles.contains("PAYMENT_INTERNAL") && !(operatorAllowed && roles.stream().anyMatch(Set.of("ADMIN", "MANAGER", "SYSTEM_ADMIN", "SYSTEM_MANAGER")::contains)))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
@@ -74,7 +76,8 @@ public class FinanceContractServiceImpl implements FinanceContractService {
         saga.put("paymentId", input.paymentId());
         saga.put("verifiedAt", input.verifiedAt());
         order.setSagaState(saga);
-        if (order.getStatus() == OrderStatus.PENDING || order.getStatus() == OrderStatus.AWAITING_PAYMENT) order.setStatus(OrderStatus.PAID);
+        if (order.getStatus() == OrderStatus.PENDING || order.getStatus() == OrderStatus.AWAITING_PAYMENT)
+            order.setStatus(OrderStatus.PAID);
         orders.save(order);
         // Payment SUCCESS → khởi tạo Commission PENDING cho mọi item có referral (idempotent phía promotion)
         int initialized = 0;
@@ -111,7 +114,8 @@ public class FinanceContractServiceImpl implements FinanceContractService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Order has not been paid");
         if (request.getRequestedAt() == null || seller.getReturnDeadline() == null || request.getRequestedAt().isAfter(seller.getReturnDeadline()))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Return is outside the delivery return window");
-        if (!"VND".equals(order.getCurrency())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Only VND refunds are supported");
+        if (!"VND".equals(order.getCurrency()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only VND refunds are supported");
         long amount;
         if (request.getStatus() == ReturnRequestStatus.REFUND_PENDING || request.getStatus() == ReturnRequestStatus.REFUNDED) {
             if (request.getRefundAmountVnd() == null || request.getRefundAmountVnd() <= 0)
@@ -229,11 +233,28 @@ public class FinanceContractServiceImpl implements FinanceContractService {
         trusted(jwt, true);
         OrderItem item = find(OrderItem.class, id, true);
         settlementBasis(item.getSellerOrderId(), jwt);
+        return retainedCommissionItem(item);
+    }
+
+    @Override
+    public Map<String, Object> commissionAdjustmentItem(String id, Jwt jwt) {
+        trusted(jwt, true);
+        OrderItem item = find(OrderItem.class, id, true);
+        SellerOrder seller = find(SellerOrder.class, item.getSellerOrderId(), false);
+        Order order = find(Order.class, seller.getOrderId(), false);
+        if (order.getStatus() == OrderStatus.CANCELLED)
+            return Map.of("orderItemId", id, "basisAmountVnd", 0L, "refundedAmountVnd", 0L, "currency", "VND", "cancelled", true);
+        if (!Set.of(OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.COMPLETED).contains(order.getStatus()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Order has not been paid");
+        return retainedCommissionItem(item);
+    }
+
+    private Map<String, Object> retainedCommissionItem(OrderItem item) {
         long refund = 0;
-        for (ReturnRequest r : returns.findAll().stream().filter(r -> id.equals(r.getOrderItemId()) && r.getStatus() == ReturnRequestStatus.REFUNDED).toList())
+        for (ReturnRequest r : returns.findByOrderItemId(item.getOrderItemId()).stream().filter(r -> r.getStatus() == ReturnRequestStatus.REFUNDED).toList())
             refund = Math.addExact(refund, r.getRefundAmountVnd());
         long retained = Math.subtractExact(item.getNetPaidAmountVnd(), refund);
         if (retained < 0) throw new ResponseStatusException(HttpStatus.CONFLICT, "Refund exceeds paid item value");
-        return Map.of("orderItemId", id, "basisAmountVnd", retained, "currency", "VND", "commissionApplicable", item.getReferralLinkId() != null || (item.getRuleSnapshot() != null && item.getRuleSnapshot().get("commissionPolicyId") != null));
+        return Map.of("orderItemId", item.getOrderItemId(), "basisAmountVnd", retained, "refundedAmountVnd", refund, "currency", "VND", "commissionApplicable", item.getReferralLinkId() != null || (item.getRuleSnapshot() != null && item.getRuleSnapshot().get("commissionPolicyId") != null));
     }
 }

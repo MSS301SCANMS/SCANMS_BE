@@ -114,9 +114,11 @@ test('signed identity, host consent, room isolation, chat identity, pinning and 
     const ended = once(viewer, 'live_session_ended');sessions.get('room-a').status = 'ENDED';await ended;
     assert.equal(server.rooms.has('room-a'), false);
     const scheduledHost = await connect(credentials.shop);
+    sessions.get('scheduled').participantRefs.endsAt = new Date(Date.now() - 3600000).toISOString();
     assert.equal((await emit(scheduledHost, 'join_live_room', { sessionId: 'scheduled', requestedRole: 'host' })).ok, true);
     assert.equal((await emit(scheduledHost, 'live_stream_started', { sessionId: 'scheduled' })).ok, false, 'camera cannot publish before shop starts the session');
     sessions.get('scheduled').status = 'LIVE';
+    sessions.get('scheduled').participantRefs.endsAt = new Date(Date.now() + 3600000).toISOString();
     assert.equal((await emit(scheduledHost, 'live_stream_started', { sessionId: 'scheduled' })).ok, true);
     const timedOut=once(scheduledHost,'live_session_ended');
     sessions.get('scheduled').participantRefs.endsAt=new Date(Date.now()-1).toISOString();

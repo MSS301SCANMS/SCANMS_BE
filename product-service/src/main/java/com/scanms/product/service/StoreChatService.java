@@ -16,6 +16,12 @@ public interface StoreChatService {
 
     Map<String, Object> open(String storeId);
 
+    Map<String, Object> open(String storeId, String customerId);
+
+    Map<String, Object> subscription(String id);
+
+    Map<String, Object> identity();
+
     List<StoreChatMessage> history(String id, int take, String cursor);
 
     StoreChatMessage send(String id, String text, String messageId);
